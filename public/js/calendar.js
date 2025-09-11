@@ -10,7 +10,7 @@ async function initGoogleCalendar() {
     try {
         // 액세스 토큰이 없으면 기늤 (처음에는 자동 연동 안함)
         if (!GoogleAuth.getAccessToken()) {
-            console.log('캘린더 자동 연동을 위해 구글 시트 또는 캘린더 버튼을 클릭해주세요.');
+    // console.log('캘린더 자동 연동을 위해 구글 시트 또는 캘린더 버튼을 클릭해주세요.');
             return;
         }
         
@@ -21,7 +21,7 @@ async function initGoogleCalendar() {
             if (iframe) {
                 const calendarUrl = `https://calendar.google.com/calendar/embed?src=${encodeURIComponent(primaryCalendarId)}&ctz=Asia%2FSeoul&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=1&showCalendars=1&showTz=0&mode=MONTH`;
                 iframe.src = calendarUrl;
-                console.log('구글 캘린더 자동 연동 완료:', primaryCalendarId);
+    // console.log('구글 캘린더 자동 연동 완료:', primaryCalendarId);
                 
                 // URL 입력란에도 표시
                 const input = document.getElementById('calendarUrl');
@@ -31,7 +31,7 @@ async function initGoogleCalendar() {
             }
         }
     } catch (error) {
-        console.log('캘린더 자동 연동 실패 (정상):', error);
+    // console.log('캘린더 자동 연동 실패 (정상):', error);
     }
 }
 

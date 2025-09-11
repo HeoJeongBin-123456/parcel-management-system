@@ -27,11 +27,11 @@ export default async function handler(req, res) {
         
         // VWorld API 키들 - 공식 개발자 키 우선
         const apiKeys = [
-            'CEB482F7-CF7C-333B-B02C-4E7111C3AC77', // 공식 개발자 테스트 키
-            key || '8C62256B-1D08-32FF-AB3C-1FCD67242196',
-            'BBAC532E-A56D-34CF-B520-CE68E8D6D52A',
-            'E5B1657B-9B6F-3A4B-91EF-98512BE931A1',
-            '6BF0B0F9-FB8F-3415-B5A3-5A5D1F8ED2EF' // 추가 테스트 키
+            'E5B1657B-9B6F-3A4B-91EF-98512BE931A1', // 메인: 범용키 (제한없음)
+            key || 'E5B1657B-9B6F-3A4B-91EF-98512BE931A1', // fallback
+            'C1C06245-E008-3F27-BD9E-9CBA4BE0F918', // 백업: localhost:3000
+            '200C6A0D-D0A2-3E72-BADD-B385BB283CAE', // 백업: localhost:4000
+            '37325C63-ACC1-39FA-949D-F4E7F4C9BCF3'  // 백업: localhost:5000
         ];
         
         let lastError;

@@ -2,12 +2,12 @@
 
 // 페이지 초기화
 document.addEventListener('DOMContentLoaded', async function() {
-    console.log('초기화 시작');
+    // console.log('초기화 시작');
     
     // 지도 초기화
     if (typeof initMap === 'function') {
         initMap();
-        console.log('지도 초기화 완료');
+    // console.log('지도 초기화 완료');
     }
     
     // 구글 캘린더 자동 연동은 사용자가 명시적으로 요청할 때만 수행
@@ -21,7 +21,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         item.addEventListener('click', function() {
             currentColor = this.dataset.color;
             document.getElementById('currentColor').style.background = currentColor;
-            console.log('색상 선택:', currentColor);
+    // console.log('색상 선택:', currentColor);
             
             // 활성 색상 표시
             document.querySelectorAll('.color-item').forEach(c => c.classList.remove('active'));
@@ -51,7 +51,15 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     }
     
-    console.log('이벤트 리스너 설정 완료');
+    // 필지 삭제 버튼 이벤트 리스너
+    const deleteParcelBtn = document.getElementById('deleteParcelBtn');
+    if (deleteParcelBtn) {
+        deleteParcelBtn.addEventListener('click', function() {
+            deleteCurrentParcel();
+        });
+    }
+    
+    // console.log('이벤트 리스너 설정 완료');
 });
 
 // 저장된 필지 데이터 가져오기
@@ -69,7 +77,7 @@ function formatJibun(properties) {
     let san = '';
     
     // 디버깅용 로그
-    console.log('📋 formatJibun 입력 properties:', properties);
+    // console.log('📋 formatJibun 입력 properties:', properties);
     
     // 1. ADDR 필드에서 동 정보 우선 추출 (가장 정확함)
     if (properties.ADDR || properties.addr) {
@@ -80,25 +88,25 @@ function formatJibun(properties) {
         const dongAfterGuMatch = fullAddr.match(/[구군]\s*([가-힣]+(동|리|가|로))/);
         if (dongAfterGuMatch) {
             dong = dongAfterGuMatch[1];
-            console.log('🔍 패턴1으로 동 추출:', dong);
+    // console.log('🔍 패턴1으로 동 추출:', dong);
         } else {
             // 패턴2: 숫자 앞에 있는 동/리/가/로
             const dongBeforeNumberMatch = fullAddr.match(/([가-힣]+(동|리|가|로))[\s\d]/);
             if (dongBeforeNumberMatch) {
                 dong = dongBeforeNumberMatch[1];
-                console.log('🔍 패턴2로 동 추출:', dong);
+    // console.log('🔍 패턴2로 동 추출:', dong);
             } else {
                 // 패턴3: 마지막에 나오는 동/리/가/로 (더 정확한 패턴)
                 const lastDongMatch = fullAddr.match(/([가-힣]+(동|리|가|로))(?!.*[동리가로])/);
                 if (lastDongMatch) {
                     dong = lastDongMatch[1];
-                    console.log('🔍 패턴3으로 동 추출:', dong);
+    // console.log('🔍 패턴3으로 동 추출:', dong);
                 } else {
                     // 패턴4: 그냥 동/리/가/로 찾기
                     const simpleDongMatch = fullAddr.match(/([가-힣]+(동|리|가|로))/);
                     if (simpleDongMatch) {
                         dong = simpleDongMatch[1];
-                        console.log('🔍 패턴4로 동 추출:', dong);
+    // console.log('🔍 패턴4로 동 추출:', dong);
                     }
                 }
             }
@@ -192,9 +200,9 @@ function formatJibun(properties) {
         }
     }
     
-    console.log('🏠 추출 결과 - 동:', dong || '없음', ', 지번:', jibun || '없음');
+    // console.log('🏠 추출 결과 - 동:', dong || '없음', ', 지번:', jibun || '없음');
     if (properties.ADDR || properties.addr) {
-        console.log('   ADDR 필드:', properties.ADDR || properties.addr);
+    // console.log('   ADDR 필드:', properties.ADDR || properties.addr);
     }
     
     // 최종 포맷팅
@@ -298,5 +306,67 @@ function updateCalendar() {
         iframe.src = calendarSrc;
         localStorage.setItem('googleCalendarUrl', urlInput);
         alert('캘린더가 업데이트되었습니다.');
+    }
+}
+
+// 현재 선택된 필지 삭제 함수
+function deleteCurrentParcel() {
+    const currentPNU = window.currentSelectedPNU;
+    const parcelNumber = document.getElementById('parcelNumber').value;
+    
+    if (!currentPNU && !parcelNumber) {
+        alert('삭제할 필지가 선택되지 않았습니다.');
+        return;
+    }
+    
+    const confirmDelete = confirm(`필지 "${parcelNumber}"을(를) 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.`);
+    if (!confirmDelete) {
+        return;
+    }
+    
+    try {
+        // 1. 지도에서 폴리곤 제거
+        if (currentPNU && window.clickParcels && window.clickParcels.has(currentPNU)) {
+            const parcelData = window.clickParcels.get(currentPNU);
+            if (parcelData && parcelData.polygon) {
+                // 폴리곤 색상 완전히 제거
+                parcelData.polygon.setOptions({
+                    fillColor: 'transparent',
+                    fillOpacity: 0,
+                    strokeColor: '#0000FF',
+                    strokeOpacity: 0.6,
+                    strokeWeight: 0.5
+                });
+                parcelData.color = 'transparent';
+            }
+        }
+        
+        // 2. LocalStorage에서 제거
+        const savedData = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEY) || '[]');
+        const updatedData = savedData.filter(item => 
+            item.pnu !== currentPNU && 
+            item.parcelNumber !== parcelNumber
+        );
+        localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(updatedData));
+        
+        // 3. 폼 초기화
+        document.getElementById('parcelNumber').value = '';
+        document.getElementById('ownerName').value = '';
+        document.getElementById('ownerAddress').value = '';
+        document.getElementById('ownerContact').value = '';
+        document.getElementById('memo').value = '';
+        window.currentSelectedPNU = null;
+        
+        // 4. 필지 목록 업데이트
+        if (window.parcelManager && window.parcelManager.renderParcelList) {
+            window.parcelManager.renderParcelList();
+        }
+        
+    // console.log('✅ 필지 삭제 완료:', currentPNU || parcelNumber);
+        alert(`필지 "${parcelNumber}"이(가) 삭제되었습니다.`);
+        
+    } catch (error) {
+        console.error('❌ 필지 삭제 실패:', error);
+        alert('필지 삭제 중 오류가 발생했습니다.');
     }
 }

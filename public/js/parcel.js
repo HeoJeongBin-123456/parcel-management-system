@@ -2,39 +2,39 @@
 
 // 실제 VWorld API로 필지 정보 조회
 async function getParcelInfo(lat, lng) {
-    console.log(`🏢 실제 필지 정보 조회 시작: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+    // console.log(`🏢 실제 필지 정보 조회 시작: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
     
-    // 다중 API 키 풀 (실제 작동 키들)
+    // 다중 API 키 풀 (메인: 범용키, 백업: 로컬호스트 제한키들)
     const apiKeys = [
-        'BBAC532E-A56D-34CF-B520-CE68E8D6D52A',
-        'E5B1657B-9B6F-3A4B-91EF-98512BE931A1',
-        '6B854F88-4A5D-303C-B7C8-40858117A95E',
-        'CEB6F0C2-8D2C-3F1A-B9B0-3F7E8D4C6A50'
+        'E5B1657B-9B6F-3A4B-91EF-98512BE931A1', // 메인: 범용키 (제한없음)
+        'C1C06245-E008-3F27-BD9E-9CBA4BE0F918', // 백업: localhost:3000
+        '200C6A0D-D0A2-3E72-BADD-B385BB283CAE', // 백업: localhost:4000
+        '37325C63-ACC1-39FA-949D-F4E7F4C9BCF3'  // 백업: localhost:5000
     ];
     
     // CORS 우회를 위해 JSONP를 우선적으로 시도
     for (let i = 0; i < apiKeys.length; i++) {
         const apiKey = apiKeys[i];
-        console.log(`🔑 JSONP 우선 시도 - API 키 ${i+1}/${apiKeys.length}: ${apiKey.substring(0, 8)}...`);
+    // console.log(`🔑 JSONP 우선 시도 - API 키 ${i+1}/${apiKeys.length}: ${apiKey.substring(0, 8)}...`);
         
         const result = await getParcelInfoViaJSONP(lat, lng, apiKey);
         if (result) {
-            console.log('🎊 JSONP로 실제 필지 데이터 획득 성공!');
+    // console.log('🎊 JSONP로 실제 필지 데이터 획득 성공!');
             return; // 성공 시 함수 종료
         }
         
-        console.log(`⚠️ JSONP API 키 ${i+1} 실패, 다음 키로 시도...`);
+    // console.log(`⚠️ JSONP API 키 ${i+1} 실패, 다음 키로 시도...`);
     }
     
     // JSONP가 모든 키로 실패한 경우 메시지 출력
-    console.log('⚠️ 모든 API 키로 필지 정보를 가져오지 못했습니다.');
-    console.log('💡 VWorld API는 CORS 정책으로 인해 JSONP만 지원합니다.');
+    // console.log('⚠️ 모든 API 키로 필지 정보를 가져오지 못했습니다.');
+    // console.log('💡 VWorld API는 CORS 정책으로 인해 JSONP만 지원합니다.');
     alert('해당 위치의 필지 정보를 찾을 수 없습니다.');
 }
 
 // JSONP 방식으로 VWorld API 호출
 async function getParcelInfoViaJSONP(lat, lng, apiKey) {
-    console.log('🌐 JSONP 방식으로 VWorld API 재시도...');
+    // console.log('🌐 JSONP 방식으로 VWorld API 재시도...');
     
     return new Promise((resolve, reject) => {
         const callbackName = `vworld_callback_${Date.now()}_${Math.floor(Math.random()*1000)}`;
@@ -42,14 +42,14 @@ async function getParcelInfoViaJSONP(lat, lng, apiKey) {
         
         // JSONP 콜백 함수 등록
         window[callbackName] = function(data) {
-            console.log('📡 JSONP 응답 수신:', data);
+    // console.log('📡 JSONP 응답 수신:', data);
             
             try {
                 if (data.response && data.response.status === 'OK' && data.response.result) {
                     const features = data.response.result.featureCollection?.features;
                     
                     if (features && features.length > 0) {
-                        console.log(`🎊 JSONP로 실제 필지 데이터 획득! ${features.length}개`);
+    // console.log(`🎊 JSONP로 실제 필지 데이터 획득! ${features.length}개`);
                         
                         const parcel = features[0];
                         displayParcelInfo(parcel);
@@ -58,7 +58,7 @@ async function getParcelInfoViaJSONP(lat, lng, apiKey) {
                         
                         resolve(parcel);
                     } else {
-                        console.log('📭 JSONP: 빈 결과');
+    // console.log('📭 JSONP: 빈 결과');
                         resolve(null);
                     }
                 } else {
@@ -104,49 +104,49 @@ async function getParcelInfoViaJSONP(lat, lng, apiKey) {
 async function loadParcelsInBounds(bounds) {
     // 검색 모드에서는 자동으로 필지를 로드하지 않음
     if (window.currentMode === 'search') {
-        console.log('🔍 검색 모드에서는 자동 필지 로드를 건너뜁니다.');
+        // 검색 모드에서는 자동 필지 로드를 건너뜀
         return;
     }
     
-    console.log('🏘️ VWorld API로 영역 내 실제 필지 데이터 로드 시작');
+    // console.log('🏘️ VWorld API로 영역 내 실제 필지 데이터 로드 시작');
     
     const ne = bounds.getNE();
     const sw = bounds.getSW();
     
     // 경계 박스 생성 (서남쪽 경도, 서남쪽 위도, 동북쪽 경도, 동북쪽 위도)
     const bbox = `${sw.lng()},${sw.lat()},${ne.lng()},${ne.lat()}`;
-    console.log('🗺️ 검색 영역 (BBOX):', bbox);
+    // console.log('🗺️ 검색 영역 (BBOX):', bbox);
     
-    // API 키 풀
+    // API 키 풀 (메인: 범용키, 백업: 로컬호스트 제한키들)
     const apiKeys = [
-        'BBAC532E-A56D-34CF-B520-CE68E8D6D52A',
-        'E5B1657B-9B6F-3A4B-91EF-98512BE931A1',
-        '6B854F88-4A5D-303C-B7C8-40858117A95E',
-        'CEB6F0C2-8D2C-3F1A-B9B0-3F7E8D4C6A50'
+        'E5B1657B-9B6F-3A4B-91EF-98512BE931A1', // 메인: 범용키 (제한없음)
+        'C1C06245-E008-3F27-BD9E-9CBA4BE0F918', // 백업: localhost:3000
+        '200C6A0D-D0A2-3E72-BADD-B385BB283CAE', // 백업: localhost:4000
+        '37325C63-ACC1-39FA-949D-F4E7F4C9BCF3'  // 백업: localhost:5000
     ];
     
     // CORS 우회를 위해 JSONP를 우선적으로 시도
     for (let keyIndex = 0; keyIndex < apiKeys.length; keyIndex++) {
         const apiKey = apiKeys[keyIndex];
-        console.log(`🔑 JSONP 폴리곤 우선 시도 - API 키 ${keyIndex+1}/${apiKeys.length}: ${apiKey.substring(0, 8)}...`);
+    // console.log(`🔑 JSONP 폴리곤 우선 시도 - API 키 ${keyIndex+1}/${apiKeys.length}: ${apiKey.substring(0, 8)}...`);
         
         const result = await loadParcelsInBoundsViaJSONP(bounds, apiKey);
         if (result > 0) {
-            console.log(`🎊 JSONP로 실제 폴리곤 데이터 획득 성공! ${result}개 필지`);
+    // console.log(`🎊 JSONP로 실제 폴리곤 데이터 획득 성공! ${result}개 필지`);
             return; // 성공 시 함수 종료
         }
         
-        console.log(`⚠️ JSONP 폴리곤 API 키 ${keyIndex+1} 실패, 다음 키로 시도...`);
+    // console.log(`⚠️ JSONP 폴리곤 API 키 ${keyIndex+1} 실패, 다음 키로 시도...`);
     }
     
     // JSONP가 모든 키로 실패한 경우 메시지 출력
-    console.log('⚠️ 모든 API 키로 필지 데이터를 가져오지 못했습니다.');
-    console.log('💡 VWorld API는 CORS 정책으로 인해 JSONP만 지원합니다.');
+    // console.log('⚠️ 모든 API 키로 필지 데이터를 가져오지 못했습니다.');
+    // console.log('💡 VWorld API는 CORS 정책으로 인해 JSONP만 지원합니다.');
 }
 
 // JSONP 방식으로 VWorld API 폴리곤 로드
 async function loadParcelsInBoundsViaJSONP(bounds, apiKey) {
-    console.log('🌐 JSONP 방식으로 VWorld 폴리곤 API 재시도...');
+    // console.log('🌐 JSONP 방식으로 VWorld 폴리곤 API 재시도...');
     
     const ne = bounds.getNE();
     const sw = bounds.getSW();
@@ -158,14 +158,14 @@ async function loadParcelsInBoundsViaJSONP(bounds, apiKey) {
         
         // JSONP 콜백 함수 등록
         window[callbackName] = function(data) {
-            console.log('📡 폴리곤 JSONP 응답 수신:', data);
+    // console.log('📡 폴리곤 JSONP 응답 수신:', data);
             
             try {
                 if (data.response && data.response.status === 'OK' && data.response.result) {
                     const features = data.response.result.featureCollection?.features;
                     
                     if (features && features.length > 0) {
-                        console.log(`🎊 JSONP로 실제 폴리곤 데이터 획득! ${features.length}개`);
+    // console.log(`🎊 JSONP로 실제 폴리곤 데이터 획득! ${features.length}개`);
                         
                         let loadedCount = 0;
                         features.forEach((feature, index) => {
@@ -176,7 +176,7 @@ async function loadParcelsInBoundsViaJSONP(bounds, apiKey) {
                                     const polygon = drawParcelPolygon(feature, false);
                                     if (polygon) {
                                         loadedCount++;
-                                        console.log(`✅ JSONP 폴리곤 그리기: ${feature.properties?.JIBUN || pnu}`);
+    // console.log(`✅ JSONP 폴리곤 그리기: ${feature.properties?.JIBUN || pnu}`);
                                     }
                                 } catch (drawError) {
                                     console.warn(`⚠️ JSONP 필지 ${pnu} 그리기 실패:`, drawError);
@@ -184,11 +184,11 @@ async function loadParcelsInBoundsViaJSONP(bounds, apiKey) {
                             }
                         });
                         
-                        console.log(`🎉 JSONP 폴리곤 로드 완료: ${loadedCount}개`);
+    // console.log(`🎉 JSONP 폴리곤 로드 완료: ${loadedCount}개`);
                         resolve(loadedCount);
                         
                     } else {
-                        console.log('📭 JSONP: 빈 폴리곤 결과');
+    // console.log('📭 JSONP: 빈 폴리곤 결과');
                         resolve(0);
                     }
                 } else {
@@ -293,7 +293,7 @@ function toggleParcelSelection(parcel, polygon) {
     const isSearchParcel = (parcelData && parcelData.color === '#9370DB') || 
                            (searchParcelData && searchParcelData.color === '#9370DB');
     if (isSearchParcel) {
-        console.log('🟣 검색 필지(보라색) 클릭 - 색상 복사 방지');
+    // console.log('🟣 검색 필지(보라색) 클릭 - 색상 복사 방지');
         // 폼에 정보만 표시하고 색상은 변경하지 않음
         document.getElementById('parcelNumber').value = jibun;
         window.currentSelectedPNU = pnu;
@@ -337,7 +337,7 @@ function toggleParcelSelection(parcel, polygon) {
     
     // 저장된 실제 정보가 있으면 폼에 로드만 하고 색상은 유지
     if (hasActualData) {
-        console.log('저장된 정보가 있는 필지 클릭 - 정보 로드, 색상 보호');
+    // console.log('저장된 정보가 있는 필지 클릭 - 정보 로드, 색상 보호');
         
         // 폼에 정보 로드
         window.currentSelectedPNU = pnu;
@@ -367,26 +367,11 @@ function toggleParcelSelection(parcel, polygon) {
         return; // 색상 변경 없이 종료
     }
     
-    // 저장된 정보가 없거나 빈 정보만 있는 경우
-    // 이미 색칠되어 있는지 확인
-    if (parcelData && parcelData.color !== 'transparent') {
-        // 두 번 클릭 시 색상 제거 (정보가 없는 경우에만)
-        console.log('정보 없는 필지 - 색상 제거');
-        clearParcel(parcel, polygon);
-        
-        // 저장된 데이터에서도 제거
-        if (savedInfo && !hasActualData) {
-            const updatedData = savedData.filter(item => 
-                !((item.pnu && item.pnu === pnu) || item.parcelNumber === jibun)
-            );
-            localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(updatedData));
-        }
-    } else {
-        // 색칠되어 있지 않으면 선택 및 색칠
-        console.log('새로운 필지 색칠:', currentColor);
-        selectParcel(parcel, polygon);
-        applyColorToParcel(parcel, currentColor);
-    }
+    // 🎯 ULTRATHINK: 왼쪽 클릭은 항상 색칠만 (토글 기능 제거)
+    // 저장된 정보가 없거나 빈 정보만 있는 경우 - 항상 색칠
+    // console.log('왼쪽 클릭 - 필지 색칠:', currentColor);
+    selectParcel(parcel, polygon);
+    applyColorToParcel(parcel, currentColor);
 }
 
 // 필지 색상 및 정보 제거
@@ -410,7 +395,7 @@ function clearParcel(parcel, polygon) {
         let savedData = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEY) || '[]');
         savedData = savedData.filter(item => item.pnu !== pnu && item.parcelNumber !== jibun);
         localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(savedData));
-        console.log('색상 정보 제거됨:', pnu, jibun);
+    // console.log('색상 정보 제거됨:', pnu, jibun);
         
         // 폼 초기화
         document.getElementById('parcelNumber').value = '';
@@ -424,7 +409,7 @@ function clearParcel(parcel, polygon) {
 // 필지 선택
 function selectParcel(parcel, polygon) {
     const properties = parcel.properties;
-    console.log('필지 속성:', properties); // 디버깅용
+    // console.log('필지 속성:', properties); // 디버깅용
     
     // 검색 모드가 아닐 때만 currentSelectedPNU 업데이트
     // (검색 모드에서는 search.js에서 설정한 PNU 유지)
@@ -463,7 +448,7 @@ function applyColorToParcel(parcel, color) {
         });
         parcelData.color = color;
         
-        console.log('필지 색상 적용됨 (저장 안됨):', pnu, color);
+    // console.log('필지 색상 적용됨 (저장 안됨):', pnu, color);
         
         // 주의: localStorage 저장은 saveParcelData() 함수에서만 수행
         // 클릭만으로는 임시 색상만 적용되고, 저장 버튼을 눌러야 실제 저장됨
@@ -473,18 +458,18 @@ function applyColorToParcel(parcel, color) {
 // 필지 정보 표시
 function displayParcelInfo(parcel) {
     const properties = parcel.properties;
-    console.log('필지 전체 정보:', properties);
+    // console.log('필지 전체 정보:', properties);
     
     // 디버깅용 - VWorld API 필드 확인
-    console.log('🔍 VWorld API 필드 확인:');
-    console.log('  - PNU:', properties.PNU || properties.pnu);
-    console.log('  - NU_NM:', properties.NU_NM || properties.nu_nm);
-    console.log('  - JIBUN:', properties.JIBUN || properties.jibun);
-    console.log('  - BONBUN:', properties.BONBUN || properties.bonbun);
-    console.log('  - BUBUN:', properties.BUBUN || properties.bubun);
-    console.log('  - ADDR:', properties.ADDR || properties.addr);
-    console.log('  - SAN:', properties.SAN || properties.san);
-    console.log('  - 모든 필드:', Object.keys(properties));
+    // console.log('🔍 VWorld API 필드 확인:');
+    // console.log('  - PNU:', properties.PNU || properties.pnu);
+    // console.log('  - NU_NM:', properties.NU_NM || properties.nu_nm);
+    // console.log('  - JIBUN:', properties.JIBUN || properties.jibun);
+    // console.log('  - BONBUN:', properties.BONBUN || properties.bonbun);
+    // console.log('  - BUBUN:', properties.BUBUN || properties.bubun);
+    // console.log('  - ADDR:', properties.ADDR || properties.addr);
+    // console.log('  - SAN:', properties.SAN || properties.san);
+    // console.log('  - 모든 필드:', Object.keys(properties));
     
     // 검색 모드가 아닐 때만 currentSelectedPNU 업데이트
     // (검색 모드에서는 search.js에서 설정한 PNU 유지)
@@ -494,7 +479,7 @@ function displayParcelInfo(parcel) {
     
     // 지번 포맷팅 (utils.js 함수 사용)
     const jibun = formatJibun(properties);
-    console.log('📝 포맷된 지번:', jibun);
+    // console.log('📝 포맷된 지번:', jibun);
     
     // 폼에 정보 표시
     if (jibun) {
@@ -519,38 +504,34 @@ function saveParcelData() {
     // currentSelectedPNU가 있으면 우선 사용
     if (currentPNU) {
         // PNU가 있으면 해당 필지의 geometry 가져오기 (검색 모드에서는 searchParcels 우선)
-        console.log('🔍 currentPNU로 필지 검색:', currentPNU);
-        console.log('   현재 모드:', window.currentMode);
+        // console.log('🔍 currentPNU로 필지 검색:', currentPNU);
         
         // 검색 모드일 때는 searchParcels를 먼저 확인
         if (window.currentMode === 'search') {
-            console.log('   searchParcels Map 크기:', window.searchParcels.size);
-            console.log('   searchParcels 키들:', Array.from(window.searchParcels.keys()));
             let parcelData = window.searchParcels.get(currentPNU);
-            console.log('   searchParcels.get(' + currentPNU + ') 결과:', !!parcelData, parcelData);
             
             if (parcelData) {
                 geometry = parcelData.data ? parcelData.data.geometry : parcelData.geometry;
                 isSearchParcel = true;
-                console.log('   ✅ searchParcels에서 찾음');
+                // searchParcels에서 찾음
             }
         }
         
         // 못 찾았으면 clickParcels 확인
         if (!geometry) {
             let parcelData = window.clickParcels.get(currentPNU);
-            console.log('   clickParcels에서 검색 결과:', !!parcelData);
+            // clickParcels 검색
             
             if (parcelData && parcelData.data) {
                 geometry = parcelData.data.geometry;
-                console.log('   ✅ clickParcels에서 찾음');
+                // clickParcels에서 찾음
             }
         }
         
-        console.log('   최종 isSearchParcel:', isSearchParcel);
+        // 최종 isSearchParcel: isSearchParcel
     } else {
         // currentSelectedPNU가 없으면 지번으로 검색 (fallback)
-        console.log('⚠️ currentSelectedPNU가 없음, 지번으로 검색 시도');
+        // currentSelectedPNU가 없음, 지번으로 검색
         
         // 검색 모드일 때는 searchParcels 우선
         if (window.currentMode === 'search') {
@@ -619,7 +600,7 @@ function saveParcelData() {
         parcelData.color = formData.color;
         parcelData.savedInfo = formData;
         
-        console.log(`✅ ${isSearchParcel ? '검색' : '클릭'} 필지 Map 업데이트 완료:`, parcelData);
+        // 필지 Map 업데이트 완료
         
         // 폴리곤 색상 업데이트 (검색 필지는 보라색 유지)
         if (parcelData.polygon) {
@@ -635,7 +616,7 @@ function saveParcelData() {
             parcelData.polygon.setMap(window.currentMode === 'search' ? map : null);
         }
         
-        console.log(`${isSearchParcel ? '검색' : '클릭'} 필지 Map 업데이트 완료:`, currentPNU, formData);
+        // 필지 Map 업데이트: currentPNU
     }
     
     // 목록 업데이트
@@ -660,7 +641,7 @@ function saveParcelData() {
     document.getElementById('memo').value = '';
     
     // 지번은 검색 결과를 유지하기 위해 그대로 둠
-    console.log('✅ 저장 완료 - 폼 초기화 (지번 유지):', savedParcelNumber);
+    // console.log('✅ 저장 완료 - 폼 초기화 (지번 유지):', savedParcelNumber);
     
     alert('저장되었습니다.');
 }
@@ -758,7 +739,7 @@ function updateParcelList() {
     
     // DOM 요소가 없으면 건너뛰기
     if (!container) {
-        console.log('parcelListContainer not found, skipping update');
+    // console.log('parcelListContainer not found, skipping update');
         return;
     }
     
@@ -813,7 +794,7 @@ function loadSavedParcels() {
 // 지도에 저장된 필지 색상 복원
 function restoreSavedParcelsOnMap() {
     const savedData = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEY) || '[]');
-    console.log(`저장된 필지 ${savedData.length}개 복원 시작`);
+    // console.log(`저장된 필지 ${savedData.length}개 복원 시작`);
     
     // 저장된 데이터 중 geometry가 있는 항목들 처리
     savedData.forEach(saved => {
@@ -831,7 +812,7 @@ function restoreSavedParcelsOnMap() {
                     fillOpacity: saved.isSearchParcel ? 0.7 : 0.5  // 검색 필지는 더 진하게
                 });
                 existingParcel.color = saved.color;
-                console.log(`기존 ${saved.isSearchParcel ? '검색' : '클릭'} 필지 색상 복원: ${saved.parcelNumber} - ${saved.color}`);
+    // console.log(`기존 ${saved.isSearchParcel ? '검색' : '클릭'} 필지 색상 복원: ${saved.parcelNumber} - ${saved.color}`);
             } else if (saved.geometry) {
                 // 없으면 폴리곤 생성
                 const parcelData = {
@@ -870,7 +851,7 @@ function restoreSavedParcelsOnMap() {
                         color: '#9370DB'
                     });
                     
-                    console.log(`새 검색 필지 생성 및 색상 복원: ${saved.parcelNumber} - #9370DB`);
+    // console.log(`새 검색 필지 생성 및 색상 복원: ${saved.parcelNumber} - #9370DB`);
                 } else {
                     // 폴리곤 그리기 (클릭 필지)
                     drawParcelPolygon(parcelData, false);
@@ -883,7 +864,7 @@ function restoreSavedParcelsOnMap() {
                             fillOpacity: 0.5
                         });
                         newParcel.color = saved.color;
-                        console.log(`새 클릭 필지 생성 및 색상 복원: ${saved.parcelNumber} - ${saved.color}`);
+    // console.log(`새 클릭 필지 생성 및 색상 복원: ${saved.parcelNumber} - ${saved.color}`);
                     }
                 }
             }
@@ -909,7 +890,7 @@ function restoreSavedParcelsOnMap() {
                         fillOpacity: 0.5
                     });
                     parcelData.color = saved.color;
-                    console.log(`추가 색상 복원: ${jibun} - ${saved.color}`);
+    // console.log(`추가 색상 복원: ${jibun} - ${saved.color}`);
                 }
             }
         }
@@ -936,7 +917,7 @@ function clearSelectedParcelsColors() {
             });
             
             if (hasInfo) {
-                console.log('정보가 있는 필지 보호:', pnu);
+    // console.log('정보가 있는 필지 보호:', pnu);
                 return;
             }
             
@@ -989,7 +970,7 @@ function clearAllParcelsColors() {
     // 폼 초기화
     document.getElementById('parcelForm').reset();
     
-    console.log(`전체 초기화: ${clearedCount}개 필지 색상 제거`);
+    // console.log(`전체 초기화: ${clearedCount}개 필지 색상 제거`);
     alert('모든 필지가 초기화되었습니다.');
 }
 
@@ -1025,3 +1006,387 @@ function initializeEventListeners() {
     });
     // 중복 이벤트 리스너 제거 - utils.js에서 이미 등록됨
 }
+
+// 🎯 ULTRATHINK: 강화된 Point-in-Polygon 검사 (다중 알고리즘)
+function isPointInPolygon(point, polygon) {
+    try {
+        const path = polygon.getPath();
+        if (!path || path.length < 3) {
+    // console.log(`   ❌ 폴리곤 경로 없음 또는 점 부족 (${path ? path.length : 0})`);
+            return false;
+        }
+        
+        const clickX = point.lng(), clickY = point.lat();
+    // console.log(`   🎯 클릭 좌표: (${clickX.toFixed(6)}, ${clickY.toFixed(6)})`);
+        
+        // 폴리곤 범위 확인 먼저
+        let minX = Infinity, maxX = -Infinity;
+        let minY = Infinity, maxY = -Infinity;
+        
+        for (let i = 0; i < path.length; i++) {
+            const vertex = path.getAt(i);
+            const x = vertex.lng(), y = vertex.lat();
+            minX = Math.min(minX, x);
+            maxX = Math.max(maxX, x);
+            minY = Math.min(minY, y);
+            maxY = Math.max(maxY, y);
+        }
+        
+    // console.log(`   📦 폴리곤 범위: X(${minX.toFixed(6)} ~ ${maxX.toFixed(6)}), Y(${minY.toFixed(6)} ~ ${maxY.toFixed(6)})`);
+        
+        // 클릭 점이 폴리곤 경계 범위 안에 있는지 확인
+        if (clickX < minX || clickX > maxX || clickY < minY || clickY > maxY) {
+    // console.log(`   ❌ 클릭 점이 폴리곤 경계 범위 밖에 있음`);
+            return false;
+        }
+        
+    // console.log(`   ✅ 클릭 점이 폴리곤 경계 범위 안에 있음`);
+        
+        // 1. 개선된 Ray Casting 알고리즘
+        let intersections = 0;
+        for (let i = 0; i < path.length; i++) {
+            const j = (i + 1) % path.length;
+            const xi = path.getAt(i).lng(), yi = path.getAt(i).lat();
+            const xj = path.getAt(j).lng(), yj = path.getAt(j).lat();
+            
+            // 수평 광선과 선분의 교차 검사 (더 정밀한 방법)
+            if (((yi > clickY) !== (yj > clickY)) && 
+                (clickX < (xj - xi) * (clickY - yi) / (yj - yi) + xi)) {
+                intersections++;
+            }
+        }
+        
+        const raycastResult = intersections % 2 === 1;
+    // console.log(`   🏹 Ray Casting: ${intersections}번 교차 → ${raycastResult ? '내부' : '외부'}`);
+        
+        // 2. Winding Number 알고리즘 (더 정확함)
+        let wn = 0;
+        for (let i = 0; i < path.length; i++) {
+            const j = (i + 1) % path.length;
+            const xi = path.getAt(i).lng(), yi = path.getAt(i).lat();
+            const xj = path.getAt(j).lng(), yj = path.getAt(j).lat();
+            
+            if (yi <= clickY) {
+                if (yj > clickY) { // upward crossing
+                    const cross = (xj - xi) * (clickY - yi) - (clickX - xi) * (yj - yi);
+                    if (cross > 0) wn++;
+                }
+            } else {
+                if (yj <= clickY) { // downward crossing
+                    const cross = (xj - xi) * (clickY - yi) - (clickX - xi) * (yj - yi);
+                    if (cross < 0) wn--;
+                }
+            }
+        }
+        
+        const windingResult = wn !== 0;
+    // console.log(`   🌪️ Winding Number: ${wn} → ${windingResult ? '내부' : '외부'}`);
+        
+        // 두 알고리즘 결과 비교
+        if (raycastResult === windingResult) {
+    // console.log(`   ✅ 두 알고리즘 일치: ${raycastResult ? '폴리곤 내부' : '폴리곤 외부'}`);
+            return raycastResult;
+        } else {
+    // console.log(`   ⚠️ 알고리즘 불일치! Ray: ${raycastResult}, Winding: ${windingResult} → Winding 결과 채택`);
+            return windingResult;
+        }
+        
+    } catch (error) {
+        console.error(`   ❌ Point-in-Polygon 검사 오류:`, error);
+        return false;
+    }
+}
+
+// 우클릭한 위치의 필지 삭제 (Point-in-Polygon 방식)
+function removeParcelAtLocation(lat, lng) {
+    try {
+        // 디버깅 로그: 함수 시작
+        window.RightClickDebugger.log('SEARCH', 'removeParcelAtLocation 함수 시작', {
+            coordinates: { lat, lng },
+            formatted: `${lat.toFixed(6)}, ${lng.toFixed(6)}`
+        });
+        
+        console.log(`🗑️ 우클릭 삭제 시도: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+        
+        // 🔍 디버깅: clickParcels 상태 확인
+        const parcelCount = window.clickParcels ? window.clickParcels.size : 0;
+        window.RightClickDebugger.log('SEARCH', 'clickParcels 상태 확인', {
+            exists: !!window.clickParcels,
+            count: parcelCount,
+            isEmpty: parcelCount === 0
+        });
+        
+        if (window.clickParcels) {
+            const parcelInfo = [];
+            window.clickParcels.forEach((parcelData, pnu) => {
+                parcelInfo.push({
+                    pnu,
+                    color: parcelData.color,
+                    hasPolygon: !!parcelData.polygon,
+                    isColored: parcelData.color !== 'transparent'
+                });
+            });
+            
+            window.RightClickDebugger.log('SEARCH', 'clickParcels 내용 분석', {
+                parcels: parcelInfo,
+                coloredCount: parcelInfo.filter(p => p.isColored).length
+            });
+        }
+        
+        let targetParcel = null;
+        
+        // 🎯 ULTRATHINK: 정확한 Point-in-Polygon 기반 삭제 (폴리곤 내부만 삭제)
+        window.RightClickDebugger.log('POLYGON', 'Point-in-Polygon 검사 시작');
+        
+        // 색칠된 필지들 중에서 클릭 위치가 내부에 있는 것 찾기
+        if (window.clickParcels) {
+            let checkedCount = 0;
+            let coloredCount = 0;
+            const polygonResults = [];
+            
+            window.clickParcels.forEach((parcelData, pnu) => {
+                checkedCount++;
+                
+                if (parcelData.color !== 'transparent' && parcelData.polygon) {
+                    coloredCount++;
+                    const path = parcelData.polygon.getPath();
+                    
+                    if (path && path.length > 0) {
+                        // Point-in-Polygon 체크 - 클릭 위치가 폴리곤 내부에 있는지 확인
+                        const isInside = isPointInPolygon(lat, lng, path);
+                        
+                        polygonResults.push({
+                            pnu,
+                            color: parcelData.color,
+                            pathLength: path.length,
+                            isInside
+                        });
+                        
+                        window.RightClickDebugger.log('POLYGON', `필지 ${pnu} 검사 완료`, {
+                            pnu,
+                            color: parcelData.color,
+                            pathPoints: path.length,
+                            isInside,
+                            result: isInside ? '내부 - 삭제 대상' : '외부 - 제외'
+                        });
+                        
+                        if (isInside) {
+                            targetParcel = { pnu, data: parcelData };
+                            window.RightClickDebugger.log('POLYGON', '삭제 대상 필지 발견!', {
+                                selectedPNU: pnu,
+                                color: parcelData.color
+                            });
+                            return; // 내부에 있으면 즉시 선택하고 종료
+                        }
+                    } else {
+                        window.RightClickDebugger.log('POLYGON', `필지 ${pnu} 경로 정보 없음`, {
+                            pnu,
+                            hasPath: !!path,
+                            pathLength: path ? path.length : 0
+                        });
+                    }
+                }
+            });
+            
+            window.RightClickDebugger.log('POLYGON', 'Point-in-Polygon 검사 완료', {
+                totalChecked: checkedCount,
+                coloredParcels: coloredCount,
+                polygonResults,
+                targetFound: !!targetParcel
+            });
+        }
+        
+        // 클릭 위치가 정확히 폴리곤 내부에 있을 때만 삭제
+        if (targetParcel) {
+            const { pnu, data } = targetParcel;
+            
+            window.RightClickDebugger.log('DELETE', '필지 삭제 처리 시작', {
+                pnu,
+                currentColor: data.color,
+                hasPolygon: !!data.polygon
+            });
+            
+            console.log(`✅ 우클릭 삭제: ${pnu}`);
+            
+            // 색칠 해제 수행
+            if (data.polygon) {
+                data.polygon.setOptions({
+                    fillColor: 'transparent',
+                    fillOpacity: 0,
+                    strokeColor: '#0000FF',
+                    strokeOpacity: 0.6,
+                    strokeWeight: 0.5
+                });
+                data.color = 'transparent';
+                
+                window.RightClickDebugger.log('DELETE', '폴리곤 색상 제거 완료', {
+                    pnu,
+                    newColor: 'transparent'
+                });
+            }
+            
+            // LocalStorage에서 제거
+            const savedData = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEY) || '[]');
+            const beforeCount = savedData.length;
+            const updatedData = savedData.filter(item => item.pnu !== pnu);
+            const afterCount = updatedData.length;
+            localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(updatedData));
+            
+            window.RightClickDebugger.log('DELETE', 'LocalStorage 데이터 제거 완료', {
+                pnu,
+                beforeCount,
+                afterCount,
+                removed: beforeCount - afterCount
+            });
+            
+            // 필지 목록 업데이트
+            if (window.parcelManager && window.parcelManager.renderParcelList) {
+                window.parcelManager.renderParcelList();
+                window.RightClickDebugger.log('DELETE', '필지 목록 업데이트 완료');
+            }
+            
+            // 현재 선택된 필지라면 폼도 초기화
+            if (window.currentSelectedPNU === pnu) {
+                document.getElementById('parcelNumber').value = '';
+                document.getElementById('ownerName').value = '';
+                document.getElementById('ownerAddress').value = '';
+                document.getElementById('ownerContact').value = '';
+                document.getElementById('memo').value = '';
+                window.currentSelectedPNU = null;
+                
+                window.RightClickDebugger.log('DELETE', '선택된 필지 폼 초기화 완료', {
+                    clearedPNU: pnu
+                });
+            }
+            
+            window.RightClickDebugger.log('SUCCESS', '필지 삭제 성공!', {
+                pnu,
+                totalOperations: '폴리곤 색상 제거, LocalStorage 업데이트, 목록 갱신 완료'
+            });
+            
+        } else {
+            window.RightClickDebugger.log('DELETE', '삭제 대상 필지 없음 - 클릭 위치가 색칠된 폴리곤 내부에 없음', {
+                clickPosition: { lat, lng },
+                reason: 'Point-in-Polygon 검사에서 일치하는 필지 없음'
+            });
+        }
+        
+        // 함수 종료 (API 호출은 비동기로 처리됨)
+    } catch (error) {
+        console.error('🚨 removeParcelAtLocation 함수 전체 에러:', error);
+        console.error('🔍 에러 상세:', {
+            message: error.message,
+            stack: error.stack,
+            coordinates: { lat, lng }
+        });
+    }
+}
+
+// 삭제용 필지 정보 조회 (간소화된 버전)
+async function getParcelInfoForDeletion(lat, lng) {
+    // console.log('🔍 삭제용 필지 정보 조회 중...');
+    
+    // 서버 프록시를 통한 VWorld API 호출
+    try {
+        const response = await fetch(`/api/vworld?lat=${lat}&lng=${lng}`);
+        if (!response.ok) {
+            throw new Error(`HTTP 오류: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.response && data.response.status === 'OK' && data.response.result) {
+            const features = data.response.result.featureCollection?.features;
+            if (features && features.length > 0) {
+                const feature = features[0];
+                return {
+                    pnu: feature.properties.PNU || feature.properties.pnu,
+                    properties: feature.properties,
+                    geometry: feature.geometry
+                };
+            }
+        }
+        return null;
+    } catch (error) {
+        console.error('삭제용 필지 조회 실패:', error);
+        return null;
+    }
+}
+
+// 🎯 ULTRATHINK: Point-in-Polygon 헬퍼 함수 (Ray Casting Algorithm)
+function isPointInPolygon(pointLat, pointLng, polygonPath) {
+    let inside = false;
+    const pathLength = polygonPath.length;
+    
+    for (let i = 0, j = pathLength - 1; i < pathLength; j = i++) {
+        const xi = polygonPath.getAt(i).lng();
+        const yi = polygonPath.getAt(i).lat();
+        const xj = polygonPath.getAt(j).lng();
+        const yj = polygonPath.getAt(j).lat();
+        
+        if (((yi > pointLat) !== (yj > pointLat)) &&
+            (pointLng < (xj - xi) * (pointLat - yi) / (yj - yi) + xi)) {
+            inside = !inside;
+        }
+    }
+    
+    return inside;
+}
+
+// 🎯 ULTRATHINK: 점에서 폴리곤 경계까지의 최단 거리 계산
+function getDistanceToPolygonEdge(pointLat, pointLng, polygonPath) {
+    let minDistance = Infinity;
+    const pathLength = polygonPath.length;
+    
+    // 각 선분(edge)과의 거리를 계산
+    for (let i = 0; i < pathLength; i++) {
+        const j = (i + 1) % pathLength;
+        const x1 = polygonPath.getAt(i).lng();
+        const y1 = polygonPath.getAt(i).lat();
+        const x2 = polygonPath.getAt(j).lng();
+        const y2 = polygonPath.getAt(j).lat();
+        
+        const distance = getDistanceToLineSegment(pointLng, pointLat, x1, y1, x2, y2);
+        if (distance < minDistance) {
+            minDistance = distance;
+        }
+    }
+    
+    return minDistance;
+}
+
+// 🎯 ULTRATHINK: 점에서 선분까지의 최단 거리 계산
+function getDistanceToLineSegment(px, py, x1, y1, x2, y2) {
+    const A = px - x1;
+    const B = py - y1;
+    const C = x2 - x1;
+    const D = y2 - y1;
+    
+    const dot = A * C + B * D;
+    const lenSq = C * C + D * D;
+    
+    let param = -1;
+    if (lenSq !== 0) {
+        param = dot / lenSq;
+    }
+    
+    let xx, yy;
+    
+    if (param < 0) {
+        xx = x1;
+        yy = y1;
+    } else if (param > 1) {
+        xx = x2;
+        yy = y2;
+    } else {
+        xx = x1 + param * C;
+        yy = y1 + param * D;
+    }
+    
+    const dx = px - xx;
+    const dy = py - yy;
+    return Math.sqrt(dx * dx + dy * dy);
+}
+
+// 전역 함수로 등록
+window.removeParcelAtLocation = removeParcelAtLocation;

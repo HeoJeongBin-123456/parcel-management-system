@@ -52,7 +52,7 @@ window.currentSelectedPNU = null; // 현재 선택된 필지의 PNU (전역 변�
 
 // 필지 표시/숨김 관련 유틸리티 함수들
 window.showClickParcels = function() {
-    console.log('클릭 필지 표시:', window.clickParcels.size, '개');
+    // console.log('클릭 필지 표시:', window.clickParcels.size, '개');
     window.clickParcels.forEach((parcel, key) => {
         if (parcel.polygon) parcel.polygon.setMap(map);
         if (parcel.label) parcel.label.setMap(map);
@@ -60,7 +60,7 @@ window.showClickParcels = function() {
 }
 
 window.hideClickParcels = function() {
-    console.log('클릭 필지 숨김:', window.clickParcels.size, '개');
+    // console.log('클릭 필지 숨김:', window.clickParcels.size, '개');
     window.clickParcels.forEach((parcel, key) => {
         if (parcel.polygon) parcel.polygon.setMap(null);
         if (parcel.label) parcel.label.setMap(null);
@@ -68,7 +68,7 @@ window.hideClickParcels = function() {
 }
 
 window.showSearchParcels = function() {
-    console.log('검색 필지 표시:', window.searchParcels.size, '개');
+    // console.log('검색 필지 표시:', window.searchParcels.size, '개');
     window.searchParcels.forEach((parcel, key) => {
         if (parcel.polygon) parcel.polygon.setMap(map);
         if (parcel.label) parcel.label.setMap(map);
@@ -76,7 +76,7 @@ window.showSearchParcels = function() {
 }
 
 window.hideSearchParcels = function() {
-    console.log('검색 필지 숨김:', window.searchParcels.size, '개');
+    // console.log('검색 필지 숨김:', window.searchParcels.size, '개');
     window.searchParcels.forEach((parcel, key) => {
         if (parcel.polygon) parcel.polygon.setMap(null);
         if (parcel.label) parcel.label.setMap(null);

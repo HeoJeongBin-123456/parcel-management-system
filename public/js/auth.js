@@ -26,7 +26,7 @@ const GoogleAuth = {
         // 개발 환경 및 테스트 환경에서는 인증 건너뛰기
         if (window.location.hostname === 'localhost' || 
             window.location.hostname.includes('vercel.app')) {
-            console.log('인증 상태: 테스트 모드 (우회)');
+    // console.log('인증 상태: 테스트 모드 (우회)');
             return true;
         }
         
@@ -38,17 +38,17 @@ const GoogleAuth = {
         if (idToken) {
             // 토큰 만료 체크
             if (!this.isTokenExpired()) {
-                console.log('인증 상태: 유효');
+    // console.log('인증 상태: 유효');
                 return true;
             } else {
-                console.log('토큰 만료됨, 자동 갱신 시도');
+    // console.log('토큰 만료됨, 자동 갱신 시도');
                 // 토큰 만료시 자동 갱신 시도
                 this.refreshToken();
                 return false;
             }
         }
         
-        console.log('인증 상태: 로그인 필요');
+    // console.log('인증 상태: 로그인 필요');
         return false;
     },
     
@@ -81,7 +81,7 @@ const GoogleAuth = {
                     scope: this.SCOPES,
                     prompt: '', // Silent refresh
                     callback: (tokenResponse) => {
-                        console.log('토큰 자동 갱신 성공');
+    // console.log('토큰 자동 갱신 성공');
                         this.saveTokens(tokenResponse);
                     }
                 });
@@ -309,21 +309,21 @@ const GoogleAuth = {
 document.addEventListener('DOMContentLoaded', function() {
     // login.html이 아닌 경우에만 인증 확인
     if (!window.location.pathname.includes('login.html')) {
-        console.log('===== 인증 체크 시작 =====');
-        console.log('현재 페이지:', window.location.pathname);
-        console.log('googleToken:', localStorage.getItem('googleToken') ? '있음' : '없음');
-        console.log('tokenExpiry:', localStorage.getItem('tokenExpiry'));
-        console.log('현재 시간:', new Date().getTime());
+    // console.log('===== 인증 체크 시작 =====');
+    // console.log('현재 페이지:', window.location.pathname);
+    // console.log('googleToken:', localStorage.getItem('googleToken') ? '있음' : '없음');
+    // console.log('tokenExpiry:', localStorage.getItem('tokenExpiry'));
+    // console.log('현재 시간:', new Date().getTime());
         
         if (!GoogleAuth.isAuthenticated()) {
-            console.log('인증 실패 - 로그인 페이지로 리다이렉트');
+    // console.log('인증 실패 - 로그인 페이지로 리다이렉트');
             GoogleAuth.redirectToLogin();
         } else {
-            console.log('인증 성공 - 메인 페이지 유지');
+    // console.log('인증 성공 - 메인 페이지 유지');
             // 인증된 경우 사용자 정보 표시
             const userInfo = GoogleAuth.getUserInfo();
             if (userInfo) {
-                console.log('로그인 사용자:', userInfo.email);
+    // console.log('로그인 사용자:', userInfo.email);
                 
                 // 헤더에 사용자 정보 표시 (선택사항)
                 const header = document.querySelector('.header');
@@ -344,7 +344,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // 주기적으로 토큰 유효성 체크 및 갱신 (30분마다)
             setInterval(() => {
                 if (GoogleAuth.isTokenExpired()) {
-                    console.log('토큰 만료 감지, 자동 갱신 시도...');
+    // console.log('토큰 만료 감지, 자동 갱신 시도...');
                     GoogleAuth.refreshToken();
                 }
             }, 30 * 60 * 1000); // 30분
@@ -352,7 +352,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // 페이지가 포커스를 받을 때마다 토큰 체크
             window.addEventListener('focus', () => {
                 if (GoogleAuth.isTokenExpired()) {
-                    console.log('페이지 포커스 시 토큰 갱신...');
+    // console.log('페이지 포커스 시 토큰 갱신...');
                     GoogleAuth.refreshToken();
                 }
             });

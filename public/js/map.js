@@ -2,6 +2,90 @@
 let streetLayer = null;
 let cadastralLayer = null;
 
+// 🔍 실시간 디버깅 로그 시스템
+window.RightClickDebugger = {
+    enabled: true,
+    logs: [],
+    maxLogs: 50,
+    
+    // 로그 추가
+    log(stage, message, data = null) {
+        if (!this.enabled) return;
+        
+        const timestamp = new Date().toISOString().slice(11, 23); // HH:MM:SS.mmm
+        const logEntry = {
+            timestamp,
+            stage,
+            message,
+            data: data ? JSON.parse(JSON.stringify(data)) : null
+        };
+        
+        this.logs.push(logEntry);
+        
+        // 최대 로그 수 제한
+        if (this.logs.length > this.maxLogs) {
+            this.logs.shift();
+        }
+        
+        // 콘솔 출력 (스타일링 포함)
+        const stageColors = {
+            'EVENT': 'color: #ff6b6b; font-weight: bold',
+            'COORDINATE': 'color: #4ecdc4; font-weight: bold',
+            'SEARCH': 'color: #45b7d1; font-weight: bold',
+            'POLYGON': 'color: #96ceb4; font-weight: bold',
+            'DELETE': 'color: #ffeaa7; font-weight: bold',
+            'SUCCESS': 'color: #00b894; font-weight: bold',
+            'ERROR': 'color: #e17055; font-weight: bold'
+        };
+        
+        console.log(
+            `%c[${timestamp}] [${stage}] ${message}`,
+            stageColors[stage] || 'color: #666',
+            data || ''
+        );
+    },
+    
+    // 현재 세션 로그 표시
+    showLogs() {
+        console.group('🔍 우클릭 디버깅 로그 (최근 ' + this.logs.length + '개)');
+        this.logs.forEach(log => {
+            console.log(`[${log.timestamp}] [${log.stage}] ${log.message}`, log.data || '');
+        });
+        console.groupEnd();
+    },
+    
+    // 로그 초기화
+    clearLogs() {
+        this.logs = [];
+        console.log('🧹 디버깅 로그가 초기화되었습니다.');
+    },
+    
+    // 디버깅 토글
+    toggle() {
+        this.enabled = !this.enabled;
+        console.log(`🔍 디버깅 ${this.enabled ? '활성화' : '비활성화'}되었습니다.`);
+    },
+    
+    // 상태 요약
+    summary() {
+        const recent = this.logs.slice(-10);
+        console.group('📊 우클릭 디버깅 요약');
+        console.log('활성화 상태:', this.enabled);
+        console.log('총 로그 수:', this.logs.length);
+        console.log('최근 10개 이벤트:', recent.map(l => `${l.stage}: ${l.message}`));
+        console.groupEnd();
+    }
+};
+
+// 전역 디버깅 단축 함수들
+window.showRightClickLogs = () => window.RightClickDebugger.showLogs();
+window.clearRightClickLogs = () => window.RightClickDebugger.clearLogs();
+window.toggleRightClickDebug = () => window.RightClickDebugger.toggle();
+window.rightClickSummary = () => window.RightClickDebugger.summary();
+
+console.log('🔍 우클릭 디버깅 시스템이 초기화되었습니다.');
+console.log('사용법: showRightClickLogs(), clearRightClickLogs(), toggleRightClickDebug(), rightClickSummary()');
+
 // 지도 초기화
 function initMap() {
     // 저장된 위치 정보 불러오기
@@ -12,11 +96,11 @@ function initMap() {
         const pos = JSON.parse(savedPosition);
         center = new naver.maps.LatLng(pos.lat, pos.lng);
         zoom = pos.zoom;
-        console.log('저장된 위치 복원:', pos);
+    // console.log('저장된 위치 복원:', pos);
     } else {
         center = new naver.maps.LatLng(CONFIG.MAP_DEFAULT_CENTER.lat, CONFIG.MAP_DEFAULT_CENTER.lng);
         zoom = CONFIG.MAP_DEFAULT_ZOOM;
-        console.log('기본 위치 사용');
+    // console.log('기본 위치 사용');
     }
     
     const mapOptions = {
@@ -73,7 +157,7 @@ function initMap() {
                 case 'street':
                     // 거리뷰 활성화
                     showStreetView();
-                    console.log('거리뷰 모드 활성화');
+    // console.log('거리뷰 모드 활성화');
                     break;
             }
         });
@@ -83,15 +167,64 @@ function initMap() {
     naver.maps.Event.addListener(map, 'click', function(e) {
         // 검색 모드에서는 클릭으로 필지를 추가하지 않음
         if (window.currentMode === 'search') {
-            console.log('검색 모드에서는 클릭으로 필지를 추가하지 않습니다.');
+    // console.log('검색 모드에서는 클릭으로 필지를 추가하지 않습니다.');
             return;
         }
         
         const coord = e.coord;
-        console.log('클릭 좌표:', coord.lat(), coord.lng());
+    // console.log('클릭 좌표:', coord.lat(), coord.lng());
         
         // 클릭 모드일 때만 Vworld API로 필지 정보 조회
         getParcelInfo(coord.lat(), coord.lng());
+    });
+    
+    // 🎯 우클릭 이벤트 - 필지 삭제 (브라우저 컨텍스트 메뉴 방지)
+    naver.maps.Event.addListener(map, 'rightclick', function(e) {
+        try {
+            // 디버깅 로그: 이벤트 시작
+            window.RightClickDebugger.log('EVENT', '우클릭 이벤트 발생');
+            
+            e.originalEvent?.preventDefault(); // 브라우저 기본 우클릭 메뉴 방지 (네이버 지도 API 호환)
+            const coord = e.coord;
+            const lat = coord.lat();
+            const lng = coord.lng();
+            
+            // 디버깅 로그: 좌표 정보
+            window.RightClickDebugger.log('COORDINATE', '클릭 좌표 추출 완료', {
+                latitude: lat,
+                longitude: lng,
+                formatted: `${lat.toFixed(6)}, ${lng.toFixed(6)}`
+            });
+            
+            console.log('👉 우클릭 이벤트 발생 - 필지 삭제:', lat, lng);
+            
+            // 해당 위치의 필지를 찾아서 삭제
+            if (window.removeParcelAtLocation) {
+                // 디버깅 로그: 삭제 함수 호출
+                window.RightClickDebugger.log('SEARCH', 'removeParcelAtLocation 함수 호출 시작');
+                window.removeParcelAtLocation(lat, lng);
+            } else {
+                // 디버깅 로그: 함수 없음 에러
+                window.RightClickDebugger.log('ERROR', 'removeParcelAtLocation 함수를 찾을 수 없음');
+                console.error('❌ removeParcelAtLocation 함수를 찾을 수 없습니다.');
+            }
+            
+            return false; // 이벤트 전파 중단
+        } catch (error) {
+            // 디버깅 로그: 에러 발생
+            window.RightClickDebugger.log('ERROR', '우클릭 이벤트 처리 중 에러 발생', {
+                message: error.message,
+                stack: error.stack
+            });
+            
+            console.error('🚨 우클릭 이벤트 처리 중 에러 발생:', error);
+            console.error('🔍 에러 상세:', {
+                message: error.message,
+                stack: error.stack,
+                event: e
+            });
+            return false; // 에러 발생 시에도 이벤트 전파 중단
+        }
     });
     
     // 지도 이동 시 필지 데이터 로드 및 위치 저장
@@ -107,7 +240,7 @@ function initMap() {
             zoom: map.getZoom()
         };
         localStorage.setItem('mapPosition', JSON.stringify(position));
-        console.log('위치 저장:', position);
+    // console.log('위치 저장:', position);
         
         // 지도 이동 후 저장된 필지 색상 복원
         setTimeout(() => {
@@ -151,7 +284,7 @@ function moveToLocation(lat, lng, zoom = 18) {
         zoom: zoom || map.getZoom()
     };
     localStorage.setItem('mapPosition', JSON.stringify(position));
-    console.log('이동 위치 저장:', position);
+    // console.log('이동 위치 저장:', position);
 }
 
 // 현재 위치로 이동
@@ -184,7 +317,7 @@ function moveToCurrentLocation() {
 function showStreetView() {
     const mapCenter = map.getCenter();
     
-    console.log('🚶 거리뷰 모드 시작:', mapCenter.toString());
+    // console.log('🚶 거리뷰 모드 시작:', mapCenter.toString());
     
     // 지도 숨기고 파노라마 표시
     document.getElementById('map').style.display = 'none';
@@ -199,7 +332,7 @@ function showStreetView() {
     if (!window.panorama) {
         // 1단계: 파노라마 시도
         try {
-            console.log('📷 파노라마 생성 시도...');
+    // console.log('📷 파노라마 생성 시도...');
             window.panorama = new naver.maps.Panorama('pano', {
                 position: mapCenter,
                 pov: { pan: -133, tilt: 0, fov: 100 },
@@ -209,14 +342,14 @@ function showStreetView() {
             });
             
             naver.maps.Event.addListener(window.panorama, 'pano_changed', function() {
-                console.log('📍 파노라마 위치 변경됨');
+    // console.log('📍 파노라마 위치 변경됨');
             });
             
             // 파노라마 로드 완료 대기
             setTimeout(() => {
                 try {
                     if (window.panorama.getPosition()) {
-                        console.log('✅ 파노라마 초기화 성공');
+    // console.log('✅ 파노라마 초기화 성공');
                         return;
                     }
                 } catch (checkError) {
@@ -233,7 +366,7 @@ function showStreetView() {
         // 기존 파노라마 위치 업데이트
         try {
             window.panorama.setPosition(mapCenter);
-            console.log('📍 파노라마 위치 업데이트 성공');
+    // console.log('📍 파노라마 위치 업데이트 성공');
         } catch (updateError) {
             console.error('💥 파노라마 위치 업데이트 실패:', updateError);
             fallbackToStreetLayer();
@@ -242,7 +375,7 @@ function showStreetView() {
     
     // 2단계: 거리뷰 레이어 폴백
     function fallbackToStreetLayer() {
-        console.log('🔄 거리뷰 레이어로 폴백 시도...');
+    // console.log('🔄 거리뷰 레이어로 폴백 시도...');
         
         // 파노라마 제거
         if (window.panorama) {
@@ -263,7 +396,7 @@ function showStreetView() {
             map.setCenter(mapCenter);
             map.setZoom(18);
             
-            console.log('✅ 거리뷰 레이어 활성화 성공');
+    // console.log('✅ 거리뷰 레이어 활성화 성공');
             
         } catch (layerError) {
             console.error('💥 거리뷰 레이어 실패:', layerError);
@@ -273,7 +406,7 @@ function showStreetView() {
     
     // 3단계: 일반 지도 폴백 (고배율)
     function fallbackToMapView() {
-        console.log('🗺️ 일반 지도 폴백 (거리뷰 풍 고배율)');
+    // console.log('🗺️ 일반 지도 폴백 (거리뷰 풍 고배율)');
         
         document.getElementById('map').style.display = 'block';
         document.getElementById('pano').style.display = 'none';
@@ -312,7 +445,7 @@ function showStreetView() {
             }
         });
         
-        console.log('✅ 고배율 지도 뷰로 표시 완료');
+    // console.log('✅ 고배율 지도 뷰로 표시 완료');
     }
 }
 
@@ -321,12 +454,12 @@ function waitForNaverMaps(callback, maxAttempts = 30) {
     let attempts = 0;
     
     function check() {
-        console.log(`🔍 네이버 지도 API 로드 확인 중... (시도 ${attempts + 1}/${maxAttempts})`);
+    // console.log(`🔍 네이버 지도 API 로드 확인 중... (시도 ${attempts + 1}/${maxAttempts})`);
         
         if (typeof naver !== 'undefined' && 
             typeof naver.maps !== 'undefined' &&
             typeof naver.maps.Map !== 'undefined') {
-            console.log('✅ 네이버 지도 API 로드 완료!');
+    // console.log('✅ 네이버 지도 API 로드 완료!');
             callback();
             return;
         }
@@ -358,22 +491,22 @@ function waitForNaverMaps(callback, maxAttempts = 30) {
 
 // 페이지 로드 시 지도 초기화
 window.onload = function() {
-    console.log('🚀 페이지 로드 완료, 지도 초기화 시작');
+    // console.log('🚀 페이지 로드 완료, 지도 초기화 시작');
     
     // 네이버 지도 API 로드 대기
     waitForNaverMaps(() => {
         try {
-            console.log('🗺️ 지도 초기화 시작...');
+    // console.log('🗺️ 지도 초기화 시작...');
             initMap();
             
             if (typeof initializeEventListeners === 'function') {
                 initializeEventListeners();
-                console.log('✅ 이벤트 리스너 초기화 완료');
+    // console.log('✅ 이벤트 리스너 초기화 완료');
             }
             
             if (typeof loadSavedParcels === 'function') {
                 loadSavedParcels();
-                console.log('✅ 저장된 필지 로드 완료');
+    // console.log('✅ 저장된 필지 로드 완료');
             }
             
             // 초기 화면의 필지 로드 및 색상 복원
@@ -393,13 +526,13 @@ window.onload = function() {
                         // 저장된 검색 결과 복원
                         if (typeof loadSearchResultsFromStorage === 'function') {
                             loadSearchResultsFromStorage();
-                            console.log('💎 저장된 검색 결과 복원 시도');
+    // console.log('💎 저장된 검색 결과 복원 시도');
                         }
                     }, 1500);
                 }
             }, 1000);
             
-            console.log('🎉 모든 초기화 완료!');
+    // console.log('🎉 모든 초기화 완료!');
             
         } catch (error) {
             console.error('💥 초기화 중 오류 발생:', error);

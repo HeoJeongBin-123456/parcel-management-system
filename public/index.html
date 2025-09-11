@@ -118,6 +118,7 @@
                     <div class="form-buttons">
                         <button type="button" id="saveBtn">저장</button>
                         <button type="button" id="clearBtn">초기화</button>
+                        <button type="button" id="deleteParcelBtn" style="background-color: #dc3545; color: white;">현재 필지 삭제</button>
                     </div>
                     <div class="export-buttons">
                         <button type="button" id="exportCurrentBtn" onclick="exportCurrentParcelToGoogleSheets()">
@@ -171,21 +172,6 @@
         </div>
     </div>
     
-    <!-- 새로운 사이드 패널 (저장된 필지 관리) -->
-    <div id="advancedParcelPanel" class="advanced-panel">
-        <div class="ap-toggle" onclick="parcelManager.togglePanel()" title="필지 목록">
-            <span class="ap-toggle-icon">≡</span>
-        </div>
-        <div class="ap-content">
-            <div class="ap-header">
-                <h3>저장 필지 목록</h3>
-                <button class="ap-close" onclick="parcelManager.togglePanel()">✕</button>
-            </div>
-            <div id="parcelManagerContent" class="ap-body">
-                <!-- 여기에 ParcelManager가 렌더링됨 -->
-            </div>
-        </div>
-    </div>
 
     <!-- JavaScript -->
     <script>

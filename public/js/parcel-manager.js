@@ -54,7 +54,7 @@ class ParcelManager {
         
         // searchParcels Map의 저장된 데이터도 추가 (중복 제외)
         if (window.searchParcels && window.searchParcels.size > 0) {
-            console.log('searchParcels 데이터 추가 시도:', window.searchParcels.size);
+    // console.log('searchParcels 데이터 추가 시도:', window.searchParcels.size);
             window.searchParcels.forEach((parcelData, pnu) => {
                 // 저장된 정보가 있는 검색 필지만 추가
                 if (parcelData.savedInfo || parcelData.ownerName || parcelData.ownerAddress || parcelData.memo) {
@@ -83,7 +83,7 @@ class ParcelManager {
                         };
                         
                         this.parcels.push(newParcel);
-                        console.log('검색 필지 추가됨:', newParcel);
+    // console.log('검색 필지 추가됨:', newParcel);
                     }
                 }
             });
@@ -183,9 +183,9 @@ class ParcelManager {
         // 검색 필지도 모두 제거 (search.js의 clearAllSearchResults 함수 호출)
         if (typeof window.clearAllSearchResults === 'function') {
             window.clearAllSearchResults();
-            console.log('검색 필지도 모두 제거됨');
+    // console.log('검색 필지도 모두 제거됨');
         } else {
-            console.log('clearAllSearchResults 함수를 찾을 수 없음');
+    // console.log('clearAllSearchResults 함수를 찾을 수 없음');
         }
         
         // UI 업데이트
@@ -268,7 +268,7 @@ class ParcelManager {
                 }
             });
             // searchParcels Map 자체는 유지하되, 폴리곤만 제거
-            console.log('검색 필지 폴리곤 제거 완료');
+    // console.log('검색 필지 폴리곤 제거 완료');
         }
     }
     
@@ -279,7 +279,7 @@ class ParcelManager {
     }
     
     setFilter(filterType) {
-        console.log('setFilter 호출됨:', filterType); // 디버깅용
+    // console.log('setFilter 호출됨:', filterType); // 디버깅용
         this.filterBy = filterType;
         
         // 보라색(검색 필지) 필터 처리
@@ -292,18 +292,18 @@ class ParcelManager {
         }
         
         this.applyFilters();
-        console.log('필터링 후 필지 개수:', this.filteredParcels.length); // 디버깅용
+    // console.log('필터링 후 필지 개수:', this.filteredParcels.length); // 디버깅용
         this.renderList(); // 리스트만 업데이트
     }
     
     // 검색 필지의 폴리곤과 라벨 모두 표시
     showSearchParcelsWithLabels() {
         if (!window.searchParcels || window.searchParcels.size === 0) {
-            console.log('표시할 검색 필지가 없음');
+    // console.log('표시할 검색 필지가 없음');
             return;
         }
         
-        console.log('🟣 보라색 필터: 검색 필지 표시 시작');
+    // console.log('🟣 보라색 필터: 검색 필지 표시 시작');
         let showCount = 0;
         
         window.searchParcels.forEach((result, key) => {
@@ -325,7 +325,7 @@ class ParcelManager {
             }
         });
         
-        console.log(`✅ ${showCount}개 검색 필지 라벨 표시 완료`);
+    // console.log(`✅ ${showCount}개 검색 필지 라벨 표시 완료`);
     }
     
     // 검색 필지의 라벨만 숨기기
@@ -334,7 +334,7 @@ class ParcelManager {
             return;
         }
         
-        console.log('🔸 다른 필터: 검색 필지 라벨 숨기기');
+    // console.log('🔸 다른 필터: 검색 필지 라벨 숨기기');
         let hideCount = 0;
         
         window.searchParcels.forEach((result, key) => {
@@ -355,13 +355,13 @@ class ParcelManager {
             }
         });
         
-        console.log(`✅ ${hideCount}개 검색 필지 라벨 숨김 완료`);
+    // console.log(`✅ ${hideCount}개 검색 필지 라벨 숨김 완료`);
     }
     
     
     applyFilters() {
-        console.log('applyFilters 시작 - filterBy:', this.filterBy); // 디버깅용
-        console.log('전체 필지 수:', this.parcels.length); // 디버깅용
+    // console.log('applyFilters 시작 - filterBy:', this.filterBy); // 디버깅용
+    // console.log('전체 필지 수:', this.parcels.length); // 디버깅용
         
         // 필터링
         this.filteredParcels = this.parcels.filter(parcel => {
@@ -385,7 +385,7 @@ class ParcelManager {
             if (this.filterBy !== 'all') {
                 // 디버깅: 각 필지의 색상 확인
                 if (this.parcels.length < 10) { // 필지가 적을 때만 로그
-                    console.log(`필지 색상 비교: ${parcel.parcelNumber} - color: ${parcel.color}, filterBy: ${this.filterBy}`);
+    // console.log(`필지 색상 비교: ${parcel.parcelNumber} - color: ${parcel.color}, filterBy: ${this.filterBy}`);
                 }
                 if (parcel.color !== this.filterBy) {
                     return false;
@@ -537,7 +537,7 @@ class ParcelManager {
             searchStatEls[1].textContent = stats.searchCount;
         }
         
-        console.log('통계 업데이트 완료:', { 선택: stats.selectedCount, 검색: stats.searchCount });
+    // console.log('통계 업데이트 완료:', { 선택: stats.selectedCount, 검색: stats.searchCount });
     }
     
     render() {
@@ -828,7 +828,7 @@ class ParcelManager {
                     
                     // currentTarget을 사용하여 정확한 버튼 요소 가져오기
                     const filterValue = e.currentTarget.getAttribute('data-filter');
-                    console.log('필터 클릭:', filterValue); // 디버깅용
+    // console.log('필터 클릭:', filterValue); // 디버깅용
                     
                     if (filterValue) {
                         this.setFilter(filterValue);

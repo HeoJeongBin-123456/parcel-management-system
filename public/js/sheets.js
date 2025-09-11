@@ -51,14 +51,14 @@ async function exportCurrentParcelToGoogleSheets() {
     
     // 액세스 토큰 확인 및 요청
     if (!GoogleAuth.getAccessToken()) {
-        console.log('액세스 토큰이 없습니다. 권한 요청을 시작합니다.');
+    // console.log('액세스 토큰이 없습니다. 권한 요청을 시작합니다.');
         
         // Google OAuth2 토큰 요청
         const tokenClient = google.accounts.oauth2.initTokenClient({
             client_id: GoogleAuth.CLIENT_ID,
             scope: GoogleAuth.SCOPES,
             callback: async (tokenResponse) => {
-                console.log('액세스 토큰 획득 성공');
+    // console.log('액세스 토큰 획득 성공');
                 GoogleAuth.saveTokens(tokenResponse);
                 
                 // 토큰 획득 후 다시 시도
@@ -75,18 +75,18 @@ async function exportCurrentParcelToGoogleSheets() {
     }
     
     try {
-        console.log('현재 필지를 Google Sheets로 전송 시작...');
+    // console.log('현재 필지를 Google Sheets로 전송 시작...');
         
         // 스프레드시트 ID 가져오기 또는 생성
         let spreadsheetId = localStorage.getItem('googleSpreadsheetId');
         
         if (!spreadsheetId) {
-            console.log('새 스프레드시트 생성 중...');
+    // console.log('새 스프레드시트 생성 중...');
             spreadsheetId = await GoogleAuth.getOrCreateSpreadsheet();
             
             if (spreadsheetId) {
                 localStorage.setItem('googleSpreadsheetId', spreadsheetId);
-                console.log('스프레드시트 생성 완료:', spreadsheetId);
+    // console.log('스프레드시트 생성 완료:', spreadsheetId);
             } else {
                 throw new Error('스프레드시트 생성 실패');
             }
@@ -96,7 +96,7 @@ async function exportCurrentParcelToGoogleSheets() {
         const result = await GoogleAuth.appendToSheet(spreadsheetId, [currentData]);
         
         if (result) {
-            console.log('전송 완료:', result);
+    // console.log('전송 완료:', result);
             alert(`현재 필지(고련${currentData.지번})가 구글 시트에 저장되었습니다!\n\n시트 열기: https://docs.google.com/spreadsheets/d/${spreadsheetId}`);
             
             // 시트 URL 자동으로 열기 (선택사항)
@@ -130,14 +130,14 @@ async function exportToGoogleSheets(dataToExport = null) {
     
     // 액세스 토큰 확인 및 요청
     if (!GoogleAuth.getAccessToken()) {
-        console.log('액세스 토큰이 없습니다. 권한 요청을 시작합니다.');
+    // console.log('액세스 토큰이 없습니다. 권한 요청을 시작합니다.');
         
         // Google OAuth2 토큰 요청
         const tokenClient = google.accounts.oauth2.initTokenClient({
             client_id: GoogleAuth.CLIENT_ID,
             scope: GoogleAuth.SCOPES,
             callback: async (tokenResponse) => {
-                console.log('액세스 토큰 획득 성공');
+    // console.log('액세스 토큰 획득 성공');
                 GoogleAuth.saveTokens(tokenResponse);
                 
                 // 토큰 획득 후 다시 시도
@@ -171,18 +171,18 @@ async function exportToGoogleSheets(dataToExport = null) {
     }));
     
     try {
-        console.log('Google Sheets로 자동 전송 시작...');
+    // console.log('Google Sheets로 자동 전송 시작...');
         
         // 스프레드시트 ID 가져오기 또는 생성
         let spreadsheetId = localStorage.getItem('googleSpreadsheetId');
         
         if (!spreadsheetId) {
-            console.log('새 스프레드시트 생성 중...');
+    // console.log('새 스프레드시트 생성 중...');
             spreadsheetId = await GoogleAuth.getOrCreateSpreadsheet();
             
             if (spreadsheetId) {
                 localStorage.setItem('googleSpreadsheetId', spreadsheetId);
-                console.log('스프레드시트 생성 완료:', spreadsheetId);
+    // console.log('스프레드시트 생성 완료:', spreadsheetId);
             } else {
                 throw new Error('스프레드시트 생성 실패');
             }
@@ -192,7 +192,7 @@ async function exportToGoogleSheets(dataToExport = null) {
         const result = await GoogleAuth.appendToSheet(spreadsheetId, dataToSend);
         
         if (result) {
-            console.log('전송 완료:', result);
+    // console.log('전송 완료:', result);
             alert(`구글 시트로 ${savedData.length}개의 데이터가 전송되었습니다!\n\n시트 열기: https://docs.google.com/spreadsheets/d/${spreadsheetId}`);
             
             // 시트 URL 자동으로 열기 (선택사항)
@@ -359,7 +359,7 @@ function copyDataToClipboard() {
         })[0];
         
         if (currentParcelData) {
-            console.log('📋 가장 최근 저장된 필지 정보를 복사합니다:', currentParcelData.parcelNumber);
+    // console.log('📋 가장 최근 저장된 필지 정보를 복사합니다:', currentParcelData.parcelNumber);
         }
     }
     
