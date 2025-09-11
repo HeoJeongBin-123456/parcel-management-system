@@ -14,6 +14,9 @@
     <!-- Google Identity Services -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     
+    <!-- Supabase -->
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    
     <!-- CSS -->
     <link rel="stylesheet" href="/css/styles.css">
     <link rel="stylesheet" href="/css/advanced-ui.css">
@@ -25,6 +28,7 @@
         <!-- 헤더 영역 -->
         <header class="header">
             <h1 style="color: white;">네이버 지도 필지 관리 프로그램</h1>
+            <div id="connectionStatus" class="connection-status disconnected">🔴 연결 중...</div>
             <div class="header-controls">
                 <!-- 지도 타입 선택 -->
                 <div class="map-type-selector">
@@ -81,14 +85,7 @@
                     <span>선택된 색상:</span>
                     <div id="currentColor" style="background: #FF0000"></div>
                 </div>
-                <div class="color-actions">
-                    <button type="button" id="clearSelectedBtn">
-                        선택 초기화
-                    </button>
-                    <button type="button" id="clearSearchBtn">
-                        검색 초기화
-                    </button>
-                </div>
+                <!-- 초기화 버튼 제거됨: 개별 삭제 버튼만 사용 -->
             </div>
 
             <!-- 필지 정보 입력 -->
@@ -117,7 +114,7 @@
                     </div>
                     <div class="form-buttons">
                         <button type="button" id="saveBtn">저장</button>
-                        <button type="button" id="clearBtn">초기화</button>
+                        <!-- 초기화 버튼 제거됨: 개별 삭제만 가능 -->
                         <button type="button" id="deleteParcelBtn" style="background-color: #dc3545; color: white;">현재 필지 삭제</button>
                     </div>
                     <div class="export-buttons">
@@ -185,6 +182,9 @@
         });
     </script>
     <script src="/js/config-client.js"></script>
+    <script src="/js/supabase-config.js"></script>
+    <script src="/js/supabase-adapter.js"></script>
+    <script src="/js/realtime-sync.js"></script>
     <script src="/js/auth.js"></script>
     <script src="/js/utils.js"></script>
     <script src="/js/calendar.js"></script>
@@ -192,6 +192,7 @@
     <script src="/js/parcel.js"></script>
     <script src="/js/parcel-manager.js"></script>
     <script src="/js/search.js"></script>
+    <script src="/js/memo-markers.js"></script>
     <script src="/js/sheets.js"></script>
     <script src="/js/mobile-handler.js"></script>
 </body>

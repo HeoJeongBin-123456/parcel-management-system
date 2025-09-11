@@ -41,7 +41,7 @@ async function getParcelInfoViaJSONP(lat, lng, apiKey) {
         const script = document.createElement('script');
         
         // JSONP 콜백 함수 등록
-        window[callbackName] = function(data) {
+        window[callbackName] = async function(data) {
     // console.log('📡 JSONP 응답 수신:', data);
             
             try {
@@ -53,8 +53,8 @@ async function getParcelInfoViaJSONP(lat, lng, apiKey) {
                         
                         const parcel = features[0];
                         displayParcelInfo(parcel);
-                        const polygon = drawParcelPolygon(parcel, true);
-                        toggleParcelSelection(parcel, polygon);
+                        const polygon = await drawParcelPolygon(parcel, true);
+                        await toggleParcelSelection(parcel, polygon);
                         
                         resolve(parcel);
                     } else {
@@ -229,7 +229,7 @@ async function loadParcelsInBoundsViaJSONP(bounds, apiKey) {
 
 
 // 필지 폴리곤 그리기
-function drawParcelPolygon(parcel, isSelected = false) {
+async function drawParcelPolygon(parcel, isSelected = false) {
     const geometry = parcel.geometry;
     const properties = parcel.properties;
     const pnu = properties.PNU || properties.pnu;
@@ -246,9 +246,9 @@ function drawParcelPolygon(parcel, isSelected = false) {
         });
         
         // 저장된 필지 정보 확인 (PNU와 지번 둘 다 확인)
-        let savedParcel = getSavedParcelData(pnu);
+        let savedParcel = await getSavedParcelData(pnu);
         if (!savedParcel && jibun) {
-            savedParcel = getSavedParcelDataByJibun(jibun);
+            savedParcel = await getSavedParcelDataByJibun(jibun);
         }
         
         const fillColor = savedParcel && savedParcel.color ? savedParcel.color : 'transparent';
@@ -266,9 +266,9 @@ function drawParcelPolygon(parcel, isSelected = false) {
         });
         
         // 클릭 이벤트
-        naver.maps.Event.addListener(polygon, 'click', function(e) {
+        naver.maps.Event.addListener(polygon, 'click', async function(e) {
             e.domEvent.stopPropagation(); // 지도 클릭 이벤트 방지
-            toggleParcelSelection(parcel, polygon);
+            await toggleParcelSelection(parcel, polygon);
         });
         
         // 필지 저장
@@ -283,7 +283,7 @@ function drawParcelPolygon(parcel, isSelected = false) {
 }
 
 // 필지 선택/해제 토글
-function toggleParcelSelection(parcel, polygon) {
+async function toggleParcelSelection(parcel, polygon) {
     const pnu = parcel.properties.PNU || parcel.properties.pnu;
     const parcelData = window.clickParcels.get(pnu);
     const searchParcelData = window.searchParcels && window.searchParcels.get(pnu);
@@ -299,7 +299,7 @@ function toggleParcelSelection(parcel, polygon) {
         window.currentSelectedPNU = pnu;
         
         // 저장된 정보가 있으면 로드
-        const savedData = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEY) || '[]');
+        const savedData = JSON.parse(await window.migratedGetItem(CONFIG.STORAGE_KEY) || '[]');
         const savedInfo = savedData.find(item => 
             (item.pnu && item.pnu === pnu) || 
             item.parcelNumber === jibun
@@ -321,7 +321,7 @@ function toggleParcelSelection(parcel, polygon) {
     }
     
     // 저장된 정보 확인
-    const savedData = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEY) || '[]');
+    const savedData = JSON.parse(await window.migratedGetItem(CONFIG.STORAGE_KEY) || '[]');
     const savedInfo = savedData.find(item => 
         (item.pnu && item.pnu === pnu) || 
         item.parcelNumber === jibun
@@ -375,7 +375,7 @@ function toggleParcelSelection(parcel, polygon) {
 }
 
 // 필지 색상 및 정보 제거
-function clearParcel(parcel, polygon) {
+async function clearParcel(parcel, polygon) {
     const pnu = parcel.properties.PNU || parcel.properties.pnu;
     const parcelData = window.clickParcels.get(pnu);
     const jibun = formatJibun(parcel.properties);
@@ -392,9 +392,9 @@ function clearParcel(parcel, polygon) {
         parcelData.color = 'transparent';
         
         // LocalStorage에서 제거 (pnu와 parcelNumber 둘 다 확인)
-        let savedData = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEY) || '[]');
+        let savedData = JSON.parse(await window.migratedGetItem(CONFIG.STORAGE_KEY) || '[]');
         savedData = savedData.filter(item => item.pnu !== pnu && item.parcelNumber !== jibun);
-        localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(savedData));
+        await window.migratedSetItem(CONFIG.STORAGE_KEY, JSON.stringify(savedData));
     // console.log('색상 정보 제거됨:', pnu, jibun);
         
         // 폼 초기화
@@ -487,8 +487,8 @@ function displayParcelInfo(parcel) {
     }
 }
 
-// 필지 데이터 저장
-function saveParcelData() {
+// 필지 데이터 저장 (Supabase 연동)
+async function saveParcelData() {
     const parcelNumber = document.getElementById('parcelNumber').value;
     
     if (!parcelNumber) {
@@ -570,8 +570,8 @@ function saveParcelData() {
         isSearchParcel: isSearchParcel // 검색 필지 여부 저장
     };
     
-    // LocalStorage에 저장
-    let savedData = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEY) || '[]');
+    // Supabase에 저장 (localStorage 호환 모드)
+    let savedData = JSON.parse(await window.migratedGetItem(CONFIG.STORAGE_KEY) || '[]');
     
     // 기존 데이터 업데이트 또는 추가 (PNU와 parcelNumber 둘 다 확인)
     const existingIndex = savedData.findIndex(item => 
@@ -585,7 +585,7 @@ function saveParcelData() {
         savedData.push(formData);
     }
     
-    localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(savedData));
+    await window.migratedSetItem(CONFIG.STORAGE_KEY, JSON.stringify(savedData));
     
     // Map에도 업데이트 (검색 필지인지 클릭 필지인지에 따라 다른 Map 사용)
     const targetMap = isSearchParcel ? window.searchParcels : window.clickParcels;
@@ -620,7 +620,7 @@ function saveParcelData() {
     }
     
     // 목록 업데이트
-    updateParcelList();
+    await updateParcelList();
     
     // 우측 필지 관리자 목록도 업데이트
     if (window.parcelManager) {
@@ -647,23 +647,23 @@ function saveParcelData() {
 }
 
 // 저장된 필지 데이터 가져오기
-function getSavedParcelData(pnu) {
-    const savedData = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEY) || '[]');
+async function getSavedParcelData(pnu) {
+    const savedData = JSON.parse(await window.migratedGetItem(CONFIG.STORAGE_KEY) || '[]');
     // PNU로 찾기
     return savedData.find(item => item.pnu === pnu);
 }
 
 // 지번으로 저장된 필지 데이터 가져오기
-function getSavedParcelDataByJibun(jibun) {
-    const savedData = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEY) || '[]');
+async function getSavedParcelDataByJibun(jibun) {
+    const savedData = JSON.parse(await window.migratedGetItem(CONFIG.STORAGE_KEY) || '[]');
     return savedData.find(item => item.parcelNumber === jibun);
 }
 
 // 필지에 메모가 있는지 확인
-function hasParcelMemo(parcel) {
+async function hasParcelMemo(parcel) {
     const pnu = parcel.properties.PNU || parcel.properties.pnu;
     const jibun = formatJibun(parcel.properties);
-    const savedData = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEY) || '[]');
+    const savedData = JSON.parse(await window.migratedGetItem(CONFIG.STORAGE_KEY) || '[]');
     // PNU 또는 지번으로 찾기
     const parcelInfo = savedData.find(item => 
         (item.pnu && item.pnu === pnu) || 
@@ -673,10 +673,10 @@ function hasParcelMemo(parcel) {
 }
 
 // 필지에 저장된 정보가 있는지 확인 (소유자명, 주소, 연락처, 메모 중 하나라도)
-function hasParcelInfo(parcel) {
+async function hasParcelInfo(parcel) {
     const pnu = parcel.properties.PNU || parcel.properties.pnu;
     const jibun = formatJibun(parcel.properties);
-    const savedData = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEY) || '[]');
+    const savedData = JSON.parse(await window.migratedGetItem(CONFIG.STORAGE_KEY) || '[]');
     // PNU 또는 지번으로 찾기
     const parcelInfo = savedData.find(item => 
         (item.pnu && item.pnu === pnu) || 
@@ -693,14 +693,14 @@ function hasParcelInfo(parcel) {
 }
 
 // 필지 정보를 폼에 로드
-function loadParcelInfoToForm(parcel) {
+async function loadParcelInfoToForm(parcel) {
     const pnu = parcel.properties.PNU || parcel.properties.pnu;
     const jibun = formatJibun(parcel.properties);
     
     // 현재 선택된 PNU 업데이트
     window.currentSelectedPNU = pnu;
     
-    const savedData = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEY) || '[]');
+    const savedData = JSON.parse(await window.migratedGetItem(CONFIG.STORAGE_KEY) || '[]');
     // PNU 또는 지번으로 찾기
     const parcelInfo = savedData.find(item => 
         (item.pnu && item.pnu === pnu) || 
@@ -733,8 +733,8 @@ function loadParcelInfoToForm(parcel) {
 }
 
 // 저장된 필지 목록 업데이트
-function updateParcelList() {
-    const savedData = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEY) || '[]');
+async function updateParcelList() {
+    const savedData = JSON.parse(await window.migratedGetItem(CONFIG.STORAGE_KEY) || '[]');
     const container = document.getElementById('parcelListContainer');
     
     // DOM 요소가 없으면 건너뛰기
@@ -783,21 +783,21 @@ function loadParcelToForm(data) {
 }
 
 // 저장된 필지 불러오기
-function loadSavedParcels() {
-    const savedData = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEY) || '[]');
-    updateParcelList();
+async function loadSavedParcels() {
+    const savedData = JSON.parse(await window.migratedGetItem(CONFIG.STORAGE_KEY) || '[]');
+    await updateParcelList();
     
     // 현재 화면에 보이는 영역의 필지들에 색상 복원
-    restoreSavedParcelsOnMap();
+    await restoreSavedParcelsOnMap();
 }
 
 // 지도에 저장된 필지 색상 복원
-function restoreSavedParcelsOnMap() {
-    const savedData = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEY) || '[]');
+async function restoreSavedParcelsOnMap() {
+    const savedData = JSON.parse(await window.migratedGetItem(CONFIG.STORAGE_KEY) || '[]');
     // console.log(`저장된 필지 ${savedData.length}개 복원 시작`);
     
     // 저장된 데이터 중 geometry가 있는 항목들 처리
-    savedData.forEach(saved => {
+    for (const saved of savedData) {
         if (saved.geometry && saved.color && saved.color !== 'transparent') {
             // 검색 필지인지 클릭 필지인지 구분
             const targetMap = saved.isSearchParcel ? window.searchParcels : window.clickParcels;
@@ -854,7 +854,7 @@ function restoreSavedParcelsOnMap() {
     // console.log(`새 검색 필지 생성 및 색상 복원: ${saved.parcelNumber} - #9370DB`);
                 } else {
                     // 폴리곤 그리기 (클릭 필지)
-                    drawParcelPolygon(parcelData, false);
+                    await drawParcelPolygon(parcelData, false);
                     
                     // 색상 적용
                     const newParcel = window.clickParcels.get(saved.pnu);
@@ -869,7 +869,7 @@ function restoreSavedParcelsOnMap() {
                 }
             }
         }
-    });
+    }
     
     // 현재 지도에 표시된 필지들도 확인
     window.clickParcels.forEach((parcelData, pnu) => {
@@ -898,14 +898,14 @@ function restoreSavedParcelsOnMap() {
 }
 
 // 선택 필지 색상 초기화
-function clearSelectedParcelsColors() {
+async function clearSelectedParcelsColors() {
     let clearedCount = 0;
     
-    window.clickParcels.forEach((parcelData, pnu) => {
+    for (const [pnu, parcelData] of window.clickParcels) {
         // 사용자가 색칠한 필지만 초기화 (8가지 색상 중 하나)
         if (parcelData.polygon && parcelData.color !== 'transparent' && parcelData.color !== '#FFFF00') {
             // 저장된 정보가 있는 필지는 건너뛰기
-            const savedData = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEY) || '[]');
+            const savedData = JSON.parse(await window.migratedGetItem(CONFIG.STORAGE_KEY) || '[]');
             const hasInfo = savedData.some(item => {
                 if (item.pnu !== pnu && (!item.parcelNumber || item.parcelNumber !== parcelData.data?.properties?.jibun)) {
                     return false;
@@ -918,7 +918,7 @@ function clearSelectedParcelsColors() {
             
             if (hasInfo) {
     // console.log('정보가 있는 필지 보호:', pnu);
-                return;
+                continue;
             }
             
             // 폴리곤 색상 제거
@@ -931,7 +931,7 @@ function clearSelectedParcelsColors() {
             parcelData.color = 'transparent';
             clearedCount++;
         }
-    });
+    }
     
     if (clearedCount > 0) {
         // 폼 초기화
@@ -943,7 +943,7 @@ function clearSelectedParcelsColors() {
 }
 
 // 모든 필지 색상 초기화 (선택 + 검색)
-function clearAllParcelsColors() {
+async function clearAllParcelsColors() {
     // confirm은 utils.js에서 이미 처리됨
     let clearedCount = 0;
     
@@ -987,7 +987,9 @@ function initializeEventListeners() {
     });
     
     // 저장 버튼
-    document.getElementById('saveBtn').addEventListener('click', saveParcelData);
+    document.getElementById('saveBtn').addEventListener('click', async () => {
+        await saveParcelData();
+    });
     
     // 초기화 버튼
     document.getElementById('clearBtn').addEventListener('click', () => {
@@ -997,7 +999,9 @@ function initializeEventListeners() {
     // 내보내기 버튼 제거 (필지 관리 시스템으로 이동)
     
     // 초기화 버튼들
-    document.getElementById('clearSelectedBtn').addEventListener('click', clearSelectedParcelsColors);
+    document.getElementById('clearSelectedBtn').addEventListener('click', async () => {
+        await clearSelectedParcelsColors();
+    });
     document.getElementById('clearSearchBtn').addEventListener('click', function() {
         // search.js의 clearAllSearchResults 함수 호출
         if (typeof clearAllSearchResults === 'function') {
@@ -1098,7 +1102,7 @@ function isPointInPolygon(point, polygon) {
 }
 
 // 우클릭한 위치의 필지 삭제 (Point-in-Polygon 방식)
-function removeParcelAtLocation(lat, lng) {
+async function removeParcelAtLocation(lat, lng) {
     try {
         // 디버깅 로그: 함수 시작
         window.RightClickDebugger.log('SEARCH', 'removeParcelAtLocation 함수 시작', {
@@ -1226,11 +1230,11 @@ function removeParcelAtLocation(lat, lng) {
             }
             
             // LocalStorage에서 제거
-            const savedData = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEY) || '[]');
+            const savedData = JSON.parse(await window.migratedGetItem(CONFIG.STORAGE_KEY) || '[]');
             const beforeCount = savedData.length;
             const updatedData = savedData.filter(item => item.pnu !== pnu);
             const afterCount = updatedData.length;
-            localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(updatedData));
+            await window.migratedSetItem(CONFIG.STORAGE_KEY, JSON.stringify(updatedData));
             
             window.RightClickDebugger.log('DELETE', 'LocalStorage 데이터 제거 완료', {
                 pnu,
@@ -1388,5 +1392,40 @@ function getDistanceToLineSegment(px, py, x1, y1, x2, y2) {
     return Math.sqrt(dx * dx + dy * dy);
 }
 
+// 기존 필지 데이터 로드 (검색/클릭 구분)
+async function loadExistingParcelData(jibun, type = 'click') {
+    try {
+        const savedData = JSON.parse(await window.migratedGetItem(CONFIG.STORAGE_KEY) || '[]');
+        const existingParcel = savedData.find(item => 
+            item.parcelNumber === jibun && 
+            item.isSearchParcel === (type === 'search')
+        );
+
+        if (existingParcel) {
+            // 폼에 데이터 로드
+            document.getElementById('ownerName').value = existingParcel.ownerName || '';
+            document.getElementById('ownerAddress').value = existingParcel.ownerAddress || '';
+            document.getElementById('ownerContact').value = existingParcel.ownerContact || '';
+            document.getElementById('memo').value = existingParcel.memo || '';
+
+            console.log('📂 기존 데이터 로드:', jibun, type);
+            return existingParcel;
+        } else {
+            // 새 필지인 경우 폼 초기화
+            document.getElementById('ownerName').value = '';
+            document.getElementById('ownerAddress').value = '';
+            document.getElementById('ownerContact').value = '';
+            document.getElementById('memo').value = '';
+            
+            console.log('📄 새 필지:', jibun, type);
+            return null;
+        }
+    } catch (error) {
+        console.error('❌ 기존 데이터 로드 실패:', error);
+        return null;
+    }
+}
+
 // 전역 함수로 등록
 window.removeParcelAtLocation = removeParcelAtLocation;
+window.loadExistingParcelData = loadExistingParcelData;

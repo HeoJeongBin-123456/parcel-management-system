@@ -149,18 +149,42 @@ function highlightParcel(parcelData) {
             parcelNumberInput.dispatchEvent(new Event('input'));
         }
         
-        // 폴리곤 클릭 이벤트 추가 - 클릭 시 왼쪽 폼에 정보 입력
-        naver.maps.Event.addListener(highlightPolygon, 'click', function() {
+        // 폴리곤 클릭 이벤트 추가 - 클릭 시 왼쪽 폼에 정보 입력 및 메모 기능 활성화
+        naver.maps.Event.addListener(highlightPolygon, 'click', async function() {
             const parcelNumberInput = document.getElementById('parcelNumber');
             if (parcelNumberInput) {
                 // formatJibun 함수 사용하여 지번 포맷팅
                 const jibun = formatJibun(properties);
                              
                 parcelNumberInput.value = jibun;
-    // console.log('🖱️ 필지 클릭 - 지번 입력:', jibun);
+                console.log('🖱️ 검색 필지 클릭 - 지번 입력:', jibun);
+                
+                // PNU 생성 (검색 필지용)
+                const searchPNU = `search_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                window.currentSelectedPNU = searchPNU;
+                
+                // searchParcels Map에 저장 (메모 기능을 위해)
+                if (!window.searchParcels.has(searchPNU)) {
+                    window.searchParcels.set(searchPNU, {
+                        data: parcelData,
+                        polygon: highlightPolygon,
+                        label: null,
+                        properties: properties,
+                        jibun: jibun,
+                        ownerName: '',
+                        ownerAddress: '',
+                        ownerContact: '',
+                        memo: ''
+                    });
+                }
+                
+                // 기존 저장된 데이터 로드 (메모가 있다면)
+                await loadExistingParcelData(jibun, 'search');
                 
                 // 폼의 다른 필드도 초기화 또는 자동 입력 가능
                 document.getElementById('ownerName')?.focus();
+                
+                console.log('📝 검색 필지 메모 기능 활성화:', searchPNU);
             }
         });
 

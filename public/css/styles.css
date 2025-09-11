@@ -865,3 +865,58 @@ body {
 .panel-body::-webkit-scrollbar-thumb:hover {
     background: #a0aec0;
 }
+
+/* M 마커 스타일 (메모 있는 필지 표시) */
+.memo-marker {
+    position: absolute;
+    width: 24px;
+    height: 24px;
+    background: #FF6B35;
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: bold;
+    font-family: 'Noto Sans KR', sans-serif;
+    box-shadow: 0 2px 8px rgba(255, 107, 53, 0.4);
+    border: 2px solid white;
+    z-index: 1000;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.memo-marker:hover {
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(255, 107, 53, 0.6);
+}
+
+.memo-marker.search-parcel {
+    background: #9370DB; /* 보라색 (검색 필지용) */
+    box-shadow: 0 2px 8px rgba(147, 112, 219, 0.4);
+}
+
+.memo-marker.search-parcel:hover {
+    box-shadow: 0 4px 12px rgba(147, 112, 219, 0.6);
+}
+
+/* 연결 상태 표시 스타일 */
+.connection-status {
+    font-size: 12px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    margin-right: 10px;
+}
+
+.connection-status.connected {
+    background: rgba(34, 197, 94, 0.1);
+    color: #16a34a;
+    border: 1px solid rgba(34, 197, 94, 0.2);
+}
+
+.connection-status.disconnected {
+    background: rgba(239, 68, 68, 0.1);
+    color: #dc2626;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+}
