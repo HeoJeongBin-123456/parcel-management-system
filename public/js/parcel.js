@@ -991,23 +991,30 @@ function initializeEventListeners() {
         await saveParcelData();
     });
     
-    // 초기화 버튼
-    document.getElementById('clearBtn').addEventListener('click', () => {
-        document.getElementById('parcelForm').reset();
-    });
+    // 초기화 버튼들 (제거된 버튼들은 안전하게 체크)
+    const clearBtn = document.getElementById('clearBtn');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            document.getElementById('parcelForm').reset();
+        });
+    }
     
-    // 내보내기 버튼 제거 (필지 관리 시스템으로 이동)
+    const clearSelectedBtn = document.getElementById('clearSelectedBtn');
+    if (clearSelectedBtn) {
+        clearSelectedBtn.addEventListener('click', async () => {
+            await clearSelectedParcelsColors();
+        });
+    }
     
-    // 초기화 버튼들
-    document.getElementById('clearSelectedBtn').addEventListener('click', async () => {
-        await clearSelectedParcelsColors();
-    });
-    document.getElementById('clearSearchBtn').addEventListener('click', function() {
-        // search.js의 clearAllSearchResults 함수 호출
-        if (typeof clearAllSearchResults === 'function') {
-            clearAllSearchResults();
-        }
-    });
+    const clearSearchBtn = document.getElementById('clearSearchBtn');
+    if (clearSearchBtn) {
+        clearSearchBtn.addEventListener('click', function() {
+            // search.js의 clearAllSearchResults 함수 호출
+            if (typeof clearAllSearchResults === 'function') {
+                clearAllSearchResults();
+            }
+        });
+    }
     // 중복 이벤트 리스너 제거 - utils.js에서 이미 등록됨
 }
 

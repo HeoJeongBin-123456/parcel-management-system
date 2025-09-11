@@ -23,25 +23,31 @@ CREATE INDEX IF NOT EXISTS idx_parcels_created_at ON parcels(created_at);
 CREATE INDEX IF NOT EXISTS idx_parcels_has_memo ON parcels(has_memo);
 CREATE INDEX IF NOT EXISTS idx_parcels_color_type ON parcels(color_type);
 
--- 3. 일일 백업 테이블
+-- 3. 일일 백업 테이블 (BackupManager 전용)
 CREATE TABLE IF NOT EXISTS daily_backups (
     id SERIAL PRIMARY KEY,
-    backup_date DATE NOT NULL UNIQUE,
-    data JSONB NOT NULL,
-    count INTEGER NOT NULL,
+    backup_date TIMESTAMPTZ NOT NULL UNIQUE,
+    data_count INTEGER NOT NULL,
+    backup_data JSONB NOT NULL,
+    backup_size INTEGER NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 4. 월간 백업 로그 테이블  
+-- 4. 월간 백업 로그 테이블 (BackupManager 전용)
 CREATE TABLE IF NOT EXISTS monthly_backup_logs (
     id SERIAL PRIMARY KEY,
-    backup_month VARCHAR(7) NOT NULL, -- YYYY-MM 형식
-    google_drive_url TEXT,
-    google_sheets_url TEXT,
-    export_count INTEGER NOT NULL,
-    status VARCHAR(20) DEFAULT 'pending', -- 'pending', 'completed', 'failed'
+    backup_date TIMESTAMPTZ NOT NULL,
+    data_count INTEGER NOT NULL,
+    backup_method VARCHAR(50) DEFAULT 'google_sheets',
+    status VARCHAR(20) DEFAULT 'success', -- 'success', 'failed'
+    error_message TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- 백업 테이블 인덱스
+CREATE INDEX IF NOT EXISTS idx_daily_backups_date ON daily_backups(backup_date);
+CREATE INDEX IF NOT EXISTS idx_monthly_logs_date ON monthly_backup_logs(backup_date);
+CREATE INDEX IF NOT EXISTS idx_monthly_logs_status ON monthly_backup_logs(status);
 
 -- 5. updated_at 자동 업데이트 함수
 CREATE OR REPLACE FUNCTION update_updated_at_column()
