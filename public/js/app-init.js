@@ -108,7 +108,8 @@ class AppInitializer {
 
         try {
             // 필지 데이터 로드 (무한 루프 방지를 위해 한 번만 호출)
-            const parcels = await window.supabaseManager.loadParcels();
+            // Supabase에서 로드하지 말고 localStorage에서만 로드
+            let parcels = [];
             
             if (parcels && parcels.length > 0) {
                 console.log(`📊 ${parcels.length}개 필지 로드됨`);
@@ -129,9 +130,40 @@ class AppInitializer {
                 }
             }
 
+            // 메모 마커 매니저 초기화 (필지 데이터 로드 후)
+            await this.initializeMemoMarkers();
+
         } catch (error) {
             console.error('❌ 필지 데이터 로드 실패:', error);
             this.dataLoadComplete = false; // 실패 시 재시도 허용
+        }
+    }
+
+    async initializeMemoMarkers() {
+        console.log('📍 메모 마커 매니저 초기화 시작...');
+        
+        try {
+            // MemoMarkerManager가 로드되었는지 확인
+            if (window.MemoMarkerManager) {
+                // 지도가 준비되었는지 확인
+                if (window.map) {
+                    await window.MemoMarkerManager.initialize();
+                    console.log('✅ 메모 마커 매니저 초기화 완료');
+                } else {
+                    console.warn('⚠️ 지도가 준비되지 않아 메모 마커 초기화 지연');
+                    // 지도 로딩 대기 후 재시도
+                    setTimeout(async () => {
+                        if (window.map && window.MemoMarkerManager) {
+                            await window.MemoMarkerManager.initialize();
+                            console.log('✅ 메모 마커 매니저 초기화 완료 (재시도)');
+                        }
+                    }, 1000);
+                }
+            } else {
+                console.warn('⚠️ MemoMarkerManager가 로드되지 않음');
+            }
+        } catch (error) {
+            console.error('❌ 메모 마커 초기화 실패:', error);
         }
     }
 

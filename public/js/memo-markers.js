@@ -344,13 +344,17 @@ if (originalSaveParcelData) {
     };
 }
 
-// 페이지 로드 시 자동 초기화
+// 페이지 로드 시 자동 초기화 (AppInitializer가 없는 경우에만)
 document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => {
-        if (window.MemoMarkerManager) {
-            window.MemoMarkerManager.initialize();
+        if (window.MemoMarkerManager && !window.MemoMarkerManager.isInitialized) {
+            // AppInitializer가 없거나 초기화되지 않은 경우에만 직접 초기화
+            if (!window.appInitializer || !window.appInitializer.isInitialized) {
+                console.log('🔄 AppInitializer 없음, 메모 마커 직접 초기화');
+                window.MemoMarkerManager.initialize();
+            }
         }
-    }, 3000); // 지도 로드 대기
+    }, 4000); // AppInitializer 보다 늦게 실행하여 중복 방지
 });
 
 console.log('📍 MemoMarkerManager 로드 완료');
