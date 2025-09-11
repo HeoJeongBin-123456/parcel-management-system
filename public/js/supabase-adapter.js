@@ -75,7 +75,7 @@ class SupabaseAdapter {
     async saveParcels(parcels) {
         try {
             // localStorage 형식을 Supabase 형식으로 변환
-            const supabaseParcels = parcels.map(this.convertToSupabaseFormat);
+            const supabaseParcels = parcels.map(localData => this.convertToSupabaseFormat(localData));
             return await this.supabaseManager.saveParcels(supabaseParcels);
         } catch (error) {
             console.error('❌ 필지 데이터 저장 실패:', error);

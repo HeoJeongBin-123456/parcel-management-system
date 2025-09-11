@@ -4,32 +4,65 @@
 async function getParcelInfo(lat, lng) {
     // console.log(`🏢 실제 필지 정보 조회 시작: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
     
-    // 다중 API 키 풀 (메인: 범용키, 백업: 로컬호스트 제한키들)
-    const apiKeys = [
-        'E5B1657B-9B6F-3A4B-91EF-98512BE931A1', // 메인: 범용키 (제한없음)
-        'C1C06245-E008-3F27-BD9E-9CBA4BE0F918', // 백업: localhost:3000
-        '200C6A0D-D0A2-3E72-BADD-B385BB283CAE', // 백업: localhost:4000
-        '37325C63-ACC1-39FA-949D-F4E7F4C9BCF3'  // 백업: localhost:5000
-    ];
-    
-    // CORS 우회를 위해 JSONP를 우선적으로 시도
-    for (let i = 0; i < apiKeys.length; i++) {
-        const apiKey = apiKeys[i];
-    // console.log(`🔑 JSONP 우선 시도 - API 키 ${i+1}/${apiKeys.length}: ${apiKey.substring(0, 8)}...`);
-        
-        const result = await getParcelInfoViaJSONP(lat, lng, apiKey);
+    // 🚀 성능 최적화: 서버 프록시를 통한 빠른 API 호출
+    try {
+        const result = await getParcelInfoViaProxy(lat, lng);
         if (result) {
-    // console.log('🎊 JSONP로 실제 필지 데이터 획득 성공!');
-            return; // 성공 시 함수 종료
+            // console.log('🎊 서버 프록시로 필지 데이터 획득 성공!');
+            return;
         }
-        
-    // console.log(`⚠️ JSONP API 키 ${i+1} 실패, 다음 키로 시도...`);
+    } catch (error) {
+        console.warn('⚠️ 서버 프록시 실패, JSONP 백업 시도:', error.message);
     }
     
-    // JSONP가 모든 키로 실패한 경우 메시지 출력
-    // console.log('⚠️ 모든 API 키로 필지 정보를 가져오지 못했습니다.');
-    // console.log('💡 VWorld API는 CORS 정책으로 인해 JSONP만 지원합니다.');
-    alert('해당 위치의 필지 정보를 찾을 수 없습니다.');
+    // 백업: JSONP 방식 (메인 키만 사용)
+    const result = await getParcelInfoViaJSONP(lat, lng, 'E5B1657B-9B6F-3A4B-91EF-98512BE931A1');
+    if (!result) {
+        alert('해당 위치의 필지 정보를 찾을 수 없습니다.');
+    }
+}
+
+// 🚀 서버 프록시를 통한 빠른 VWorld API 호출
+async function getParcelInfoViaProxy(lat, lng) {
+    const geometry = `POINT(${lng} ${lat})`;
+    const url = `/api/vworld-proxy?geomFilter=${encodeURIComponent(geometry)}`;
+    
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.response && data.response.status === 'OK' && data.response.result) {
+            const features = data.response.result.featureCollection?.features;
+            
+            if (features && features.length > 0) {
+                const feature = features[0];
+                const properties = feature.properties;
+                
+                // 필지 정보 UI 업데이트
+                updateParcelUI(properties, lat, lng, feature.geometry);
+                
+                // 지도에 필지 표시
+                await displayParcelOnMap(feature, properties, lat, lng);
+                
+                return true;
+            }
+        }
+        
+        return false;
+    } catch (error) {
+        console.error('❌ 서버 프록시 호출 실패:', error);
+        throw error;
+    }
 }
 
 // JSONP 방식으로 VWorld API 호출
@@ -632,6 +665,12 @@ async function saveParcelData() {
     
     // 또는 refreshParcelList 이벤트 발생
     window.dispatchEvent(new Event('refreshParcelList'));
+    
+    // 메모 마커 업데이트 (메모가 있는 경우)
+    if (window.memoMarkerManager && formData.memo && formData.memo.trim() !== '') {
+        await window.memoMarkerManager.createMemoMarker(formData);
+        console.log('📍 메모 마커 생성/업데이트:', formData.parcelNumber);
+    }
     
     // 저장 후 폼 초기화 (지번은 유지)
     const savedParcelNumber = document.getElementById('parcelNumber').value;

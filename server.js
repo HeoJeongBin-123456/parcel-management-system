@@ -41,13 +41,10 @@ app.get('/api/vworld', async (req, res) => {
             crs = 'EPSG:4326'
         } = req.query;
         
-        // VWorld API 키들 (메인: 범용키, 백업: 로컬호스트 제한키들)
+        // VWorld API 키들 (고정된 범용 키)
         const apiKeys = [
-            'E5B1657B-9B6F-3A4B-91EF-98512BE931A1', // 메인: 범용키 (제한없음)
-            key || 'E5B1657B-9B6F-3A4B-91EF-98512BE931A1', // fallback
-            'C1C06245-E008-3F27-BD9E-9CBA4BE0F918', // 백업: localhost:3000
-            '200C6A0D-D0A2-3E72-BADD-B385BB283CAE', // 백업: localhost:4000
-            '37325C63-ACC1-39FA-949D-F4E7F4C9BCF3'  // 백업: localhost:5000
+            'E5B1657B-9B6F-3A4B-91EF-98512BE931A1', // 지정된 고정 키
+            key || 'E5B1657B-9B6F-3A4B-91EF-98512BE931A1' // fallback
         ];
         
         let lastError;

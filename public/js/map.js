@@ -1,6 +1,7 @@
 // 전역 변수
 let streetLayer = null;
 let cadastralLayer = null;
+let roadviewLayer = null; // 로드뷰 레이어
 
 // 🔍 실시간 디버깅 로그 시스템
 window.RightClickDebugger = {
@@ -253,20 +254,58 @@ function initMap() {
 
 // 지도 타입 변경
 function changeMapType(type) {
+    // 다른 지도 타입으로 변경 시 로드뷰 레이어 제거
+    if (type !== 'street' && roadviewLayer) {
+        roadviewLayer.setMap(null);
+        roadviewLayer = null;
+        console.log('🛣️ 로드뷰 레이어 제거됨');
+    }
+
     switch(type) {
-        case 'NORMAL':
+        case 'normal':
             map.setMapTypeId(naver.maps.MapTypeId.NORMAL);
             break;
-        case 'TERRAIN':
+        case 'terrain':
             map.setMapTypeId(naver.maps.MapTypeId.TERRAIN);
             break;
-        case 'SATELLITE':
+        case 'satellite':
             map.setMapTypeId(naver.maps.MapTypeId.SATELLITE);
             break;
-        case 'HYBRID':
+        case 'hybrid':
             map.setMapTypeId(naver.maps.MapTypeId.HYBRID);
             break;
+        case 'cadastral':
+            // 지적편집도 - 한국 고유의 지적도
+            map.setMapTypeId(naver.maps.MapTypeId.HYBRID);
+            break;
+        case 'street':
+            // 로드뷰 레이어 표시 - 지도 위에 로드뷰 촬영 가능한 도로 표시
+            toggleRoadviewLayer();
+            break;
     }
+}
+
+// 지도 타입 버튼 초기화
+function initializeMapTypeButtons() {
+    const mapTypeButtons = document.querySelectorAll('.map-type-btn');
+    
+    mapTypeButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            // 모든 버튼에서 active 클래스 제거
+            mapTypeButtons.forEach(btn => btn.classList.remove('active'));
+            
+            // 클릭된 버튼에 active 클래스 추가
+            button.classList.add('active');
+            
+            // 지도 타입 변경
+            const mapType = button.getAttribute('data-type');
+            changeMapType(mapType);
+            
+            console.log(`🗺️ 지도 타입 변경: ${mapType}`);
+        });
+    });
+    
+    console.log('🎯 지도 타입 버튼 초기화 완료');
 }
 
 // 지도 이동
@@ -504,6 +543,9 @@ window.onload = function() {
     // console.log('✅ 이벤트 리스너 초기화 완료');
             }
             
+            // 지도 타입 버튼 이벤트 리스너 추가
+            initializeMapTypeButtons();
+            
             if (typeof loadSavedParcels === 'function') {
                 loadSavedParcels();
     // console.log('✅ 저장된 필지 로드 완료');
@@ -552,3 +594,32 @@ window.onload = function() {
         }
     });
 };
+
+// 로드뷰 레이어 토글 함수
+function toggleRoadviewLayer() {
+    if (!map) {
+        console.error('🚫 지도가 초기화되지 않았습니다.');
+        return;
+    }
+
+    try {
+        if (roadviewLayer) {
+            // 로드뷰 레이어가 있으면 제거
+            roadviewLayer.setMap(null);
+            roadviewLayer = null;
+            console.log('🛣️ 로드뷰 레이어 숨김');
+        } else {
+            // 로드뷰 레이어 생성 및 표시
+            roadviewLayer = new naver.maps.StreetLayer();
+            roadviewLayer.setMap(map);
+            console.log('🛣️ 로드뷰 레이어 표시 - 파란선은 로드뷰 촬영 가능한 도로입니다');
+        }
+    } catch (error) {
+        console.error('🚫 로드뷰 레이어 처리 중 오류:', error);
+        // StreetLayer가 지원되지 않는 경우 대체 방법
+        if (!roadviewLayer) {
+            console.log('🛣️ StreetLayer를 사용할 수 없어 기본 지도를 유지합니다.');
+            map.setMapTypeId(naver.maps.MapTypeId.NORMAL);
+        }
+    }
+}

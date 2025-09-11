@@ -126,6 +126,11 @@ body {
 #map {
     width: 100%;
     height: 100%;
+    cursor: default !important; /* 일반 커서로 변경 */
+}
+
+#map * {
+    cursor: default !important; /* 지도 내부 모든 요소도 일반 커서로 변경 */
 }
 
 /* 거리뷰(파노라마) */

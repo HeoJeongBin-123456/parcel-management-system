@@ -24,7 +24,30 @@ class MemoMarkerManager {
     // 모든 메모 마커 로드
     async loadAllMemoMarkers() {
         try {
-            const savedData = JSON.parse(await window.migratedGetItem(CONFIG.STORAGE_KEY) || '[]');
+            // localStorage에서 직접 데이터 로드 (Supabase 문제 회피)
+            let savedData = [];
+            
+            // 1. localStorage 직접 접근
+            const localStorageData = localStorage.getItem(CONFIG.STORAGE_KEY);
+            if (localStorageData) {
+                savedData = JSON.parse(localStorageData);
+                console.log(`🔍 localStorage에서 ${savedData.length}개 필지 로드`);
+            }
+            
+            // 2. migratedGetItem도 시도해보지만 실패해도 계속 진행
+            try {
+                const migratedData = await window.migratedGetItem(CONFIG.STORAGE_KEY);
+                if (migratedData) {
+                    const parsed = JSON.parse(migratedData);
+                    if (parsed.length > savedData.length) {
+                        savedData = parsed;
+                        console.log(`📡 migratedGetItem에서 더 많은 데이터: ${parsed.length}개`);
+                    }
+                }
+            } catch (supabaseError) {
+                console.warn('⚠️ Supabase 연결 실패, localStorage 데이터 사용:', supabaseError.message);
+            }
+
             const parcelsWithMemo = savedData.filter(parcel => 
                 parcel.memo && parcel.memo.trim() !== ''
             );
@@ -127,6 +150,10 @@ class MemoMarkerManager {
                 // 폴리곤 중심점 계산
                 const center = this.calculatePolygonCenter(coords[0]);
                 [lng, lat] = center;
+            } else if (parcelData.geometry.type === 'MultiPolygon') {
+                // MultiPolygon의 첫 번째 폴리곤의 중심점 계산
+                const center = this.calculatePolygonCenter(coords[0][0]);
+                [lng, lat] = center;
             }
         }
         // clickParcels/searchParcels에서 찾기
@@ -138,6 +165,9 @@ class MemoMarkerManager {
                     [lng, lat] = coords;
                 } else if (foundParcel.data.geometry.type === 'Polygon') {
                     const center = this.calculatePolygonCenter(coords[0]);
+                    [lng, lat] = center;
+                } else if (foundParcel.data.geometry.type === 'MultiPolygon') {
+                    const center = this.calculatePolygonCenter(coords[0][0]);
                     [lng, lat] = center;
                 }
             }
