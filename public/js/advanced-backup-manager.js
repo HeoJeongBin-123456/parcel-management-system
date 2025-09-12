@@ -163,7 +163,23 @@ class AdvancedBackupManager {
             // 1. 현재 데이터 수집
             const data = await this.collectCurrentData();
             if (!data || data.length === 0) {
-                throw new Error('백업할 데이터가 없습니다');
+                console.log('ℹ️ 일일 백업: 현재 저장된 필지 데이터가 없습니다');
+                const metadata = {
+                    id: backupId,
+                    type: 'daily',
+                    timestamp: startTime.toISOString(),
+                    dataCount: 0,
+                    status: 'skipped',
+                    message: '백업할 데이터 없음',
+                    duration: Date.now() - startTime.getTime()
+                };
+                this.addToBackupHistory(metadata);
+                return {
+                    success: true,
+                    skipped: true,
+                    metadata: metadata,
+                    message: '백업 건너뜀: 저장된 데이터 없음'
+                };
             }
 
             console.log(`📊 백업 대상 데이터: ${data.length}개 필지`);
@@ -244,7 +260,23 @@ class AdvancedBackupManager {
             // 1. 현재 데이터 수집
             const data = await this.collectCurrentData();
             if (!data || data.length === 0) {
-                throw new Error('백업할 데이터가 없습니다');
+                console.log('ℹ️ 월간 백업: 현재 저장된 필지 데이터가 없습니다');
+                const metadata = {
+                    id: backupId,
+                    type: 'monthly',
+                    timestamp: startTime.toISOString(),
+                    dataCount: 0,
+                    status: 'skipped',
+                    message: '백업할 데이터 없음',
+                    duration: Date.now() - startTime.getTime()
+                };
+                this.addToBackupHistory(metadata);
+                return {
+                    success: true,
+                    skipped: true,
+                    metadata: metadata,
+                    message: '백업 건너뜀: 저장된 데이터 없음'
+                };
             }
 
             // 2. Excel/CSV 형태로 변환

@@ -64,12 +64,12 @@ class AppInitializer {
 
         // SupabaseManager 로딩 대기 (제한적 체크)
         this.dependencyChecks = 0;
-        while (!window.supabaseManager && this.dependencyChecks < this.maxDependencyChecks) {
+        while (!window.SupabaseManager && this.dependencyChecks < this.maxDependencyChecks) {
             await this.sleep(500);
             this.dependencyChecks++;
         }
 
-        if (!window.supabaseManager) {
+        if (!window.SupabaseManager) {
             throw new Error('SupabaseManager 로딩 타임아웃');
         }
 
@@ -79,15 +79,15 @@ class AppInitializer {
     async initializeSupabase() {
         console.log('🔗 Supabase 초기화 확인 중...');
 
-        if (window.supabaseManager && window.supabaseManager.isConnected) {
+        if (window.SupabaseManager && window.SupabaseManager.isConnected) {
             console.log('✅ Supabase 이미 연결됨');
             return;
         }
 
         // Supabase 매니저 재연결 시도
-        if (window.supabaseManager && typeof window.supabaseManager.reconnect === 'function') {
+        if (window.SupabaseManager && typeof window.SupabaseManager.reconnect === 'function') {
             console.log('🔄 Supabase 재연결 시도...');
-            await window.supabaseManager.reconnect();
+            await window.SupabaseManager.reconnect();
         }
     }
 

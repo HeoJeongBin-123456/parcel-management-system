@@ -119,7 +119,8 @@ class BackupUI {
 
                 const historyHTML = history.map(item => {
                     const statusIcon = item.status === 'completed' ? '✅' : 
-                                     item.status === 'failed' ? '❌' : '⏳';
+                                     item.status === 'failed' ? '❌' : 
+                                     item.status === 'skipped' ? 'ℹ️' : '⏳';
                     const typeIcon = item.type === 'daily' ? '📅' : 
                                    item.type === 'monthly' ? '📆' : '⚡';
                     
@@ -131,7 +132,8 @@ class BackupUI {
                                 <span class="history-time">${new Date(item.timestamp).toLocaleString('ko-KR')}</span>
                             </div>
                             <div class="history-details">
-                                ${item.dataCount ? `데이터: ${item.dataCount}개` : ''}
+                                ${item.status === 'skipped' ? `사유: ${item.message || '백업할 데이터가 없음'}` : ''}
+                                ${item.dataCount !== undefined ? `데이터: ${item.dataCount}개` : ''}
                                 ${item.duration ? `소요시간: ${item.duration}ms` : ''}
                                 ${item.error ? `오류: ${item.error}` : ''}
                                 ${item.driveUrl ? `<a href="${item.driveUrl}" target="_blank">Google Drive 열기</a>` : ''}
@@ -167,7 +169,11 @@ class BackupUI {
             const result = await window.advancedBackupManager.performManualBackup(type);
             
             if (result.success) {
-                this.showBackupNotification(`✅ ${type} 백업 완료`, 'success');
+                if (result.skipped) {
+                    this.showBackupNotification(`ℹ️ ${type} 백업 건너뜀: 저장된 데이터 없음`, 'info');
+                } else {
+                    this.showBackupNotification(`✅ ${type} 백업 완료`, 'success');
+                }
                 this.refreshBackupStatus();
                 this.refreshBackupHistory();
             } else {

@@ -24,37 +24,107 @@ class MemoMarkerManager {
     // 모든 메모 마커 로드
     async loadAllMemoMarkers() {
         try {
-            // localStorage에서 직접 데이터 로드 (Supabase 문제 회피)
-            let savedData = [];
+            console.log('🔍 모든 저장소 키에서 메모 필지 검색 시작...');
             
-            // 1. localStorage 직접 접근
-            const localStorageData = localStorage.getItem(CONFIG.STORAGE_KEY);
-            if (localStorageData) {
-                savedData = JSON.parse(localStorageData);
-                console.log(`🔍 localStorage에서 ${savedData.length}개 필지 로드`);
+            // 가능한 모든 저장소 키들
+            const possibleKeys = [
+                CONFIG.STORAGE_KEY,           // 'parcelData'
+                'parcels_current_session',    // 실제 저장되는 키
+                'parcels',                    // 다른 가능한 키
+                'parcelData_backup'           // 백업 키
+            ];
+            
+            // 모든 키에서 메모가 있는 필지들을 수집
+            let allMemoData = [];
+            const seenParcels = new Set(); // 중복 제거용
+            
+            // 각 키에서 개별적으로 메모가 있는 필지 찾기
+            for (const key of possibleKeys) {
+                try {
+                    const data = localStorage.getItem(key);
+                    if (data && data !== 'null' && data !== '[]') {
+                        const parsed = JSON.parse(data);
+                        if (Array.isArray(parsed) && parsed.length > 0) {
+                            console.log(`🔍 ${key}에서 ${parsed.length}개 필지 발견`);
+                            
+                            // 이 키에서 메모가 있는 필지들 찾기
+                            const withMemo = parsed.filter(parcel => 
+                                parcel.memo && parcel.memo.trim() !== ''
+                            );
+                            
+                            if (withMemo.length > 0) {
+                                console.log(`📝 ${key}에서 메모가 있는 필지 ${withMemo.length}개 발견`);
+                                
+                                // 중복 제거하면서 추가
+                                withMemo.forEach(parcel => {
+                                    const identifier = parcel.pnu || parcel.parcelNumber || parcel.parcel_name || parcel.id;
+                                    if (identifier && !seenParcels.has(identifier)) {
+                                        seenParcels.add(identifier);
+                                        allMemoData.push({
+                                            ...parcel,
+                                            sourceKey: key // 출처 키 저장
+                                        });
+                                        console.log(`📌 메모 필지 추가: ${identifier} (출처: ${key})`);
+                                    }
+                                });
+                            }
+                        }
+                    }
+                } catch (parseError) {
+                    console.warn(`⚠️ ${key} 파싱 오류:`, parseError);
+                }
             }
             
-            // 2. migratedGetItem도 시도해보지만 실패해도 계속 진행
+            // 추가로 migratedGetItem에서도 메모 필지 찾기
             try {
                 const migratedData = await window.migratedGetItem(CONFIG.STORAGE_KEY);
                 if (migratedData) {
                     const parsed = JSON.parse(migratedData);
-                    if (parsed.length > savedData.length) {
-                        savedData = parsed;
-                        console.log(`📡 migratedGetItem에서 더 많은 데이터: ${parsed.length}개`);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        console.log(`📡 migratedGetItem에서 ${parsed.length}개 필지 발견`);
+                        
+                        const withMemo = parsed.filter(parcel => 
+                            parcel.memo && parcel.memo.trim() !== ''
+                        );
+                        
+                        if (withMemo.length > 0) {
+                            console.log(`📝 migratedGetItem에서 메모가 있는 필지 ${withMemo.length}개 발견`);
+                            
+                            // 중복 제거하면서 추가
+                            withMemo.forEach(parcel => {
+                                const identifier = parcel.pnu || parcel.parcelNumber || parcel.parcel_name || parcel.id;
+                                if (identifier && !seenParcels.has(identifier)) {
+                                    seenParcels.add(identifier);
+                                    allMemoData.push({
+                                        ...parcel,
+                                        sourceKey: 'migratedGetItem' // 출처 저장
+                                    });
+                                    console.log(`📌 메모 필지 추가: ${identifier} (출처: migratedGetItem)`);
+                                }
+                            });
+                        }
                     }
                 }
             } catch (supabaseError) {
-                console.warn('⚠️ Supabase 연결 실패, localStorage 데이터 사용:', supabaseError.message);
+                console.warn('⚠️ Supabase 연결 실패, localStorage 데이터만 사용:', supabaseError.message);
+            }
+            
+            console.log(`📋 최종 메모 필지 발견: ${allMemoData.length}개`);
+            
+            if (allMemoData.length > 0) {
+                console.log('📄 메모 필지 목록:');
+                allMemoData.forEach((parcel, index) => {
+                    console.log(`${index + 1}. ${parcel.parcelNumber || parcel.parcel_name || parcel.pnu}:`, {
+                        memo: parcel.memo.substring(0, 50),
+                        hasLat: !!parcel.lat,
+                        hasLng: !!parcel.lng,
+                        source: parcel.sourceKey
+                    });
+                });
             }
 
-            const parcelsWithMemo = savedData.filter(parcel => 
-                parcel.memo && parcel.memo.trim() !== ''
-            );
-
-            console.log(`📝 메모가 있는 필지: ${parcelsWithMemo.length}개`);
-
-            for (const parcel of parcelsWithMemo) {
+            // 모든 메모 필지에 대해 마커 생성
+            for (const parcel of allMemoData) {
                 await this.createMemoMarker(parcel);
             }
         } catch (error) {
@@ -67,16 +137,54 @@ class MemoMarkerManager {
         try {
             const pnu = parcelData.pnu || parcelData.id;
             
+            console.log('🔥 메모 마커 생성 시작:', {
+                pnu: pnu,
+                parcelNumber: parcelData.parcelNumber,
+                hasLat: !!parcelData.lat,
+                hasLng: !!parcelData.lng,
+                lat: parcelData.lat,
+                lng: parcelData.lng,
+                hasGeometry: !!parcelData.geometry,
+                geometryType: parcelData.geometry?.type,
+                fullParcelData: parcelData
+            });
+            
             // 이미 마커가 있으면 업데이트
             if (this.markers.has(pnu)) {
+                console.log('🔄 기존 마커 업데이트:', pnu);
                 await this.updateMemoMarker(pnu, parcelData);
                 return;
             }
 
             // 좌표 계산
-            const { lat, lng } = this.getParcelCoordinates(parcelData);
+            let { lat, lng } = this.getParcelCoordinates(parcelData);
+            console.log('🎯 좌표 계산 결과:', { lat, lng, hasLat: !!lat, hasLng: !!lng });
+            
+            // 좌표가 없으면 VWorld API로 획득 시도
             if (!lat || !lng) {
-                console.warn('❌ 필지 좌표 없음:', parcelData.parcelNumber);
+                console.log('🚀 좌표 없음, VWorld API 시도:', parcelData.parcelNumber);
+                const coordinates = await this.fetchCoordinatesFromVWorld(parcelData);
+                if (coordinates && coordinates.lat && coordinates.lng) {
+                    lat = coordinates.lat;
+                    lng = coordinates.lng;
+                    console.log('✅ VWorld API로 좌표 획득:', { lat, lng });
+                    
+                    // 획득한 좌표를 parcelData에 저장 (다음 사용을 위해)
+                    parcelData.lat = lat;
+                    parcelData.lng = lng;
+                } else {
+                    console.error('❌ VWorld API 좌표 획득 실패');
+                }
+            }
+            
+            if (!lat || !lng) {
+                console.error('❌ 최종 좌표 획득 실패:', {
+                    parcelNumber: parcelData.parcelNumber,
+                    pnu: pnu,
+                    lat: lat,
+                    lng: lng,
+                    parcelData: parcelData
+                });
                 return;
             }
 
@@ -135,44 +243,89 @@ class MemoMarkerManager {
     // 필지 좌표 계산
     getParcelCoordinates(parcelData) {
         let lat, lng;
+        
+        console.log('🔍 좌표 추출 시작:', {
+            hasDirectLat: !!parcelData.lat,
+            hasDirectLng: !!parcelData.lng,
+            directLat: parcelData.lat,
+            directLng: parcelData.lng,
+            hasGeometry: !!parcelData.geometry,
+            geometryType: parcelData.geometry?.type,
+            hasCoordinates: !!(parcelData.geometry && parcelData.geometry.coordinates)
+        });
 
         // 직접 좌표가 있는 경우
         if (parcelData.lat && parcelData.lng) {
             lat = parseFloat(parcelData.lat);
             lng = parseFloat(parcelData.lng);
+            console.log('✅ 직접 좌표 사용:', { lat, lng });
         }
         // geometry에서 좌표 추출
         else if (parcelData.geometry && parcelData.geometry.coordinates) {
+            console.log('🔍 geometry에서 좌표 추출:', parcelData.geometry);
             const coords = parcelData.geometry.coordinates;
             if (parcelData.geometry.type === 'Point') {
                 [lng, lat] = coords;
+                console.log('📍 Point 좌표 추출:', { lng, lat });
             } else if (parcelData.geometry.type === 'Polygon') {
                 // 폴리곤 중심점 계산
+                console.log('🔺 Polygon 중심점 계산:', coords[0]);
                 const center = this.calculatePolygonCenter(coords[0]);
                 [lng, lat] = center;
+                console.log('📍 Polygon 중심점:', { lng, lat });
             } else if (parcelData.geometry.type === 'MultiPolygon') {
                 // MultiPolygon의 첫 번째 폴리곤의 중심점 계산
+                console.log('🔻 MultiPolygon 중심점 계산:', coords[0][0]);
                 const center = this.calculatePolygonCenter(coords[0][0]);
                 [lng, lat] = center;
+                console.log('📍 MultiPolygon 중심점:', { lng, lat });
             }
         }
         // clickParcels/searchParcels에서 찾기
         else {
+            console.log('🔍 clickParcels/searchParcels에서 검색:', parcelData.pnu || parcelData.id);
             const foundParcel = this.findParcelInMaps(parcelData.pnu || parcelData.id);
+            console.log('🔍 검색된 필지:', foundParcel);
             if (foundParcel && foundParcel.data && foundParcel.data.geometry) {
+                console.log('🔍 검색된 필지의 geometry:', foundParcel.data.geometry);
                 const coords = foundParcel.data.geometry.coordinates;
                 if (foundParcel.data.geometry.type === 'Point') {
                     [lng, lat] = coords;
+                    console.log('📍 검색된 Point 좌표:', { lng, lat });
                 } else if (foundParcel.data.geometry.type === 'Polygon') {
                     const center = this.calculatePolygonCenter(coords[0]);
                     [lng, lat] = center;
+                    console.log('📍 검색된 Polygon 중심점:', { lng, lat });
                 } else if (foundParcel.data.geometry.type === 'MultiPolygon') {
                     const center = this.calculatePolygonCenter(coords[0][0]);
                     [lng, lat] = center;
+                    console.log('📍 검색된 MultiPolygon 중심점:', { lng, lat });
+                }
+            } else {
+                console.warn('⚠️ clickParcels/searchParcels에서 필지를 찾을 수 없음');
+                
+                // 🆘 최후의 수단: VWorld API로 좌표 요청
+                if (parcelData.parcelNumber) {
+                    console.log('🆘 VWorld API로 좌표 검색 시도:', parcelData.parcelNumber);
+                    try {
+                        // 비동기로 좌표를 가져와서 나중에 마커 생성
+                        this.fetchCoordinatesFromVWorld(parcelData).then(coords => {
+                            if (coords.lat && coords.lng) {
+                                console.log('🎯 VWorld API에서 좌표 획득:', coords);
+                                lat = coords.lat;
+                                lng = coords.lng;
+                                // 좌표를 얻었으면 마커 생성 재시도
+                                setTimeout(() => this.createMemoMarker({...parcelData, lat, lng}), 100);
+                            }
+                        });
+                    } catch (error) {
+                        console.error('❌ VWorld API 좌표 요청 실패:', error);
+                    }
                 }
             }
         }
 
+        console.log('🎯 최종 좌표 결과:', { lat, lng });
         return { lat, lng };
     }
 
@@ -199,6 +352,46 @@ class MemoMarkerManager {
         }
         
         return [totalX / count, totalY / count];
+    }
+
+    // VWorld API에서 좌표 가져오기 (최후의 수단)
+    async fetchCoordinatesFromVWorld(parcelData) {
+        try {
+            // 지번 정보 추출
+            const parcelNumber = parcelData.parcelNumber || parcelData.parcel_name;
+            if (!parcelNumber) {
+                console.warn('⚠️ 필지번호가 없어서 VWorld API 요청 불가');
+                return { lat: null, lng: null };
+            }
+            
+            console.log('🌐 VWorld API 좌표 요청:', parcelNumber);
+            
+            // Geocoding API를 통한 주소 검색 (대략적인 위치)
+            // 이는 완전한 해결책은 아니지만 임시 방편으로 사용
+            if (window.naver && window.naver.maps && window.naver.maps.Service) {
+                return new Promise((resolve) => {
+                    window.naver.maps.Service.geocode({
+                        query: parcelNumber
+                    }, (status, response) => {
+                        if (status === window.naver.maps.Service.Status.OK && response.v2.addresses.length > 0) {
+                            const result = response.v2.addresses[0];
+                            const lat = parseFloat(result.y);
+                            const lng = parseFloat(result.x);
+                            console.log('✅ Naver Geocoding에서 좌표 획득:', { lat, lng });
+                            resolve({ lat, lng });
+                        } else {
+                            console.warn('⚠️ Naver Geocoding 실패');
+                            resolve({ lat: null, lng: null });
+                        }
+                    });
+                });
+            }
+            
+            return { lat: null, lng: null };
+        } catch (error) {
+            console.error('❌ VWorld API 좌표 요청 오류:', error);
+            return { lat: null, lng: null };
+        }
     }
 
     // clickParcels/searchParcels에서 필지 찾기

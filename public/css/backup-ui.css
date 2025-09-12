@@ -192,6 +192,11 @@
     border-left: 4px solid #f44336;
 }
 
+.history-item.skipped {
+    border-left: 4px solid #2196F3;
+    background: #f8f9ff;
+}
+
 .history-header {
     display: flex;
     justify-content: space-between;

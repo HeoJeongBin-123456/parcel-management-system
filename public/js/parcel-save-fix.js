@@ -1,3 +1,28 @@
+// 폴리곤 중심점 계산 함수 (메모 마커용)
+function calculatePolygonCenter(coordinates) {
+    if (!coordinates || coordinates.length === 0) {
+        return [0, 0];
+    }
+    
+    let totalX = 0;
+    let totalY = 0;
+    let count = 0;
+    
+    for (const coord of coordinates) {
+        if (coord && coord.length >= 2) {
+            totalX += coord[0];
+            totalY += coord[1];
+            count++;
+        }
+    }
+    
+    if (count === 0) {
+        return [0, 0];
+    }
+    
+    return [totalX / count, totalY / count];
+}
+
 // 개선된 저장 함수 - 저장 버그 수정
 async function saveParcelDataFixed() {
     const parcelNumber = document.getElementById('parcelNumber').value;
@@ -70,6 +95,27 @@ async function saveParcelDataFixed() {
             timestamp: new Date().toISOString(),
             isSearchParcel: isSearchParcel
         };
+        
+        // 📍 geometry에서 중심 좌표 추출 (메모 마커용)
+        if (geometry && geometry.coordinates) {
+            let centerLat, centerLng;
+            
+            if (geometry.type === 'Point') {
+                [centerLng, centerLat] = geometry.coordinates;
+            } else if (geometry.type === 'Polygon') {
+                const center = calculatePolygonCenter(geometry.coordinates[0]);
+                [centerLng, centerLat] = center;
+            } else if (geometry.type === 'MultiPolygon') {
+                const center = calculatePolygonCenter(geometry.coordinates[0][0]);
+                [centerLng, centerLat] = center;
+            }
+            
+            if (centerLat && centerLng) {
+                formData.lat = parseFloat(centerLat);
+                formData.lng = parseFloat(centerLng);
+                console.log('📍 추출된 중심 좌표:', { lat: formData.lat, lng: formData.lng });
+            }
+        }
         
         console.log('📄 저장할 데이터:', formData);
         

@@ -117,6 +117,105 @@ app.get('/api/vworld', async (req, res) => {
     }
 });
 
+// VWorld API 프록시 라우트 (클라이언트 호환성)
+app.get('/api/vworld-proxy', async (req, res) => {
+    // CORS 헤더 설정
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    
+    try {
+        console.log('VWorld API 프록시 요청 (vworld-proxy):', req.query);
+        
+        // 쿼리 파라미터 추출
+        const {
+            service = 'data',
+            request: requestType = 'GetFeature', 
+            data: dataType = 'LP_PA_CBND_BUBUN',
+            key,
+            geometry = 'true',
+            geomFilter = '',
+            size = '10',
+            format = 'json',
+            crs = 'EPSG:4326'
+        } = req.query;
+        
+        // VWorld API 키들 (고정된 범용 키)
+        const apiKeys = [
+            'E5B1657B-9B6F-3A4B-91EF-98512BE931A1', // 지정된 고정 키
+            key || 'E5B1657B-9B6F-3A4B-91EF-98512BE931A1' // fallback
+        ];
+        
+        let lastError;
+        let successResult;
+        
+        // 각 키를 순서대로 시도
+        for (let i = 0; i < apiKeys.length; i++) {
+            const currentKey = apiKeys[i];
+            
+            try {
+                console.log(`API 키 ${i + 1}/${apiKeys.length} 시도 중... (vworld-proxy)`);
+                
+                const params = new URLSearchParams();
+                params.append('service', service);
+                params.append('request', requestType);
+                params.append('data', dataType);
+                params.append('key', currentKey);
+                params.append('geometry', geometry);
+                params.append('format', format);
+                params.append('crs', crs);
+                
+                if (geomFilter) {
+                    params.append('geomFilter', geomFilter);
+                }
+                params.append('size', size);
+                
+                const url = `https://api.vworld.kr/req/data?${params.toString()}`;
+                
+                const { default: fetch } = await import('node-fetch');
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'User-Agent': 'Mozilla/5.0'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.response?.status === 'OK' || (data.features && data.features.length > 0)) {
+                    console.log(`✓ API 키 성공: ${currentKey.substring(0, 8)}... (vworld-proxy)`);
+                    successResult = data;
+                    break;
+                } else {
+                    console.log(`✗ API 키 실패: ${data.response?.status || '데이터 없음'} (vworld-proxy)`);
+                    lastError = data;
+                }
+            } catch (error) {
+                console.error(`API 키 ${currentKey.substring(0, 8)}... 오류 (vworld-proxy):`, error.message);
+                lastError = error;
+            }
+        }
+        
+        if (successResult) {
+            return res.json(successResult);
+        } else {
+            console.error('모든 API 키 실패 (vworld-proxy)');
+            return res.status(500).json({
+                error: '모든 API 키가 실패했습니다',
+                lastError: lastError
+            });
+        }
+        
+    } catch (error) {
+        console.error('프록시 오류 (vworld-proxy):', error);
+        res.status(500).json({ 
+            error: '프록시 서버 오류', 
+            message: error.message 
+        });
+    }
+});
+
 // 기본 라우트
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));

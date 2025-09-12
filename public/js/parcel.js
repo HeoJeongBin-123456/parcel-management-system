@@ -1,5 +1,30 @@
 // 필지 관련 기능
 
+// 폴리곤 중심점 계산 함수 (메모 마커용)
+function calculatePolygonCenter(coordinates) {
+    if (!coordinates || coordinates.length === 0) {
+        return [0, 0];
+    }
+    
+    let totalX = 0;
+    let totalY = 0;
+    let count = 0;
+    
+    for (const coord of coordinates) {
+        if (coord && coord.length >= 2) {
+            totalX += coord[0];
+            totalY += coord[1];
+            count++;
+        }
+    }
+    
+    if (count === 0) {
+        return [0, 0];
+    }
+    
+    return [totalX / count, totalY / count];
+}
+
 // 실제 VWorld API로 필지 정보 조회
 async function getParcelInfo(lat, lng) {
     // console.log(`🏢 실제 필지 정보 조회 시작: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
@@ -49,10 +74,12 @@ async function getParcelInfoViaProxy(lat, lng) {
                 const properties = feature.properties;
                 
                 // 필지 정보 UI 업데이트
-                updateParcelUI(properties, lat, lng, feature.geometry);
+                const parcelForUI = { properties: properties, geometry: feature.geometry };
+                displayParcelInfo(parcelForUI);
                 
                 // 지도에 필지 표시
-                await displayParcelOnMap(feature, properties, lat, lng);
+                const parcelForMap = { properties: properties, geometry: feature.geometry };
+                await drawParcelPolygon(parcelForMap, false);
                 
                 return true;
             }
@@ -592,6 +619,46 @@ async function saveParcelData() {
             timestamp: new Date().toISOString(),
             isSearchParcel: isSearchParcel
         };
+        
+        // 📍 geometry에서 중심 좌표 추출 (메모 마커용)
+        console.log('🔍 geometry 디버깅:', {
+            geometry: geometry,
+            hasGeometry: !!geometry,
+            geometryType: geometry?.type,
+            hasCoordinates: !!(geometry && geometry.coordinates),
+            coordinatesLength: geometry?.coordinates?.length
+        });
+        
+        if (geometry && geometry.coordinates) {
+            let centerLat, centerLng;
+            
+            console.log('🎯 좌표 추출 시작 - geometry type:', geometry.type);
+            
+            if (geometry.type === 'Point') {
+                [centerLng, centerLat] = geometry.coordinates;
+                console.log('📍 Point 좌표:', { centerLng, centerLat });
+            } else if (geometry.type === 'Polygon') {
+                console.log('🔺 Polygon 좌표 배열:', geometry.coordinates[0]);
+                const center = calculatePolygonCenter(geometry.coordinates[0]);
+                [centerLng, centerLat] = center;
+                console.log('📍 Polygon 중심점:', { centerLng, centerLat });
+            } else if (geometry.type === 'MultiPolygon') {
+                console.log('🔻 MultiPolygon 좌표 배열:', geometry.coordinates[0][0]);
+                const center = calculatePolygonCenter(geometry.coordinates[0][0]);
+                [centerLng, centerLat] = center;
+                console.log('📍 MultiPolygon 중심점:', { centerLng, centerLat });
+            }
+            
+            if (centerLat && centerLng) {
+                formData.lat = parseFloat(centerLat);
+                formData.lng = parseFloat(centerLng);
+                console.log('✅ 최종 추출된 중심 좌표:', { lat: formData.lat, lng: formData.lng });
+            } else {
+                console.warn('⚠️ 중심 좌표 계산 실패:', { centerLat, centerLng });
+            }
+        } else {
+            console.warn('❌ geometry 또는 coordinates 없음:', { geometry, coordinates: geometry?.coordinates });
+        }
         
         console.log('📄 저장할 데이터:', formData);
         

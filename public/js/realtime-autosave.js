@@ -289,6 +289,31 @@ class RealtimeAutoSave {
         }
     }
 
+    // 폴리곤 중심점 계산 함수 (메모 마커용)
+    calculatePolygonCenter(coordinates) {
+        if (!coordinates || coordinates.length === 0) {
+            return [0, 0];
+        }
+        
+        let totalX = 0;
+        let totalY = 0;
+        let count = 0;
+        
+        for (const coord of coordinates) {
+            if (coord && coord.length >= 2) {
+                totalX += coord[0];
+                totalY += coord[1];
+                count++;
+            }
+        }
+        
+        if (count === 0) {
+            return [0, 0];
+        }
+        
+        return [totalX / count, totalY / count];
+    }
+
     // 현재 폼 데이터 가져오기
     getCurrentFormData() {
         try {
@@ -304,6 +329,50 @@ class RealtimeAutoSave {
                 color: document.getElementById('currentColor')?.style.backgroundColor || '#FF0000',
                 timestamp: new Date().toISOString()
             };
+            
+            // 🔧 현재 선택된 필지의 추가 정보 포함 (좌표, geometry, pnu)
+            if (window.currentSelectedPNU) {
+                formData.pnu = window.currentSelectedPNU;
+                
+                // 검색 모드일 때는 searchParcels에서 geometry 가져오기
+                if (window.currentMode === 'search' && window.searchParcels) {
+                    const parcelData = window.searchParcels.get(window.currentSelectedPNU);
+                    if (parcelData && parcelData.data) {
+                        formData.geometry = parcelData.data.geometry;
+                        formData.isSearchParcel = true;
+                    }
+                }
+                
+                // 클릭 모드일 때는 clickParcels에서 geometry 가져오기
+                if (!formData.geometry && window.clickParcels) {
+                    const parcelData = window.clickParcels.get(window.currentSelectedPNU);
+                    if (parcelData && parcelData.data) {
+                        formData.geometry = parcelData.data.geometry;
+                        formData.isSearchParcel = false;
+                    }
+                }
+                
+                // 📍 geometry에서 중심 좌표 추출 (메모 마커용)
+                if (formData.geometry && formData.geometry.coordinates) {
+                    let centerLat, centerLng;
+                    
+                    if (formData.geometry.type === 'Point') {
+                        [centerLng, centerLat] = formData.geometry.coordinates;
+                    } else if (formData.geometry.type === 'Polygon') {
+                        const center = this.calculatePolygonCenter(formData.geometry.coordinates[0]);
+                        [centerLng, centerLat] = center;
+                    } else if (formData.geometry.type === 'MultiPolygon') {
+                        const center = this.calculatePolygonCenter(formData.geometry.coordinates[0][0]);
+                        [centerLng, centerLat] = center;
+                    }
+                    
+                    if (centerLat && centerLng) {
+                        formData.lat = parseFloat(centerLat);
+                        formData.lng = parseFloat(centerLng);
+                        console.log('📍 자동저장용 좌표 추출:', { lat: formData.lat, lng: formData.lng });
+                    }
+                }
+            }
             
             // 빈 폼은 무시
             const hasData = Object.values(formData).some(value => 
