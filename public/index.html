@@ -22,6 +22,7 @@
     <link rel="stylesheet" href="/css/advanced-ui.css">
     <link rel="stylesheet" href="/css/business-style.css">
     <link rel="stylesheet" href="/css/responsive.css">
+    <link rel="stylesheet" href="/css/backup-ui.css">
 </head>
 <body>
     <div id="app">
@@ -59,6 +60,18 @@
                         <rect x="7" y="17" width="3" height="3" rx="0.5" fill="currentColor"/>
                     </svg>
                     <span>캘린더</span>
+                </button>
+                
+                <!-- 백업 관리 버튼 -->
+                <button id="backupBtn" class="header-backup-btn" onclick="openBackupModal()" title="백업 관리">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="2"/>
+                        <polyline points="14,2 14,8 20,8" stroke="currentColor" stroke-width="2"/>
+                        <line x1="16" y1="13" x2="8" y2="13" stroke="currentColor" stroke-width="2"/>
+                        <line x1="16" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2"/>
+                        <polyline points="10,9 9,9 8,9" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                    <span>백업</span>
                 </button>
                 
             </div>
@@ -169,6 +182,91 @@
         </div>
     </div>
     
+    <!-- 백업 관리 모달 -->
+    <div id="backupModal" class="modal" style="display: none;">
+        <div class="modal-content backup-modal">
+            <div class="modal-header">
+                <h2>📦 백업 관리 시스템</h2>
+                <span class="close" onclick="closeBackupModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                
+                <!-- 백업 상태 대시보드 -->
+                <div class="backup-status-section">
+                    <h3>🔄 백업 상태</h3>
+                    <div class="backup-status-grid">
+                        <div class="status-card daily-backup">
+                            <h4>📅 일일 백업 (Supabase)</h4>
+                            <div class="status-info">
+                                <span id="dailyBackupStatus">확인 중...</span>
+                                <span id="dailyBackupTime" class="backup-time"></span>
+                            </div>
+                            <button class="backup-btn" onclick="performManualBackup('daily')">수동 백업</button>
+                        </div>
+                        <div class="status-card monthly-backup">
+                            <h4>📆 월간 백업 (Google Drive)</h4>
+                            <div class="status-info">
+                                <span id="monthlyBackupStatus">확인 중...</span>
+                                <span id="monthlyBackupTime" class="backup-time"></span>
+                            </div>
+                            <button class="backup-btn" onclick="performManualBackup('monthly')">수동 백업</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 백업 히스토리 -->
+                <div class="backup-history-section">
+                    <h3>📋 백업 히스토리</h3>
+                    <div class="backup-history-controls">
+                        <button onclick="refreshBackupHistory()">새로고침</button>
+                        <button onclick="exportBackupHistory()">히스토리 내보내기</button>
+                    </div>
+                    <div id="backupHistoryList" class="backup-history-list">
+                        <p>백업 히스토리를 로드하는 중...</p>
+                    </div>
+                </div>
+                
+                <!-- 백업 설정 -->
+                <div class="backup-settings-section">
+                    <h3>⚙️ 백업 설정</h3>
+                    <div class="settings-grid">
+                        <div class="setting-item">
+                            <label>자동 백업 활성화</label>
+                            <label class="switch">
+                                <input type="checkbox" id="autoBackupEnabled" checked>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="setting-item">
+                            <label>일일 백업 시간</label>
+                            <input type="time" id="dailyBackupTime" value="02:00">
+                        </div>
+                        <div class="setting-item">
+                            <label>Google Drive 폴더</label>
+                            <input type="text" id="driveFolder" placeholder="폴더 ID 입력" readonly>
+                            <button onclick="selectGoogleDriveFolder()">폴더 선택</button>
+                        </div>
+                        <div class="setting-item full-width">
+                            <label>백업 알림 설정</label>
+                            <div class="notification-options">
+                                <label><input type="checkbox" id="notifySuccess" checked> 성공 시 알림</label>
+                                <label><input type="checkbox" id="notifyFailure" checked> 실패 시 알림</label>
+                                <label><input type="checkbox" id="browserNotification"> 브라우저 알림</label>
+                            </div>
+                        </div>
+                    </div>
+                    <button onclick="saveBackupSettings()" class="save-settings-btn">설정 저장</button>
+                </div>
+                
+            </div>
+            <div class="modal-footer">
+                <button onclick="performEmergencyBackup()" class="btn-warning">⚡ 긴급 백업</button>
+                <button onclick="restoreFromBackup()" class="btn-info">📥 복원</button>
+                <button onclick="closeBackupModal()" class="btn-secondary">닫기</button>
+            </div>
+        </div>
+    </div>
+    
 
     <!-- JavaScript -->
     <script>
@@ -196,6 +294,12 @@
     <script src="/js/backup-manager.js"></script>
     <script src="/js/sheets.js"></script>
     <script src="/js/mobile-handler.js"></script>
+    <script src="/js/data-persistence-manager.js"></script>
+    <script src="/js/parcel-restore-helper.js"></script>
+    <script src="/js/advanced-backup-manager.js"></script>
+    <script src="/js/backup-ui.js"></script>
+    <script src="/js/realtime-autosave.js"></script>
+    <script src="/js/debug-save-system.js"></script>
     <script src="/js/app-init.js"></script>
 </body>
 </html>

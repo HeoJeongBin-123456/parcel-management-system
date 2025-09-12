@@ -357,7 +357,12 @@ function deleteCurrentParcel() {
         document.getElementById('memo').value = '';
         window.currentSelectedPNU = null;
         
-        // 4. 필지 목록 업데이트
+        // 4. 메모 마커 제거 (메모 저장 내역도 함께 삭제)
+        if (window.memoMarkerManager && currentPNU) {
+            window.memoMarkerManager.onParcelDeleted(currentPNU);
+        }
+        
+        // 5. 필지 목록 업데이트
         if (window.parcelManager && window.parcelManager.renderParcelList) {
             window.parcelManager.renderParcelList();
         }

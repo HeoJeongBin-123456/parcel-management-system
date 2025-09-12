@@ -292,10 +292,11 @@ async function setStorageItem(key, value) {
     return await window.supabaseAdapter.setItem(key, value);
 }
 
-// 기존 코드와의 호환성을 위한 헬퍼 함수들
+// 기존 코드와의 호환성을 위한 헬퍼 함수들 (무한 루프 방지)
 window.migratedGetItem = async function(key) {
     if (key === CONFIG.STORAGE_KEY) {
-        return await window.supabaseAdapter.getParcels();
+        // 🚨 무한 루프 방지: localStorage에서 직접 읽기 (로그 제거)
+        return localStorage.getItem(key) || '[]';
     }
     return localStorage.getItem(key);
 };
@@ -303,7 +304,18 @@ window.migratedGetItem = async function(key) {
 window.migratedSetItem = async function(key, value) {
     if (key === CONFIG.STORAGE_KEY) {
         const parcels = JSON.parse(value);
-        await window.supabaseAdapter.saveParcels(parcels);
+        
+        // ✅ 중요: localStorage에도 저장해야 새로고침 시 복원 가능
+        localStorage.setItem(key, value);
+        console.log('💾 localStorage 저장 완료:', parcels.length, '개 항목');
+        
+        // Supabase에도 저장 (실패해도 localStorage는 유지됨)
+        try {
+            await window.supabaseAdapter.saveParcels(parcels);
+            console.log('☁️ Supabase 저장 완료:', parcels.length, '개 항목');
+        } catch (error) {
+            console.warn('⚠️ Supabase 저장 실패 (localStorage는 성공):', error);
+        }
         return;
     }
     localStorage.setItem(key, value);
