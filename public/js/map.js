@@ -87,21 +87,40 @@ window.rightClickSummary = () => window.RightClickDebugger.summary();
 console.log('🔍 우클릭 디버깅 시스템이 초기화되었습니다.');
 console.log('사용법: showRightClickLogs(), clearRightClickLogs(), toggleRightClickDebug(), rightClickSummary()');
 
-// 지도 초기화
-function initMap() {
-    // 저장된 위치 정보 불러오기
-    const savedPosition = localStorage.getItem('mapPosition');
+// 지도 초기화 (Supabase 기반)
+async function initMap() {
+    // 🗺️ 저장된 위치 정보 불러오기 (Supabase 우선, localStorage 백업)
     let center, zoom;
-    
-    if (savedPosition) {
-        const pos = JSON.parse(savedPosition);
-        center = new naver.maps.LatLng(pos.lat, pos.lng);
-        zoom = pos.zoom;
-    // console.log('저장된 위치 복원:', pos);
-    } else {
+
+    try {
+        if (window.SupabaseManager) {
+            const savedPosition = await window.SupabaseManager.loadMapPosition();
+            if (savedPosition && savedPosition.lat && savedPosition.lng) {
+                center = new naver.maps.LatLng(savedPosition.lat, savedPosition.lng);
+                zoom = savedPosition.zoom || CONFIG.MAP_DEFAULT_ZOOM;
+                console.log('🗺️ Supabase에서 위치 복원:', savedPosition);
+            }
+        }
+    } catch (error) {
+        console.warn('⚠️ Supabase 위치 로드 실패, 로컬 저장소 확인:', error);
+    }
+
+    // 백업: localStorage에서 위치 복원
+    if (!center) {
+        const savedPosition = localStorage.getItem('mapPosition');
+        if (savedPosition) {
+            const pos = JSON.parse(savedPosition);
+            center = new naver.maps.LatLng(pos.lat, pos.lng);
+            zoom = pos.zoom;
+            console.log('📁 localStorage에서 위치 복원:', pos);
+        }
+    }
+
+    // 기본 위치 사용
+    if (!center) {
         center = new naver.maps.LatLng(CONFIG.MAP_DEFAULT_CENTER.lat, CONFIG.MAP_DEFAULT_CENTER.lng);
         zoom = CONFIG.MAP_DEFAULT_ZOOM;
-    // console.log('기본 위치 사용');
+        console.log('🎯 기본 위치 사용:', CONFIG.MAP_DEFAULT_CENTER);
     }
     
     const mapOptions = {
@@ -253,6 +272,19 @@ function initMap() {
             lng: center.lng(),
             zoom: map.getZoom()
         };
+
+        // 🗺️ Supabase에 위치 저장 (비동기, localStorage 백업 포함)
+        if (window.SupabaseManager) {
+            window.SupabaseManager.saveMapPosition(position.lat, position.lng, position.zoom)
+                .then(() => {
+                    console.log('🗺️ 지도 위치 저장 완료:', position);
+                })
+                .catch(error => {
+                    console.error('❌ Supabase 위치 저장 실패:', error);
+                });
+        }
+
+        // 백업: localStorage에도 저장
         localStorage.setItem('mapPosition', JSON.stringify(position));
     // console.log('위치 저장:', position);
         
@@ -335,6 +367,19 @@ function moveToLocation(lat, lng, zoom = 18) {
         lng: lng,
         zoom: zoom || map.getZoom()
     };
+
+    // 🗺️ Supabase에 위치 저장 (비동기)
+    if (window.SupabaseManager) {
+        window.SupabaseManager.saveMapPosition(position.lat, position.lng, position.zoom)
+            .then(() => {
+                console.log('🗺️ 이동 위치 저장 완료:', position);
+            })
+            .catch(error => {
+                console.error('❌ 이동 위치 저장 실패:', error);
+            });
+    }
+
+    // 백업: localStorage에도 저장
     localStorage.setItem('mapPosition', JSON.stringify(position));
     // console.log('이동 위치 저장:', position);
 }

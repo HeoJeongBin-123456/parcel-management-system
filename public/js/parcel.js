@@ -690,16 +690,32 @@ async function saveParcelData() {
             console.error('❌ localStorage 저장 실패:', localError);
         }
         
-        // 2단계: Supabase 저장 시도
+        // 2단계: 🌟 새로운 Supabase 올인원 저장 시도
         let supabaseSuccess = false;
         try {
-            if (window.migratedSetItem && typeof window.migratedSetItem === 'function') {
-                const savedData = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEY) || '[]');
-                await window.migratedSetItem(CONFIG.STORAGE_KEY, JSON.stringify(savedData));
+            if (window.SupabaseManager && window.SupabaseManager.isConnected) {
+                // 🎯 개별 필지 데이터를 Supabase에 저장 (확장된 parcels 테이블 활용)
+                const supabaseData = {
+                    ...formData,
+                    // 🔺 폴리곤 데이터 JSONB 필드로 저장
+                    polygon_data: geometry ? {
+                        type: geometry.type,
+                        coordinates: geometry.coordinates,
+                        center: { lat: formData.lat, lng: formData.lng }
+                    } : null,
+                    // 🎨 색상 정보 JSONB 필드로 저장
+                    color_info: formData.color ? {
+                        color: formData.color,
+                        applied_at: new Date().toISOString(),
+                        mode: isSearchParcel ? 'search' : 'click'
+                    } : null
+                };
+
+                await window.SupabaseManager.saveParcel(currentPNU, supabaseData);
                 supabaseSuccess = true;
-                console.log('✅ Supabase 저장 성공');
+                console.log('✅ Supabase 올인원 저장 성공:', currentPNU);
             } else {
-                console.warn('⚠️ migratedSetItem 함수 없음 - localStorage만 사용');
+                console.warn('⚠️ SupabaseManager 연결 없음 - localStorage만 사용');
             }
         } catch (supabaseError) {
             console.error('❌ Supabase 저장 실패:', supabaseError);

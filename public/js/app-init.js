@@ -192,25 +192,51 @@ class AppInitializer {
         
         for (const parcel of parcels) {
             try {
-                if (parcel.geometry && parcel.geometry.coordinates) {
+                // 🌟 새로운 Supabase 구조: polygon_data 필드 우선 처리
+                let geometry = null;
+
+                if (parcel.polygon_data && parcel.polygon_data.coordinates) {
+                    // 새로운 Supabase JSONB 필드에서 폴리곤 데이터 추출
+                    geometry = {
+                        type: parcel.polygon_data.type,
+                        coordinates: parcel.polygon_data.coordinates
+                    };
+                    console.log('🔺 Supabase polygon_data에서 폴리곤 복원:', parcel.parcel_name || parcel.pnu);
+                } else if (parcel.geometry && parcel.geometry.coordinates) {
+                    // 기존 geometry 필드 (하위 호환성)
+                    geometry = parcel.geometry;
+                    console.log('📐 기존 geometry에서 폴리곤 복원:', parcel.parcel_name || parcel.pnu);
+                }
+
+                if (geometry && geometry.coordinates) {
                     // 폴리곤으로 복원
                     const feature = {
-                        geometry: parcel.geometry,
+                        geometry: geometry,
                         properties: {
                             PNU: parcel.pnu,
                             pnu: parcel.pnu,
-                            jibun: parcel.parcelNumber,
-                            JIBUN: parcel.parcelNumber
+                            jibun: parcel.parcel_name || parcel.parcelNumber,
+                            JIBUN: parcel.parcel_name || parcel.parcelNumber
                         }
                     };
                     
                     if (typeof window.drawParcelPolygon === 'function') {
                         await window.drawParcelPolygon(feature, false);
                         
-                        // 색상 적용
-                        if (parcel.color && parcel.color !== 'transparent') {
+                        // 🎨 색상 적용 (새로운 color_info 필드 우선 처리)
+                        let colorToApply = null;
+
+                        if (parcel.color_info && parcel.color_info.color) {
+                            colorToApply = parcel.color_info.color;
+                            console.log('🎨 Supabase color_info에서 색상 복원:', colorToApply);
+                        } else if (parcel.color && parcel.color !== 'transparent') {
+                            colorToApply = parcel.color;
+                            console.log('🎨 기존 color 필드에서 색상 복원:', colorToApply);
+                        }
+
+                        if (colorToApply) {
                             setTimeout(() => {
-                                this.applyParcelColor(parcel);
+                                this.applyParcelColor({...parcel, color: colorToApply});
                             }, 50); // 약간의 지연
                         }
                         

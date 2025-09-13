@@ -328,6 +328,423 @@ class SupabaseManager {
     async loadCurrentColor() {
         return await this.loadUserSetting('current_color', '#FF0000'); // 기본값: 빨간색
     }
+
+    // ============================================================================
+    // 🌟 새로운 올인원 Supabase 메서드들 - user_states 테이블 관리
+    // ============================================================================
+
+    // 사용자 상태 저장 (지도 위치, 선택된 필지, UI 상태 등)
+    async saveUserState(stateData) {
+        const sessionId = this.getUserSession();
+
+        if (!this.isConnected) {
+            // 로컬 저장소 백업
+            localStorage.setItem('user_state', JSON.stringify(stateData));
+            console.log('💾 로컬 상태 저장:', Object.keys(stateData));
+            return true;
+        }
+
+        try {
+            const stateRecord = {
+                user_session: sessionId,
+                ...stateData,
+                updated_at: new Date().toISOString()
+            };
+
+            const { data, error } = await this.supabase
+                .from('user_states')
+                .upsert(stateRecord, {
+                    onConflict: 'user_session',
+                    ignoreDuplicates: false
+                });
+
+            if (error) {
+                console.warn('📝 Supabase 상태 저장 실패, 로컬 저장 사용:', error);
+                localStorage.setItem('user_state', JSON.stringify(stateData));
+                return false;
+            }
+
+            console.log('✅ 사용자 상태 저장 완료:', Object.keys(stateData));
+            return true;
+        } catch (error) {
+            console.error('❌ 사용자 상태 저장 실패:', error);
+            localStorage.setItem('user_state', JSON.stringify(stateData));
+            return false;
+        }
+    }
+
+    // 사용자 상태 로드
+    async loadUserState() {
+        const sessionId = this.getUserSession();
+
+        if (!this.isConnected) {
+            const stored = localStorage.getItem('user_state');
+            const state = stored ? JSON.parse(stored) : {};
+            console.log('📁 로컬 상태 로드:', Object.keys(state));
+            return state;
+        }
+
+        try {
+            const { data, error } = await this.supabase
+                .from('user_states')
+                .select('*')
+                .eq('user_session', sessionId)
+                .single();
+
+            if (error || !data) {
+                const stored = localStorage.getItem('user_state');
+                const state = stored ? JSON.parse(stored) : {};
+                console.log('📁 로컬 백업 상태 로드:', Object.keys(state));
+                return state;
+            }
+
+            console.log('📡 Supabase 상태 로드:', Object.keys(data));
+            return data;
+        } catch (error) {
+            console.error('❌ 사용자 상태 로드 실패:', error);
+            const stored = localStorage.getItem('user_state');
+            return stored ? JSON.parse(stored) : {};
+        }
+    }
+
+    // ============================================================================
+    // 🗺️ 지도 상태 관리 (user_states 테이블의 특정 필드들)
+    // ============================================================================
+
+    // 지도 중심점과 줌 레벨 저장
+    async saveMapPosition(lat, lng, zoom) {
+        const mapCenter = { lat, lng, zoom };
+        return await this.saveUserState({ map_center: mapCenter });
+    }
+
+    // 지도 중심점과 줌 레벨 로드
+    async loadMapPosition() {
+        const state = await this.loadUserState();
+        return state.map_center || { lat: 37.5665, lng: 126.9780, zoom: 15 };
+    }
+
+    // 선택된 필지 저장
+    async saveSelectedParcel(parcelId, pnu = null) {
+        return await this.saveUserState({
+            selected_parcel_id: parcelId,
+            selected_parcel_pnu: pnu
+        });
+    }
+
+    // 선택된 필지 로드
+    async loadSelectedParcel() {
+        const state = await this.loadUserState();
+        return {
+            parcelId: state.selected_parcel_id || null,
+            pnu: state.selected_parcel_pnu || null
+        };
+    }
+
+    // 활성 레이어 저장 (일반지도, 위성지도, 지적편집도 등)
+    async saveActiveLayers(layers) {
+        return await this.saveUserState({ active_layers: layers });
+    }
+
+    // 활성 레이어 로드
+    async loadActiveLayers() {
+        const state = await this.loadUserState();
+        return state.active_layers || ['normal'];
+    }
+
+    // UI 상태 저장 (사이드바, 모달 등)
+    async saveUIState(uiState) {
+        return await this.saveUserState({ ui_state: uiState });
+    }
+
+    // UI 상태 로드
+    async loadUIState() {
+        const state = await this.loadUserState();
+        return state.ui_state || {};
+    }
+
+    // 검색/클릭 모드 저장
+    async saveCurrentMode(mode) {
+        return await this.saveUserState({ current_mode: mode });
+    }
+
+    // 검색/클릭 모드 로드
+    async loadCurrentMode() {
+        const state = await this.loadUserState();
+        return state.current_mode || 'click';
+    }
+
+    // ============================================================================
+    // 📍 고급 필지 관리 (parcels 테이블 확장 기능)
+    // ============================================================================
+
+    // 필지에 폴리곤 데이터 저장
+    async saveParcelPolygon(parcelId, polygonData) {
+        if (!this.isConnected) {
+            console.log('💾 오프라인 모드 - 폴리곤 데이터 로컬 저장');
+            return false;
+        }
+
+        try {
+            const { data, error } = await this.supabase
+                .from('parcels')
+                .update({
+                    polygon_data: polygonData,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', parcelId);
+
+            if (error) throw error;
+            console.log('✅ 필지 폴리곤 저장 완료:', parcelId);
+            return true;
+        } catch (error) {
+            console.error('❌ 필지 폴리곤 저장 실패:', error);
+            return false;
+        }
+    }
+
+    // 필지에 마커 데이터 저장
+    async saveParcelMarker(parcelId, markerData, markerType = 'normal') {
+        if (!this.isConnected) {
+            console.log('💾 오프라인 모드 - 마커 데이터 로컬 저장');
+            return false;
+        }
+
+        try {
+            const { data, error } = await this.supabase
+                .from('parcels')
+                .update({
+                    marker_data: markerData,
+                    marker_type: markerType,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', parcelId);
+
+            if (error) throw error;
+            console.log('✅ 필지 마커 저장 완료:', parcelId, markerType);
+            return true;
+        } catch (error) {
+            console.error('❌ 필지 마커 저장 실패:', error);
+            return false;
+        }
+    }
+
+    // 필지 색상 정보 저장 (기존 color_type 확장)
+    async saveParcelColor(parcelId, colorInfo) {
+        if (!this.isConnected) {
+            console.log('💾 오프라인 모드 - 색상 정보 로컬 저장');
+            return false;
+        }
+
+        try {
+            const { data, error } = await this.supabase
+                .from('parcels')
+                .update({
+                    color_info: {
+                        ...colorInfo,
+                        applied_at: new Date().toISOString()
+                    },
+                    is_colored: true,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', parcelId);
+
+            if (error) throw error;
+            console.log('✅ 필지 색상 저장 완료:', parcelId, colorInfo.color);
+            return true;
+        } catch (error) {
+            console.error('❌ 필지 색상 저장 실패:', error);
+            return false;
+        }
+    }
+
+    // 고급 필지 정보 저장 (소유자 정보, 메타데이터 포함)
+    async saveAdvancedParcelInfo(parcelId, advancedInfo) {
+        if (!this.isConnected) {
+            console.log('💾 오프라인 모드 - 고급 정보 로컬 저장');
+            return false;
+        }
+
+        try {
+            const updateData = {
+                updated_at: new Date().toISOString()
+            };
+
+            // 선택적으로 업데이트할 필드들
+            if (advancedInfo.ownerInfo) updateData.owner_info = advancedInfo.ownerInfo;
+            if (advancedInfo.pnuCode) updateData.pnu_code = advancedInfo.pnuCode;
+            if (advancedInfo.addressFull) updateData.address_full = advancedInfo.addressFull;
+            if (advancedInfo.addressShort) updateData.address_short = advancedInfo.addressShort;
+            if (advancedInfo.metadata) updateData.metadata = advancedInfo.metadata;
+
+            const { data, error } = await this.supabase
+                .from('parcels')
+                .update(updateData)
+                .eq('id', parcelId);
+
+            if (error) throw error;
+            console.log('✅ 필지 고급 정보 저장 완료:', parcelId);
+            return true;
+        } catch (error) {
+            console.error('❌ 필지 고급 정보 저장 실패:', error);
+            return false;
+        }
+    }
+
+    // ============================================================================
+    // 🔍 고급 쿼리 메서드들
+    // ============================================================================
+
+    // 메모가 있는 필지들만 조회
+    async loadMemoparcels() {
+        if (!this.isConnected) {
+            const stored = localStorage.getItem('parcels');
+            const parcels = stored ? JSON.parse(stored) : [];
+            return parcels.filter(p => p.memo && p.memo.trim() !== '');
+        }
+
+        try {
+            const { data, error } = await this.supabase
+                .from('parcels')
+                .select('*')
+                .eq('has_memo', true)
+                .order('updated_at', { ascending: false });
+
+            if (error) throw error;
+            console.log('📡 메모 필지 로드 완료:', data?.length || 0, '개');
+            return data || [];
+        } catch (error) {
+            console.error('❌ 메모 필지 로드 실패:', error);
+            return [];
+        }
+    }
+
+    // 특정 색상의 필지들만 조회
+    async loadParcelsByColor(color) {
+        if (!this.isConnected) {
+            const stored = localStorage.getItem('parcels');
+            const parcels = stored ? JSON.parse(stored) : [];
+            return parcels.filter(p =>
+                (p.color_info && p.color_info.color === color) ||
+                (p.color === color) // 하위 호환성
+            );
+        }
+
+        try {
+            const { data, error } = await this.supabase
+                .from('parcels')
+                .select('*')
+                .contains('color_info', { color: color })
+                .order('updated_at', { ascending: false });
+
+            if (error) throw error;
+            console.log(`📡 ${color} 색상 필지 로드 완료:`, data?.length || 0, '개');
+            return data || [];
+        } catch (error) {
+            console.error('❌ 색상별 필지 로드 실패:', error);
+            return [];
+        }
+    }
+
+    // 특정 마커 타입의 필지들만 조회
+    async loadParcelsByMarkerType(markerType) {
+        if (!this.isConnected) {
+            const stored = localStorage.getItem('parcels');
+            const parcels = stored ? JSON.parse(stored) : [];
+            return parcels.filter(p => p.marker_type === markerType);
+        }
+
+        try {
+            const { data, error } = await this.supabase
+                .from('parcels')
+                .select('*')
+                .eq('marker_type', markerType)
+                .order('updated_at', { ascending: false });
+
+            if (error) throw error;
+            console.log(`📡 ${markerType} 마커 필지 로드 완료:`, data?.length || 0, '개');
+            return data || [];
+        } catch (error) {
+            console.error('❌ 마커 타입별 필지 로드 실패:', error);
+            return [];
+        }
+    }
+
+    // 🌟 누락된 핵심 메서드: 개별 필지 저장 (확장된 JSONB 필드 활용)
+    async saveParcel(pnu, parcelData) {
+        if (!this.isConnected) {
+            console.warn('⚠️ Supabase 미연결, localStorage에만 저장');
+            // localStorage 백업
+            try {
+                const stored = localStorage.getItem('parcels') || '[]';
+                const parcels = JSON.parse(stored);
+                const existingIndex = parcels.findIndex(p => p.pnu === pnu);
+
+                if (existingIndex >= 0) {
+                    parcels[existingIndex] = { ...parcels[existingIndex], ...parcelData, pnu };
+                } else {
+                    parcels.push({ ...parcelData, pnu });
+                }
+
+                localStorage.setItem('parcels', JSON.stringify(parcels));
+                console.log('💾 로컬 백업 저장 완료:', pnu);
+            } catch (error) {
+                console.error('❌ 로컬 백업 저장 실패:', error);
+            }
+            return false;
+        }
+
+        try {
+            // Supabase에 upsert (없으면 생성, 있으면 업데이트)
+            const { data, error } = await this.supabase
+                .from('parcels')
+                .upsert({
+                    pnu: pnu,
+                    parcel_name: parcelData.parcelNumber || parcelData.parcel_name,
+                    lat: parseFloat(parcelData.lat) || null,
+                    lng: parseFloat(parcelData.lng) || null,
+                    owner_name: parcelData.ownerName || null,
+                    owner_address: parcelData.ownerAddress || null,
+                    owner_contact: parcelData.ownerContact || null,
+                    memo: parcelData.memo || null,
+                    // 🔺 새로운 JSONB 필드들
+                    polygon_data: parcelData.polygon_data || null,
+                    color_info: parcelData.color_info || null,
+                    marker_data: parcelData.marker_data || null,
+                    user_session: this.getUserSession(),
+                    updated_at: new Date().toISOString()
+                }, {
+                    onConflict: 'pnu'
+                })
+                .select();
+
+            if (error) throw error;
+
+            console.log('✅ 필지 Supabase 저장 완료:', pnu);
+            return data;
+        } catch (error) {
+            console.error('❌ 필지 Supabase 저장 실패:', error);
+
+            // 에러 발생시 localStorage 백업
+            try {
+                const stored = localStorage.getItem('parcels') || '[]';
+                const parcels = JSON.parse(stored);
+                const existingIndex = parcels.findIndex(p => p.pnu === pnu);
+
+                if (existingIndex >= 0) {
+                    parcels[existingIndex] = { ...parcels[existingIndex], ...parcelData, pnu };
+                } else {
+                    parcels.push({ ...parcelData, pnu });
+                }
+
+                localStorage.setItem('parcels', JSON.stringify(parcels));
+                console.log('💾 Supabase 실패로 인한 로컬 백업 저장:', pnu);
+            } catch (backupError) {
+                console.error('❌ 백업 저장도 실패:', backupError);
+            }
+
+            return false;
+        }
+    }
 }
 
 // 전역 인스턴스 생성 - 중복 생성 방지

@@ -16,10 +16,11 @@ document.addEventListener('DOMContentLoaded', async function() {
     //     // 캘린더 연동 코드...
     // }
     
-    // 🎨 페이지 로드시 저장된 색상 복원
-    async function loadSavedColor() {
+    // 🎨 페이지 로드시 저장된 색상 및 지도 상태 복원
+    async function loadSavedColorAndState() {
         if (window.SupabaseManager) {
             try {
+                // 🎨 색상 복원
                 const savedColor = await window.SupabaseManager.loadCurrentColor();
                 console.log('🎨 저장된 색상 복원:', savedColor);
 
@@ -33,10 +34,36 @@ document.addEventListener('DOMContentLoaded', async function() {
                     if (targetItem) {
                         targetItem.classList.add('active');
                     }
-                    return;
                 }
+
+                // 🗺️ 지도 모드 복원
+                const savedMode = await window.SupabaseManager.loadCurrentMode();
+                if (savedMode && window.currentMode !== savedMode) {
+                    window.currentMode = savedMode;
+
+                    // 검색 버튼 상태 업데이트
+                    const searchToggleBtn = document.getElementById('searchToggleBtn');
+                    if (searchToggleBtn) {
+                        searchToggleBtn.textContent = savedMode === 'search' ? '검색 ON' : '검색 OFF';
+                    }
+                    console.log('🔄 지도 모드 복원:', savedMode);
+                }
+
+                // 🗺️ 지도 위치 복원 (지도가 로드된 후에 실행)
+                if (window.map) {
+                    const savedPosition = await window.SupabaseManager.loadMapPosition();
+                    if (savedPosition && savedPosition.lat && savedPosition.lng) {
+                        window.map.setCenter(new naver.maps.LatLng(savedPosition.lat, savedPosition.lng));
+                        if (savedPosition.zoom) {
+                            window.map.setZoom(savedPosition.zoom);
+                        }
+                        console.log('🗺️ 지도 위치 복원:', savedPosition);
+                    }
+                }
+
+                return;
             } catch (error) {
-                console.error('색상 복원 실패:', error);
+                console.error('상태 복원 실패:', error);
             }
         }
 
@@ -67,8 +94,8 @@ document.addEventListener('DOMContentLoaded', async function() {
         });
     });
 
-    // 페이지 로드시 저장된 색상 복원 (SupabaseManager 로드 후 실행)
-    setTimeout(loadSavedColor, 1000);
+    // 페이지 로드시 저장된 색상 및 상태 복원 (SupabaseManager 로드 후 실행)
+    setTimeout(loadSavedColorAndState, 1000);
     
     // 저장 버튼과 초기화 버튼 이벤트는 parcel.js에서 처리됨
     // 중복 이벤트 리스너 제거

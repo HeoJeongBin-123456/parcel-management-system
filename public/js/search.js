@@ -327,17 +327,28 @@ let checkMapInterval = null;
 // 기존 필지 색상 저장용
 let hiddenParcels = [];
 
-// 검색 모드 토글 기능 (전역 함수로 변경)
-function toggleSearchMode() {
+// 검색 모드 토글 기능 (전역 함수로 변경) - Supabase 저장 포함
+async function toggleSearchMode() {
     // console.log('=== toggleSearchMode 시작 ===');
     // console.log('현재 currentMode:', window.currentMode);
     // console.log('clickParcels 상태:', window.clickParcels.size, '개');
     // console.log('searchParcels 상태:', window.searchParcels.size, '개');
-    
+
     // 모드 전환
-    window.currentMode = (window.currentMode === 'search') ? 'click' : 'search';
+    const newMode = (window.currentMode === 'search') ? 'click' : 'search';
+    window.currentMode = newMode;
     const toggleBtn = document.getElementById('searchToggleBtn');
-    
+
+    // 🎯 새로운 모드를 Supabase에 저장
+    if (window.SupabaseManager) {
+        try {
+            await window.SupabaseManager.saveCurrentMode(newMode);
+            console.log('🔄 검색 모드 저장 완료:', newMode);
+        } catch (error) {
+            console.error('❌ 검색 모드 저장 실패:', error);
+        }
+    }
+
     // console.log('새 currentMode:', window.currentMode);
     // console.log('toggleBtn 요소:', toggleBtn);
     

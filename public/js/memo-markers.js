@@ -21,92 +21,110 @@ class MemoMarkerManager {
         console.log('✅ MemoMarkerManager 초기화 완료');
     }
 
-    // 모든 메모 마커 로드
+    // 모든 메모 마커 로드 (Supabase 우선, localStorage 백업)
     async loadAllMemoMarkers() {
         try {
-            console.log('🔍 모든 저장소 키에서 메모 필지 검색 시작...');
-            
-            // 가능한 모든 저장소 키들
-            const possibleKeys = [
-                CONFIG.STORAGE_KEY,           // 'parcelData'
-                'parcels_current_session',    // 실제 저장되는 키
-                'parcels',                    // 다른 가능한 키
-                'parcelData_backup'           // 백업 키
-            ];
-            
-            // 모든 키에서 메모가 있는 필지들을 수집
+            console.log('🔍 메모 마커 로드 시작: Supabase 우선 → localStorage 백업');
+
             let allMemoData = [];
-            const seenParcels = new Set(); // 중복 제거용
-            
-            // 각 키에서 개별적으로 메모가 있는 필지 찾기
-            for (const key of possibleKeys) {
+
+            // 🎯 1차: Supabase에서 메모가 있는 필지들 로드
+            if (window.SupabaseManager && window.SupabaseManager.isConnected) {
                 try {
-                    const data = localStorage.getItem(key);
-                    if (data && data !== 'null' && data !== '[]') {
-                        const parsed = JSON.parse(data);
-                        if (Array.isArray(parsed) && parsed.length > 0) {
-                            console.log(`🔍 ${key}에서 ${parsed.length}개 필지 발견`);
-                            
-                            // 이 키에서 메모가 있는 필지들 찾기
-                            const withMemo = parsed.filter(parcel => 
-                                parcel.memo && parcel.memo.trim() !== ''
-                            );
-                            
-                            if (withMemo.length > 0) {
-                                console.log(`📝 ${key}에서 메모가 있는 필지 ${withMemo.length}개 발견`);
-                                
-                                // 중복 제거하면서 추가
-                                withMemo.forEach(parcel => {
-                                    const identifier = parcel.pnu || parcel.parcelNumber || parcel.parcel_name || parcel.id;
-                                    if (identifier && !seenParcels.has(identifier)) {
-                                        seenParcels.add(identifier);
-                                        allMemoData.push({
-                                            ...parcel,
-                                            sourceKey: key // 출처 키 저장
-                                        });
-                                        console.log(`📌 메모 필지 추가: ${identifier} (출처: ${key})`);
-                                    }
-                                });
+                    const supabaseMemoData = await window.SupabaseManager.loadMemoparcels();
+                    if (supabaseMemoData && supabaseMemoData.length > 0) {
+                        allMemoData = supabaseMemoData;
+                        console.log(`📡 Supabase에서 ${allMemoData.length}개 메모 필지 로드 완료`);
+                    }
+                } catch (error) {
+                    console.warn('⚠️ Supabase 메모 필지 로드 실패:', error);
+                }
+            }
+
+            // 🔄 2차: Supabase 실패시 localStorage 백업 사용
+            if (allMemoData.length === 0) {
+                console.log('📁 localStorage에서 메모 필지 검색...');
+
+                const possibleKeys = [
+                    CONFIG.STORAGE_KEY,           // 'parcelData'
+                    'parcels_current_session',    // 실제 저장되는 키
+                    'parcels',                    // 다른 가능한 키
+                    'parcelData_backup'           // 백업 키
+                ];
+
+                const seenParcels = new Set(); // 중복 제거용
+
+                // 각 키에서 개별적으로 메모가 있는 필지 찾기
+                for (const key of possibleKeys) {
+                    try {
+                        const data = localStorage.getItem(key);
+                        if (data && data !== 'null' && data !== '[]') {
+                            const parsed = JSON.parse(data);
+                            if (Array.isArray(parsed) && parsed.length > 0) {
+                                console.log(`🔍 ${key}에서 ${parsed.length}개 필지 발견`);
+
+                                // 이 키에서 메모가 있는 필지들 찾기
+                                const withMemo = parsed.filter(parcel =>
+                                    parcel.memo && parcel.memo.trim() !== ''
+                                );
+
+                                if (withMemo.length > 0) {
+                                    console.log(`📝 ${key}에서 메모가 있는 필지 ${withMemo.length}개 발견`);
+
+                                    // 중복 제거하면서 추가
+                                    withMemo.forEach(parcel => {
+                                        const identifier = parcel.pnu || parcel.parcelNumber || parcel.parcel_name || parcel.id;
+                                        if (identifier && !seenParcels.has(identifier)) {
+                                            seenParcels.add(identifier);
+                                            allMemoData.push({
+                                                ...parcel,
+                                                sourceKey: key // 출처 키 저장
+                                            });
+                                            console.log(`📌 메모 필지 추가: ${identifier} (출처: ${key})`);
+                                        }
+                                    });
+                                }
+                            }
+                        }
+                    } catch (parseError) {
+                        console.warn(`⚠️ ${key} 파싱 오류:`, parseError);
+                    }
+                }
+
+                // 추가로 migratedGetItem에서도 메모 필지 찾기
+                try {
+                    if (window.migratedGetItem && typeof window.migratedGetItem === 'function') {
+                        const migratedData = await window.migratedGetItem(CONFIG.STORAGE_KEY);
+                        if (migratedData) {
+                            const parsed = JSON.parse(migratedData);
+                            if (Array.isArray(parsed) && parsed.length > 0) {
+                                console.log(`📡 migratedGetItem에서 ${parsed.length}개 필지 발견`);
+
+                                const withMemo = parsed.filter(parcel =>
+                                    parcel.memo && parcel.memo.trim() !== ''
+                                );
+
+                                if (withMemo.length > 0) {
+                                    console.log(`📝 migratedGetItem에서 메모가 있는 필지 ${withMemo.length}개 발견`);
+
+                                    // 중복 제거하면서 추가
+                                    withMemo.forEach(parcel => {
+                                        const identifier = parcel.pnu || parcel.parcelNumber || parcel.parcel_name || parcel.id;
+                                        if (identifier && !seenParcels.has(identifier)) {
+                                            seenParcels.add(identifier);
+                                            allMemoData.push({
+                                                ...parcel,
+                                                sourceKey: 'migratedGetItem' // 출처 키 저장
+                                            });
+                                        }
+                                    });
+                                }
                             }
                         }
                     }
-                } catch (parseError) {
-                    console.warn(`⚠️ ${key} 파싱 오류:`, parseError);
+                } catch (migratedError) {
+                    console.warn('⚠️ migratedGetItem 오류:', migratedError);
                 }
-            }
-            
-            // 추가로 migratedGetItem에서도 메모 필지 찾기
-            try {
-                const migratedData = await window.migratedGetItem(CONFIG.STORAGE_KEY);
-                if (migratedData) {
-                    const parsed = JSON.parse(migratedData);
-                    if (Array.isArray(parsed) && parsed.length > 0) {
-                        console.log(`📡 migratedGetItem에서 ${parsed.length}개 필지 발견`);
-                        
-                        const withMemo = parsed.filter(parcel => 
-                            parcel.memo && parcel.memo.trim() !== ''
-                        );
-                        
-                        if (withMemo.length > 0) {
-                            console.log(`📝 migratedGetItem에서 메모가 있는 필지 ${withMemo.length}개 발견`);
-                            
-                            // 중복 제거하면서 추가
-                            withMemo.forEach(parcel => {
-                                const identifier = parcel.pnu || parcel.parcelNumber || parcel.parcel_name || parcel.id;
-                                if (identifier && !seenParcels.has(identifier)) {
-                                    seenParcels.add(identifier);
-                                    allMemoData.push({
-                                        ...parcel,
-                                        sourceKey: 'migratedGetItem' // 출처 저장
-                                    });
-                                    console.log(`📌 메모 필지 추가: ${identifier} (출처: migratedGetItem)`);
-                                }
-                            });
-                        }
-                    }
-                }
-            } catch (supabaseError) {
-                console.warn('⚠️ Supabase 연결 실패, localStorage 데이터만 사용:', supabaseError.message);
             }
             
             console.log(`📋 최종 메모 필지 발견: ${allMemoData.length}개`);
@@ -216,6 +234,23 @@ class MemoMarkerManager {
                 data: parcelData,
                 element: markerElement
             });
+
+            // 🌟 Supabase에 마커 데이터 저장
+            if (window.SupabaseManager && window.SupabaseManager.isConnected) {
+                try {
+                    const markerData = {
+                        type: 'memo',
+                        position: { lat, lng },
+                        memo: parcelData.memo,
+                        parcelNumber: parcelData.parcelNumber,
+                        element: markerElement.outerHTML
+                    };
+                    await window.SupabaseManager.saveParcelMarker(pnu, markerData);
+                    console.log('✅ 메모 마커 Supabase 저장 완료:', pnu);
+                } catch (error) {
+                    console.error('❌ 메모 마커 Supabase 저장 실패:', error);
+                }
+            }
 
             console.log(`📍 메모 마커 생성: ${parcelData.parcelNumber}`);
 
@@ -448,6 +483,23 @@ class MemoMarkerManager {
         markerInfo.data = parcelData;
         markerInfo.element = newElement;
 
+        // 🌟 Supabase에 업데이트된 마커 데이터 저장
+        if (window.SupabaseManager && window.SupabaseManager.isConnected) {
+            try {
+                const markerData = {
+                    type: 'memo',
+                    position: { lat: parcelData.lat, lng: parcelData.lng },
+                    memo: parcelData.memo,
+                    parcelNumber: parcelData.parcelNumber,
+                    element: newElement.outerHTML
+                };
+                await window.SupabaseManager.saveParcelMarker(pnu, markerData);
+                console.log('✅ 메모 마커 Supabase 업데이트 완료:', pnu);
+            } catch (error) {
+                console.error('❌ 메모 마커 Supabase 업데이트 실패:', error);
+            }
+        }
+
         console.log(`🔄 메모 마커 업데이트: ${parcelData.parcelNumber}`);
     }
 
@@ -457,6 +509,22 @@ class MemoMarkerManager {
         if (markerInfo) {
             markerInfo.marker.setMap(null);
             this.markers.delete(pnu);
+
+            // 🌟 Supabase에서 마커 데이터 제거 (marker_data 필드를 null로 설정)
+            if (window.SupabaseManager && window.SupabaseManager.isConnected) {
+                try {
+                    window.SupabaseManager.saveParcelMarker(pnu, null)
+                        .then(() => {
+                            console.log('✅ 메모 마커 Supabase 제거 완료:', pnu);
+                        })
+                        .catch(error => {
+                            console.error('❌ 메모 마커 Supabase 제거 실패:', error);
+                        });
+                } catch (error) {
+                    console.error('❌ 메모 마커 Supabase 제거 실패:', error);
+                }
+            }
+
             console.log(`🗑️ 메모 마커 제거: ${pnu}`);
         }
     }
