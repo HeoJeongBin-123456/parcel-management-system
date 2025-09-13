@@ -97,39 +97,77 @@ class AppInitializer {
             console.log('✅ 필지 데이터 이미 로드됨');
             return;
         }
-        
-        console.log('🛡️ 5단계 데이터 복원 시스템 시작...');
+
+        console.log('🎯 Supabase 중심 단순 데이터 로딩 시작...');
         this.dataLoadComplete = true; // 중복 호출 방지
 
         try {
-            // DataPersistenceManager를 사용한 완벽한 복원
-            if (window.dataPersistenceManager) {
-                const restoredData = await window.dataPersistenceManager.restore();
-                
-                if (restoredData && restoredData.length > 0) {
-                    console.log(`🎯 ${restoredData.length}개 필지 복원 완료`);
-                    
-                    // 전역 데이터 설정
-                    window.parcelsData = restoredData;
-                    
-                    // 지도에 필지 복원
-                    await this.restoreParcelsToMap(restoredData);
-                    
-                    // ParcelManager 동기화
-                    if (window.parcelManager) {
-                        window.parcelManager.loadParcels();
+            // 🔥 새로운 단순 시스템: Supabase에서 직접 로드
+            console.log('📡 Supabase에서 필지 데이터 직접 로드...');
+
+            let restoredData = [];
+
+            // Supabase가 연결되어 있으면 직접 로드
+            if (window.SupabaseManager && window.SupabaseManager.isConnected) {
+                try {
+                    const { data, error } = await window.supabase
+                        .from('parcels')
+                        .select('*')
+                        .order('created_at', { ascending: false });
+
+                    if (error) {
+                        console.warn('⚠️ Supabase 로드 실패:', error);
+                    } else if (data && data.length > 0) {
+                        restoredData = data;
+                        console.log(`✅ Supabase에서 ${data.length}개 필지 로드 성공`);
                     }
-                    
-                    // UI 업데이트
-                    if (typeof updateParcelList === 'function') {
-                        await updateParcelList();
+                } catch (error) {
+                    console.warn('⚠️ Supabase 쿼리 실패:', error);
+                }
+            }
+
+            // Supabase 실패시 localStorage 백업 사용
+            if (restoredData.length === 0) {
+                console.log('🔄 localStorage 백업에서 데이터 로드 시도...');
+                const backupSources = ['parcels', 'parcels_current_session'];
+
+                for (const source of backupSources) {
+                    try {
+                        const stored = localStorage.getItem(source);
+                        if (stored) {
+                            const parsed = JSON.parse(stored);
+                            if (parsed && parsed.length > 0) {
+                                restoredData = parsed;
+                                console.log(`✅ ${source}에서 ${parsed.length}개 필지 백업 복원`);
+                                break;
+                            }
+                        }
+                    } catch (error) {
+                        console.warn(`⚠️ ${source} 복원 실패:`, error);
                     }
-                } else {
-                    console.log('📭 복원할 필지 데이터가 없습니다');
+                }
+            }
+
+            if (restoredData && restoredData.length > 0) {
+                console.log(`🎯 ${restoredData.length}개 필지 복원 완료`);
+
+                // 전역 데이터 설정
+                window.parcelsData = restoredData;
+
+                // 지도에 필지 복원
+                await this.restoreParcelsToMap(restoredData);
+
+                // ParcelManager 동기화
+                if (window.parcelManager) {
+                    window.parcelManager.loadParcels();
+                }
+
+                // UI 업데이트
+                if (typeof updateParcelList === 'function') {
+                    await updateParcelList();
                 }
             } else {
-                // 백업: 기존 복원 시스템 사용
-                await this.restoreSavedParcelsFromStorage();
+                console.log('📭 복원할 필지 데이터가 없습니다');
             }
             
             // 메모 마커 매니저 초기화
@@ -212,19 +250,21 @@ class AppInitializer {
         }
     }
 
-    // 점 마커로 필지 복원
+    // 점 마커로 필지 복원 (일반 마커와 동일한 스타일)
     restoreParcelAsMarker(parcel) {
         if (!window.map || !window.naver) return;
-        
+
         const color = parcel.color || '#FF0000';
-        const marker = new window.naver.maps.Circle({
+
+        // 일반 마커와 동일한 스타일 적용
+        const marker = new window.naver.maps.Marker({
+            position: new window.naver.maps.LatLng(parcel.lat, parcel.lng),
             map: window.map,
-            center: new window.naver.maps.LatLng(parcel.lat, parcel.lng),
-            radius: 30,
-            fillColor: color,
-            fillOpacity: 0.6,
-            strokeColor: color,
-            strokeWeight: 2
+            title: parcel.parcel_name || parcel.parcelNumber || 'Unknown',
+            icon: {
+                content: '<div style="width: 24px; height: 24px; background-color: ' + color + '; border: 2px solid white; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">M</div>',
+                anchor: new window.naver.maps.Point(12, 12)
+            }
         });
         
         if (!window.restoredMarkers) {

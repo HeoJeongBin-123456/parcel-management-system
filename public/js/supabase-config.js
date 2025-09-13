@@ -62,6 +62,7 @@ class SupabaseManager {
 
     async checkAndCreateTables() {
         try {
+            // parcels 테이블 확인
             const { data, error } = await this.supabase
                 .from('parcels')
                 .select('id')
@@ -73,8 +74,25 @@ class SupabaseManager {
             } else if (error) {
                 throw error;
             }
-            
+
             console.log('✅ parcels 테이블 확인 완료');
+
+            // user_settings 테이블 확인 (없어도 계속 진행)
+            try {
+                const { data: settingsData, error: settingsError } = await this.supabase
+                    .from('user_settings')
+                    .select('id')
+                    .limit(1);
+
+                if (settingsError && settingsError.code === 'PGRST116') {
+                    console.log('⚠️ user_settings 테이블이 존재하지 않습니다. 로컬 저장소 사용');
+                } else {
+                    console.log('✅ user_settings 테이블 확인 완료');
+                }
+            } catch (settingsError) {
+                console.log('📝 user_settings 테이블 없음 - 로컬 저장소로 대체');
+            }
+
         } catch (error) {
             console.error('❌ 테이블 확인 실패:', error);
             throw error;
@@ -225,6 +243,90 @@ class SupabaseManager {
             timestamp: new Date().toISOString(),
             attempts: this.initializationAttempts
         };
+    }
+
+    // 🎨 사용자 설정 관리 메서드들
+    async saveUserSetting(key, value) {
+        const sessionId = this.getUserSession();
+
+        // 로컬 저장소에도 백업
+        localStorage.setItem(`setting_${key}`, JSON.stringify(value));
+
+        if (!this.isConnected) {
+            console.log(`💾 로컬 저장: ${key} = ${value}`);
+            return true;
+        }
+
+        try {
+            const settingData = {
+                id: `${sessionId}_${key}`,
+                user_session: sessionId,
+                setting_key: key,
+                setting_value: JSON.stringify(value),
+                updated_at: new Date().toISOString()
+            };
+
+            const { data, error } = await this.supabase
+                .from('user_settings')
+                .upsert(settingData, { onConflict: 'id' });
+
+            if (error) {
+                console.log(`📝 Supabase 저장 실패, 로컬 저장 사용: ${key}`);
+                return false;
+            }
+
+            console.log(`✅ 설정 저장 완료: ${key} = ${value}`);
+            return true;
+        } catch (error) {
+            console.error(`❌ 설정 저장 실패: ${key}`, error);
+            return false;
+        }
+    }
+
+    async loadUserSetting(key, defaultValue = null) {
+        const sessionId = this.getUserSession();
+
+        if (!this.isConnected) {
+            const stored = localStorage.getItem(`setting_${key}`);
+            const value = stored ? JSON.parse(stored) : defaultValue;
+            console.log(`📁 로컬 로드: ${key} = ${value}`);
+            return value;
+        }
+
+        try {
+            const { data, error } = await this.supabase
+                .from('user_settings')
+                .select('setting_value')
+                .eq('user_session', sessionId)
+                .eq('setting_key', key)
+                .single();
+
+            if (error || !data) {
+                // Supabase에서 찾지 못하면 로컬 저장소 확인
+                const stored = localStorage.getItem(`setting_${key}`);
+                const value = stored ? JSON.parse(stored) : defaultValue;
+                console.log(`📁 로컬 백업 로드: ${key} = ${value}`);
+                return value;
+            }
+
+            const value = JSON.parse(data.setting_value);
+            console.log(`📡 Supabase 로드: ${key} = ${value}`);
+            return value;
+        } catch (error) {
+            console.error(`❌ 설정 로드 실패: ${key}`, error);
+            // 에러 시 로컬 저장소로 폴백
+            const stored = localStorage.getItem(`setting_${key}`);
+            return stored ? JSON.parse(stored) : defaultValue;
+        }
+    }
+
+    // 🎨 색상 설정 전용 메서드들
+    async saveCurrentColor(color) {
+        return await this.saveUserSetting('current_color', color);
+    }
+
+    async loadCurrentColor() {
+        return await this.loadUserSetting('current_color', '#FF0000'); // 기본값: 빨간색
     }
 }
 

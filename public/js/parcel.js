@@ -79,8 +79,14 @@ async function getParcelInfoViaProxy(lat, lng) {
                 
                 // 지도에 필지 표시
                 const parcelForMap = { properties: properties, geometry: feature.geometry };
-                await drawParcelPolygon(parcelForMap, false);
-                
+                const polygon = await drawParcelPolygon(parcelForMap, false);
+
+                // 🎨 새로 조회한 필지에 현재 색상 적용
+                if (polygon) {
+                    console.log('🎨 새로운 필지에 색상 적용:', currentColor);
+                    await toggleParcelSelection(parcelForMap, polygon);
+                }
+
                 return true;
             }
         }

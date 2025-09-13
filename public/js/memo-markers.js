@@ -464,7 +464,15 @@ class MemoMarkerManager {
     // 새 필지 메모 추가 시 호출
     async onParcelMemoAdded(parcelData) {
         if (parcelData.memo && parcelData.memo.trim() !== '') {
-            await this.createMemoMarker(parcelData);
+            const pnu = parcelData.pnu || parcelData.id;
+            // 이미 마커가 있으면 업데이트, 없으면 새로 생성
+            if (this.markers.has(pnu)) {
+                console.log('🔄 기존 메모 마커 업데이트:', pnu);
+                await this.updateMemoMarker(pnu, parcelData);
+            } else {
+                console.log('📍 새 메모 마커 생성:', pnu);
+                await this.createMemoMarker(parcelData);
+            }
         }
     }
 
@@ -525,14 +533,48 @@ const originalSaveParcelData = window.saveParcelData;
 if (originalSaveParcelData) {
     window.saveParcelData = async function() {
         const result = await originalSaveParcelData.apply(this, arguments);
-        
-        // 메모 마커 새로고침
+
+        // 🔥 ULTRATHINK 수정: refreshAllMarkers 대신 직접 마커 생성/업데이트
         if (window.MemoMarkerManager && window.MemoMarkerManager.isInitialized) {
-            setTimeout(() => {
-                window.MemoMarkerManager.refreshAllMarkers();
-            }, 500);
+            // 현재 저장된 필지 정보 직접 가져오기
+            const parcelNumber = document.getElementById('parcelNumber').value;
+            const memo = document.getElementById('memo').value;
+            const ownerName = document.getElementById('ownerName').value;
+            const ownerAddress = document.getElementById('ownerAddress').value;
+            const ownerContact = document.getElementById('ownerContact').value;
+            const currentPNU = window.currentSelectedPNU;
+
+            console.log('💾 저장 후 마커 업데이트:', {
+                currentPNU: currentPNU,
+                parcelNumber: parcelNumber,
+                hasMemo: !!(memo && memo.trim())
+            });
+
+            if (currentPNU) {
+                if (memo && memo.trim() !== '') {
+                    // 메모가 있는 경우 - 마커 생성/업데이트
+                    const parcelData = {
+                        pnu: currentPNU,
+                        id: currentPNU,
+                        parcelNumber: parcelNumber,
+                        memo: memo,
+                        ownerName: ownerName,
+                        ownerAddress: ownerAddress,
+                        ownerContact: ownerContact,
+                        lat: null, // createMemoMarker에서 좌표 계산
+                        lng: null
+                    };
+
+                    console.log('📍 메모 마커 즉시 생성:', parcelData);
+                    await window.MemoMarkerManager.onParcelMemoAdded(parcelData);
+                } else {
+                    // 메모가 없는 경우 - 마커 제거
+                    console.log('🗑️ 메모 마커 제거:', currentPNU);
+                    window.MemoMarkerManager.removeMemoMarker(currentPNU);
+                }
+            }
         }
-        
+
         return result;
     };
 }

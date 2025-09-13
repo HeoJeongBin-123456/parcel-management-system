@@ -16,21 +16,59 @@ document.addEventListener('DOMContentLoaded', async function() {
     //     // 캘린더 연동 코드...
     // }
     
+    // 🎨 페이지 로드시 저장된 색상 복원
+    async function loadSavedColor() {
+        if (window.SupabaseManager) {
+            try {
+                const savedColor = await window.SupabaseManager.loadCurrentColor();
+                console.log('🎨 저장된 색상 복원:', savedColor);
+
+                if (savedColor) {
+                    currentColor = savedColor;
+                    document.getElementById('currentColor').style.background = currentColor;
+
+                    // 해당 색상 팔레트 아이템 활성화
+                    document.querySelectorAll('.color-item').forEach(c => c.classList.remove('active'));
+                    const targetItem = document.querySelector(`.color-item[data-color="${savedColor}"]`);
+                    if (targetItem) {
+                        targetItem.classList.add('active');
+                    }
+                    return;
+                }
+            } catch (error) {
+                console.error('색상 복원 실패:', error);
+            }
+        }
+
+        // 기본 색상 설정 (빨간색)
+        document.querySelector('.color-item[data-color="#FF0000"]')?.click();
+    }
+
     // 색상 팔레트 이벤트 설정
     document.querySelectorAll('.color-item').forEach(item => {
-        item.addEventListener('click', function() {
+        item.addEventListener('click', async function() {
             currentColor = this.dataset.color;
             document.getElementById('currentColor').style.background = currentColor;
-    // console.log('색상 선택:', currentColor);
-            
+            console.log('🎨 색상 선택:', currentColor);
+
+            // 🎨 Supabase에 색상 저장
+            if (window.SupabaseManager) {
+                try {
+                    await window.SupabaseManager.saveCurrentColor(currentColor);
+                    console.log('✅ 색상 저장 완료:', currentColor);
+                } catch (error) {
+                    console.error('❌ 색상 저장 실패:', error);
+                }
+            }
+
             // 활성 색상 표시
             document.querySelectorAll('.color-item').forEach(c => c.classList.remove('active'));
             this.classList.add('active');
         });
     });
-    
-    // 초기 색상 설정
-    document.querySelector('.color-item[data-color="#FF0000"]')?.click();
+
+    // 페이지 로드시 저장된 색상 복원 (SupabaseManager 로드 후 실행)
+    setTimeout(loadSavedColor, 1000);
     
     // 저장 버튼과 초기화 버튼 이벤트는 parcel.js에서 처리됨
     // 중복 이벤트 리스너 제거

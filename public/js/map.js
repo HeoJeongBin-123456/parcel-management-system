@@ -164,19 +164,32 @@ function initMap() {
         });
     });
     
-    // 지도 클릭 이벤트
+    // 지도 클릭 이벤트 (안전한 함수 호출)
     naver.maps.Event.addListener(map, 'click', function(e) {
         // 검색 모드에서는 클릭으로 필지를 추가하지 않음
         if (window.currentMode === 'search') {
     // console.log('검색 모드에서는 클릭으로 필지를 추가하지 않습니다.');
             return;
         }
-        
+
         const coord = e.coord;
-    // console.log('클릭 좌표:', coord.lat(), coord.lng());
-        
-        // 클릭 모드일 때만 Vworld API로 필지 정보 조회
-        getParcelInfo(coord.lat(), coord.lng());
+        console.log('🖱️ 지도 클릭:', coord.lat(), coord.lng());
+
+        // getParcelInfo 함수가 로드되었는지 확인 후 호출
+        if (typeof getParcelInfo === 'function') {
+            getParcelInfo(coord.lat(), coord.lng());
+        } else {
+            // 함수가 아직 로드되지 않은 경우 잠시 후 재시도
+            console.warn('⏳ getParcelInfo 함수 대기 중...');
+            setTimeout(() => {
+                if (typeof getParcelInfo === 'function') {
+                    getParcelInfo(coord.lat(), coord.lng());
+                } else {
+                    console.error('❌ getParcelInfo 함수를 찾을 수 없습니다.');
+                    alert('필지 정보 조회 기능이 아직 로드되지 않았습니다. 잠시 후 다시 시도해주세요.');
+                }
+            }, 500);
+        }
     });
     
     // 🎯 우클릭 이벤트 - 필지 삭제 (브라우저 컨텍스트 메뉴 방지)
@@ -528,56 +541,30 @@ function waitForNaverMaps(callback, maxAttempts = 30) {
     check();
 }
 
-// 페이지 로드 시 지도 초기화
+// 페이지 로드 시 지도 초기화 (데이터 로딩은 app-init.js에 위임)
 window.onload = function() {
-    // console.log('🚀 페이지 로드 완료, 지도 초기화 시작');
-    
+    console.log('🚀 페이지 로드 완료, 지도 초기화 시작');
+
     // 네이버 지도 API 로드 대기
     waitForNaverMaps(() => {
         try {
-    // console.log('🗺️ 지도 초기화 시작...');
+            console.log('🗺️ 지도 초기화 시작...');
             initMap();
-            
+
             if (typeof initializeEventListeners === 'function') {
                 initializeEventListeners();
-    // console.log('✅ 이벤트 리스너 초기화 완료');
+                console.log('✅ 이벤트 리스너 초기화 완료');
             }
-            
+
             // 지도 타입 버튼 이벤트 리스너 추가
             initializeMapTypeButtons();
-            
-            if (typeof loadSavedParcels === 'function') {
-                loadSavedParcels();
-    // console.log('✅ 저장된 필지 로드 완료');
-            }
-            
-            // 초기 화면의 필지 로드 및 색상 복원
-            setTimeout(() => {
-                if (map) {
-                    const bounds = map.getBounds();
-                    if (typeof loadParcelsInBounds === 'function') {
-                        loadParcelsInBounds(bounds);
-                    }
-                    
-                    // 저장된 필지 색상 복원
-                    setTimeout(() => {
-                        if (typeof restoreSavedParcelsOnMap === 'function') {
-                            restoreSavedParcelsOnMap();
-                        }
-                        
-                        // 저장된 검색 결과 복원
-                        if (typeof loadSearchResultsFromStorage === 'function') {
-                            loadSearchResultsFromStorage();
-    // console.log('💎 저장된 검색 결과 복원 시도');
-                        }
-                    }, 1500);
-                }
-            }, 1000);
-            
-    // console.log('🎉 모든 초기화 완료!');
-            
+
+            console.log('✅ 지도 기본 초기화 완료 - 데이터 로딩은 AppInitializer가 담당');
+
+            console.log('🎉 지도 초기화 완료! 데이터 로딩은 AppInitializer에 위임됨');
+
         } catch (error) {
-            console.error('💥 초기화 중 오류 발생:', error);
+            console.error('💥 지도 초기화 중 오류 발생:', error);
             const mapContainer = document.getElementById('map');
             if (mapContainer) {
                 mapContainer.innerHTML = `
