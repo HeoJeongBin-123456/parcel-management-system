@@ -561,9 +561,8 @@ class AppInitializer {
                         }
 
                         if (colorToApply) {
-                            setTimeout(() => {
-                                this.applyParcelColor({...parcel, color: colorToApply});
-                            }, 50); // 약간의 지연
+                            // 🎨 즉시 색상 적용 (setTimeout 제거)
+                            this.applyParcelColor({...parcel, color: colorToApply});
                         }
                         
                         restoredCount++;
@@ -592,6 +591,19 @@ class AppInitializer {
         }
         
         console.log(`✅ ${restoredCount}/${parcels.length}개 필지 지도 복원 완료`);
+
+        // 🎨 모든 복원 완료 후 지도 강제 새로고침으로 색상 즉시 표시
+        if (restoredCount > 0 && window.map) {
+            setTimeout(() => {
+                const currentZoom = window.map.getZoom();
+                window.map.setZoom(currentZoom + 0.001); // 아주 미세한 변경
+                setTimeout(() => {
+                    window.map.setZoom(currentZoom); // 원래 줌으로 복원
+                    console.log('🎨 지도 새로고침으로 색상 즉시 표시 완료');
+                }, 10);
+            }, 100);
+        }
+
         return restoredCount;
     }
 

@@ -89,7 +89,7 @@ class SupabaseAdapter {
     convertToSupabaseFormat(localData) {
         // 좌표 추출 (geometry에서 또는 직접 값에서)
         let lat, lng;
-        
+
         if (localData.geometry && localData.geometry.coordinates) {
             // GeoJSON 형식
             [lng, lat] = localData.geometry.coordinates;
@@ -103,7 +103,7 @@ class SupabaseAdapter {
             lng = 126.9783882;
         }
 
-        return this.supabaseManager.createParcelData(
+        const supabaseData = this.supabaseManager.createParcelData(
             lat,
             lng,
             localData.parcelNumber || localData.parcel_name || '알수없음',
@@ -111,6 +111,13 @@ class SupabaseAdapter {
             true, // 저장된 데이터는 모두 색칠된 것으로 간주
             localData.isSearchParcel ? 'search' : 'click'
         );
+
+        // ✅ geometry 정보 보존 - 폴리곤 복원에 필요
+        if (localData.geometry) {
+            supabaseData.geometry = localData.geometry;
+        }
+
+        return supabaseData;
     }
 
     // localStorage 형식에서 메모 생성
@@ -143,7 +150,8 @@ class SupabaseAdapter {
             visitDate: '',
             isSearchParcel: supabaseData.color_type === 'search',
             pnu: supabaseData.id, // ID를 PNU로 사용
-            geometry: {
+            // ✅ Supabase에 저장된 geometry가 있으면 사용, 없으면 Point로 생성
+            geometry: supabaseData.geometry || {
                 type: 'Point',
                 coordinates: [supabaseData.lng, supabaseData.lat]
             },
