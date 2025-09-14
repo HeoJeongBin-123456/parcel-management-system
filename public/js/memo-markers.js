@@ -1,9 +1,22 @@
-// 메모 마커 관리자 - 메모가 있는 필지에 M 표시
+// 메모 마커 관리자 - 정보가 있는 필지에 M 표시 (확장된 조건)
 class MemoMarkerManager {
     constructor() {
         this.markers = new Map(); // PNU -> marker 매핑
         this.isInitialized = false;
         console.log('📍 MemoMarkerManager 초기화');
+    }
+
+    // 마커 표시 조건 확인 (확장된 조건)
+    shouldShowMarker(parcelData) {
+        // PNU, 지번, 메모, 소유자명, 소유자주소, 연락처 중 하나라도 있으면 마커 표시
+        return !!(
+            (parcelData.pnu) ||
+            (parcelData.parcelNumber && parcelData.parcelNumber.trim()) ||
+            (parcelData.memo && parcelData.memo.trim()) ||
+            (parcelData.ownerName && parcelData.ownerName.trim()) ||
+            (parcelData.ownerAddress && parcelData.ownerAddress.trim()) ||
+            (parcelData.ownerContact && parcelData.ownerContact.trim())
+        );
     }
 
     // 초기화 (지도 로드 후 호출)
@@ -63,9 +76,9 @@ class MemoMarkerManager {
                             if (Array.isArray(parsed) && parsed.length > 0) {
                                 console.log(`🔍 ${key}에서 ${parsed.length}개 필지 발견`);
 
-                                // 이 키에서 메모가 있는 필지들 찾기
+                                // 이 키에서 정보가 있는 필지들 찾기 (확장된 조건)
                                 const withMemo = parsed.filter(parcel =>
-                                    parcel.memo && parcel.memo.trim() !== ''
+                                    this.shouldShowMarker(parcel)
                                 );
 
                                 if (withMemo.length > 0) {
@@ -101,7 +114,7 @@ class MemoMarkerManager {
                                 console.log(`📡 migratedGetItem에서 ${parsed.length}개 필지 발견`);
 
                                 const withMemo = parsed.filter(parcel =>
-                                    parcel.memo && parcel.memo.trim() !== ''
+                                    this.shouldShowMarker(parcel)
                                 );
 
                                 if (withMemo.length > 0) {
@@ -612,32 +625,32 @@ if (originalSaveParcelData) {
             const ownerContact = document.getElementById('ownerContact').value;
             const currentPNU = window.currentSelectedPNU;
 
+            const parcelData = {
+                pnu: currentPNU,
+                id: currentPNU,
+                parcelNumber: parcelNumber,
+                memo: memo,
+                ownerName: ownerName,
+                ownerAddress: ownerAddress,
+                ownerContact: ownerContact,
+                lat: null, // createMemoMarker에서 좌표 계산
+                lng: null
+            };
+
             console.log('💾 저장 후 마커 업데이트:', {
                 currentPNU: currentPNU,
                 parcelNumber: parcelNumber,
-                hasMemo: !!(memo && memo.trim())
+                shouldShowMarker: window.MemoMarkerManager.shouldShowMarker(parcelData)
             });
 
             if (currentPNU) {
-                if (memo && memo.trim() !== '') {
-                    // 메모가 있는 경우 - 마커 생성/업데이트
-                    const parcelData = {
-                        pnu: currentPNU,
-                        id: currentPNU,
-                        parcelNumber: parcelNumber,
-                        memo: memo,
-                        ownerName: ownerName,
-                        ownerAddress: ownerAddress,
-                        ownerContact: ownerContact,
-                        lat: null, // createMemoMarker에서 좌표 계산
-                        lng: null
-                    };
-
-                    console.log('📍 메모 마커 즉시 생성:', parcelData);
+                if (window.MemoMarkerManager.shouldShowMarker(parcelData)) {
+                    // 정보가 있는 경우 - 마커 생성/업데이트 (확장된 조건)
+                    console.log('📍 마커 즉시 생성 (확장된 조건):', parcelData);
                     await window.MemoMarkerManager.onParcelMemoAdded(parcelData);
                 } else {
-                    // 메모가 없는 경우 - 마커 제거
-                    console.log('🗑️ 메모 마커 제거:', currentPNU);
+                    // 정보가 없는 경우 - 마커 제거
+                    console.log('🗑️ 마커 제거:', currentPNU);
                     window.MemoMarkerManager.removeMemoMarker(currentPNU);
                 }
             }

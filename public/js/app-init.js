@@ -18,16 +18,20 @@ class AppInitializer {
 
         this.initInProgress = true;
         console.log('🚀 애플리케이션 초기화 시작');
+        const startTime = performance.now();
 
         try {
-            // 1. 필수 요소들이 로드될 때까지 대기
-            await this.waitForDependencies();
+            // ⚡ 병렬 처리로 속도 개선 - 의존성 체크와 초기화를 동시 실행
+            const [dependencies, supabaseInit] = await Promise.all([
+                this.waitForDependencies(),
+                this.initializeSupabaseParallel()
+            ]);
 
-            // 2. Supabase 연결 확인 및 초기화
-            await this.initializeSupabase();
+            // 데이터 로드는 의존성 완료 후 실행
+            await this.loadAndDisplaySavedParcelsOptimized();
 
-            // 3. 저장된 필지 데이터 로드 및 표시
-            await this.loadAndDisplaySavedParcels();
+            const loadTime = ((performance.now() - startTime) / 1000).toFixed(2);
+            console.log(`⚡ 초기화 완료: ${loadTime}초`);
 
             this.isInitialized = true;
             this.initInProgress = false;
@@ -36,7 +40,7 @@ class AppInitializer {
         } catch (error) {
             console.error('❌ 애플리케이션 초기화 실패:', error);
             this.initInProgress = false;
-            
+
             // 재시도 로직 (제한적)
             if (this.retryCount < this.maxRetries) {
                 this.retryCount++;
@@ -88,6 +92,248 @@ class AppInitializer {
         if (window.SupabaseManager && typeof window.SupabaseManager.reconnect === 'function') {
             console.log('🔄 Supabase 재연결 시도...');
             await window.SupabaseManager.reconnect();
+        }
+    }
+
+    // 병렬 처리용 Supabase 초기화
+    async initializeSupabaseParallel() {
+        console.log('⚡ Supabase 병렬 초기화 시작...');
+
+        for (let i = 0; i < 10; i++) {
+            if (window.SupabaseManager) {
+                if (window.SupabaseManager.isConnected) {
+                    console.log('✅ Supabase 이미 연결됨');
+                    return;
+                }
+                if (typeof window.SupabaseManager.reconnect === 'function') {
+                    console.log('🔄 Supabase 재연결 시도...');
+                    await window.SupabaseManager.reconnect();
+                    return;
+                }
+            }
+            await this.sleep(200);
+        }
+
+        console.log('⚠️ Supabase 초기화 스킵');
+    }
+
+    // 최적화된 데이터 로드
+    async loadAndDisplaySavedParcelsOptimized() {
+        if (this.dataLoadComplete) {
+            console.log('✅ 필지 데이터 이미 로드됨');
+            return;
+        }
+
+        console.log('⚡ 최적화된 데이터 로딩 시작...');
+        this.dataLoadComplete = true;
+        const startTime = performance.now();
+
+        try {
+            // 병렬로 여러 소스에서 데이터 로드
+            const [supabaseData, localData, polygonData] = await Promise.all([
+                this.loadFromSupabase(),
+                this.loadFromLocalStorage(),
+                this.loadPolygonData()
+            ]);
+
+            // 데이터 병합
+            const restoredData = supabaseData.length > 0 ? supabaseData : localData;
+
+            if (restoredData.length > 0 || polygonData.length > 0) {
+                console.log(`⚡ 데이터 로드: ${restoredData.length}개 필지, ${polygonData.length}개 폴리곤`);
+
+                window.parcelsData = restoredData;
+
+                // 뷰포트 기반 최적화 렌더링
+                await this.restoreParcelsToMapOptimized(restoredData, polygonData);
+
+                // UI 업데이트 지연
+                if (window.requestIdleCallback) {
+                    window.requestIdleCallback(() => {
+                        if (window.parcelManager) window.parcelManager.loadParcels();
+                        if (typeof updateParcelList === 'function') updateParcelList();
+                    });
+                } else {
+                    setTimeout(() => {
+                        if (window.parcelManager) window.parcelManager.loadParcels();
+                        if (typeof updateParcelList === 'function') updateParcelList();
+                    }, 100);
+                }
+            }
+
+            const loadTime = ((performance.now() - startTime) / 1000).toFixed(2);
+            console.log(`⚡ 데이터 로드 완료: ${loadTime}초`);
+
+            // 메모 마커 지연 로드
+            setTimeout(() => this.initializeMemoMarkers(), 500);
+
+        } catch (error) {
+            console.error('❌ 데이터 로드 실패:', error);
+            this.dataLoadComplete = false;
+        }
+    }
+
+    // Supabase에서 데이터 로드
+    async loadFromSupabase() {
+        if (!window.SupabaseManager || !window.SupabaseManager.isConnected) {
+            return [];
+        }
+
+        try {
+            const { data, error } = await window.supabase
+                .from('parcels')
+                .select('*')
+                .order('created_at', { ascending: false })
+                .limit(100);
+
+            if (!error && data) {
+                console.log(`✅ Supabase: ${data.length}개 필지`);
+                return data;
+            }
+        } catch (error) {
+            console.warn('⚠️ Supabase 로드 실패:', error);
+        }
+        return [];
+    }
+
+    // LocalStorage에서 데이터 로드
+    async loadFromLocalStorage() {
+        const sources = ['parcels', 'parcels_current_session'];
+        for (const source of sources) {
+            try {
+                const stored = localStorage.getItem(source);
+                if (stored) {
+                    const parsed = JSON.parse(stored);
+                    if (parsed && parsed.length > 0) {
+                        console.log(`✅ LocalStorage(${source}): ${parsed.length}개`);
+                        return parsed;
+                    }
+                }
+            } catch (error) {
+                console.warn(`⚠️ ${source} 파싱 실패`);
+            }
+        }
+        return [];
+    }
+
+    // 폴리곤 데이터 로드
+    async loadPolygonData() {
+        if (!window.dataPersistenceManager) return [];
+
+        try {
+            const polygons = await window.dataPersistenceManager.loadAllPolygons();
+            console.log(`✅ 폴리곤: ${polygons.length}개`);
+            return polygons;
+        } catch (error) {
+            console.warn('⚠️ 폴리곤 로드 실패');
+            return [];
+        }
+    }
+
+    // 뷰포트 기반 최적화 렌더링
+    async restoreParcelsToMapOptimized(parcels, polygons) {
+        console.log('⚡ 뷰포트 기반 렌더링 시작...');
+
+        if (!window.map) return;
+
+        const bounds = window.map.getBounds();
+        const visibleParcels = [];
+        const invisibleParcels = [];
+        const visiblePolygons = [];
+        const invisiblePolygons = [];
+
+        // 필지 분류
+        parcels.forEach(parcel => {
+            const point = new window.naver.maps.LatLng(parcel.lat, parcel.lng);
+            if (bounds.hasLatLng(point)) {
+                visibleParcels.push(parcel);
+            } else {
+                invisibleParcels.push(parcel);
+            }
+        });
+
+        // 폴리곤 분류
+        polygons.forEach(polygon => {
+            if (polygon.geometry && polygon.geometry.coordinates) {
+                const coords = polygon.geometry.coordinates[0];
+                if (coords && coords.length > 0) {
+                    const point = new window.naver.maps.LatLng(coords[0][1], coords[0][0]);
+                    if (bounds.hasLatLng(point)) {
+                        visiblePolygons.push(polygon);
+                    } else {
+                        invisiblePolygons.push(polygon);
+                    }
+                }
+            }
+        });
+
+        console.log(`👀 보이는 영역: ${visibleParcels.length}개 필지, ${visiblePolygons.length}개 폴리곤`);
+
+        // 보이는 영역 먼저 렌더링
+        for (const parcel of visibleParcels) {
+            await this.restoreParcelOptimized(parcel);
+        }
+
+        for (const polygon of visiblePolygons) {
+            await this.restorePolygonOptimized(polygon);
+        }
+
+        // 나머지는 비동기로 처리
+        if (window.requestIdleCallback) {
+            window.requestIdleCallback(() => {
+                invisibleParcels.forEach(parcel => this.restoreParcelOptimized(parcel));
+                invisiblePolygons.forEach(polygon => this.restorePolygonOptimized(polygon));
+            });
+        } else {
+            setTimeout(() => {
+                invisibleParcels.forEach(parcel => this.restoreParcelOptimized(parcel));
+                invisiblePolygons.forEach(polygon => this.restorePolygonOptimized(polygon));
+            }, 100);
+        }
+
+        console.log('✅ 뷰포트 기반 렌더링 완료');
+    }
+
+    // 최적화된 필지 복원
+    async restoreParcelOptimized(parcel) {
+        try {
+            if (parcel.geometry && parcel.geometry.coordinates) {
+                const feature = {
+                    geometry: parcel.geometry,
+                    properties: {
+                        PNU: parcel.pnu,
+                        pnu: parcel.pnu,
+                        jibun: parcel.parcel_name || parcel.parcelNumber
+                    }
+                };
+
+                if (typeof window.drawParcelPolygon === 'function') {
+                    await window.drawParcelPolygon(feature, false);
+                }
+            } else {
+                this.restoreParcelAsMarker(parcel);
+            }
+        } catch (error) {
+            console.warn(`⚠️ 필지 복원 실패: ${parcel.pnu}`);
+        }
+    }
+
+    // 최적화된 폴리곤 복원
+    async restorePolygonOptimized(polygon) {
+        try {
+            const feature = {
+                geometry: polygon.geometry,
+                properties: polygon.properties || {
+                    PNU: polygon.pnu,
+                    pnu: polygon.pnu
+                }
+            };
+
+            if (typeof window.drawParcelPolygon === 'function') {
+                await window.drawParcelPolygon(feature, false);
+            }
+        } catch (error) {
+            console.warn(`⚠️ 폴리곤 복원 실패: ${polygon.pnu}`);
         }
     }
 
@@ -148,6 +394,15 @@ class AppInitializer {
                 }
             }
 
+            // 🗺️ 폴리곤 데이터 로드 (새로 추가)
+            console.log('🗺️ 저장된 폴리곤 데이터 로드 시작...');
+            let polygonData = [];
+
+            if (window.dataPersistenceManager) {
+                polygonData = await window.dataPersistenceManager.loadAllPolygons();
+                console.log(`🗺️ ${polygonData.length}개 폴리곤 로드 완료`);
+            }
+
             if (restoredData && restoredData.length > 0) {
                 console.log(`🎯 ${restoredData.length}개 필지 복원 완료`);
 
@@ -166,6 +421,10 @@ class AppInitializer {
                 if (typeof updateParcelList === 'function') {
                     await updateParcelList();
                 }
+            } else if (polygonData && polygonData.length > 0) {
+                // 🗺️ 필지 데이터가 없어도 폴리곤 데이터가 있으면 복원
+                console.log('🗺️ 폴리곤 데이터로 필지 복원 시도...');
+                await this.restorePolygonsToMap(polygonData);
             } else {
                 console.log('📭 복원할 필지 데이터가 없습니다');
             }
@@ -274,6 +533,35 @@ class AppInitializer {
             existingParcel.color = parcel.color;
             console.log(`🎨 필지 색상 적용: ${parcel.parcelNumber} → ${parcel.color}`);
         }
+    }
+
+    // 🗺️ 폴리곤 데이터로 필지 복원 (새로 추가)
+    async restorePolygonsToMap(polygons) {
+        console.log(`🗺️ ${polygons.length}개 폴리곤을 지도에 복원합니다...`);
+        let restoredCount = 0;
+
+        for (const polygonData of polygons) {
+            try {
+                const feature = {
+                    geometry: polygonData.geometry,
+                    properties: polygonData.properties || {
+                        PNU: polygonData.pnu,
+                        pnu: polygonData.pnu
+                    }
+                };
+
+                if (typeof window.drawParcelPolygon === 'function') {
+                    await window.drawParcelPolygon(feature, false);
+                    restoredCount++;
+                    console.log('🗺️ 폴리곤 복원 완료:', polygonData.pnu);
+                }
+            } catch (error) {
+                console.warn(`⚠️ 폴리곤 복원 실패: ${polygonData.pnu}`, error);
+            }
+        }
+
+        console.log(`✅ ${restoredCount}/${polygons.length}개 폴리곤 복원 완료`);
+        return restoredCount;
     }
 
     // 점 마커로 필지 복원 (일반 마커와 동일한 스타일)
@@ -475,7 +763,7 @@ class AppInitializer {
 
     async initializeMemoMarkers() {
         console.log('📍 메모 마커 매니저 초기화 시작...');
-        
+
         try {
             // MemoMarkerManager가 로드되었는지 확인
             if (window.MemoMarkerManager) {
@@ -483,6 +771,9 @@ class AppInitializer {
                 if (window.map) {
                     await window.MemoMarkerManager.initialize();
                     console.log('✅ 메모 마커 매니저 초기화 완료');
+
+                    // 🎯 추가: 저장된 모든 필지에서 마커가 필요한 것들 확인
+                    await this.ensureAllMarkersCreated();
                 } else {
                     console.warn('⚠️ 지도가 준비되지 않아 메모 마커 초기화 지연');
                     // 지도 로딩 대기 후 재시도
@@ -490,6 +781,9 @@ class AppInitializer {
                         if (window.map && window.MemoMarkerManager) {
                             await window.MemoMarkerManager.initialize();
                             console.log('✅ 메모 마커 매니저 초기화 완료 (재시도)');
+
+                            // 🎯 추가: 저장된 모든 필지에서 마커가 필요한 것들 확인
+                            await this.ensureAllMarkersCreated();
                         }
                     }, 1000);
                 }
@@ -498,6 +792,72 @@ class AppInitializer {
             }
         } catch (error) {
             console.error('❌ 메모 마커 초기화 실패:', error);
+        }
+    }
+
+    // 🎯 새로운 메서드: 모든 저장된 필지에 대해 마커 생성 보장
+    async ensureAllMarkersCreated() {
+        try {
+            console.log('🔍 저장된 모든 필지에서 마커 필요 여부 확인...');
+
+            // window.parcelsData에서 마커가 필요한 필지들 찾기
+            if (window.parcelsData && Array.isArray(window.parcelsData)) {
+                const parcelsNeedingMarkers = window.parcelsData.filter(parcel => {
+                    // PNU 또는 지번이 있는 필지는 마커가 필요함
+                    return (parcel.pnu && parcel.pnu.trim()) ||
+                           (parcel.parcelNumber && parcel.parcelNumber.trim());
+                });
+
+                console.log(`📌 마커가 필요한 필지 ${parcelsNeedingMarkers.length}개 발견`);
+
+                // 각 필지에 대해 마커 생성 시도
+                for (const parcel of parcelsNeedingMarkers) {
+                    try {
+                        // 이미 마커가 있는지 확인
+                        const markerKey = parcel.pnu || parcel.parcelNumber || parcel.id;
+                        if (markerKey && !window.MemoMarkerManager.markers.has(markerKey)) {
+                            // 마커 생성
+                            if (parcel.lat && parcel.lng) {
+                                window.MemoMarkerManager.createOrUpdateMarker(parcel);
+                                console.log(`✅ 마커 생성: ${markerKey}`);
+                            }
+                        }
+                    } catch (err) {
+                        console.warn('⚠️ 개별 마커 생성 실패:', err);
+                    }
+                }
+            }
+
+            // localStorage에서도 확인
+            const storageKeys = ['parcelData', 'parcels_current_session', 'parcels'];
+            for (const key of storageKeys) {
+                try {
+                    const data = localStorage.getItem(key);
+                    if (data && data !== 'null' && data !== '[]') {
+                        const parsed = JSON.parse(data);
+                        if (Array.isArray(parsed)) {
+                            const parcelsWithInfo = parsed.filter(p =>
+                                (p.pnu && p.pnu.trim()) || (p.parcelNumber && p.parcelNumber.trim())
+                            );
+
+                            for (const parcel of parcelsWithInfo) {
+                                const markerKey = parcel.pnu || parcel.parcelNumber || parcel.id;
+                                if (markerKey && !window.MemoMarkerManager.markers.has(markerKey)) {
+                                    if (parcel.lat && parcel.lng) {
+                                        window.MemoMarkerManager.createOrUpdateMarker(parcel);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.warn(`⚠️ ${key} 처리 중 오류:`, err);
+                }
+            }
+
+            console.log('✅ 마커 생성 확인 완료');
+        } catch (error) {
+            console.error('❌ 마커 생성 확인 실패:', error);
         }
     }
 

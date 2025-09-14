@@ -316,9 +316,25 @@ async function drawParcelPolygon(parcel, isSelected = false) {
         if (!savedParcel && jibun) {
             savedParcel = await getSavedParcelDataByJibun(jibun);
         }
-        
-        const fillColor = savedParcel && savedParcel.color ? savedParcel.color : 'transparent';
-        const fillOpacity = savedParcel && savedParcel.color && savedParcel.color !== 'transparent' ? 0.5 : 0;
+
+        // DataPersistenceManager에서 색상 상태 확인 (우선순위: DataPersistenceManager > savedParcel)
+        let fillColor = 'transparent';
+        let fillOpacity = 0;
+
+        if (window.dataPersistenceManager) {
+            const colorState = window.dataPersistenceManager.getColorState(pnu);
+            if (colorState && colorState.is_colored && colorState.color) {
+                fillColor = colorState.color;
+                fillOpacity = 0.5;
+                console.log('🎨 DataPersistenceManager에서 색상 복원:', pnu, fillColor);
+            } else if (savedParcel && savedParcel.color) {
+                fillColor = savedParcel.color;
+                fillOpacity = savedParcel.color !== 'transparent' ? 0.5 : 0;
+            }
+        } else if (savedParcel && savedParcel.color) {
+            fillColor = savedParcel.color;
+            fillOpacity = savedParcel.color !== 'transparent' ? 0.5 : 0;
+        }
         
         const polygon = new naver.maps.Polygon({
             map: map,
@@ -334,6 +350,13 @@ async function drawParcelPolygon(parcel, isSelected = false) {
         // 클릭 이벤트
         naver.maps.Event.addListener(polygon, 'click', async function(e) {
             e.domEvent.stopPropagation(); // 지도 클릭 이벤트 방지
+
+            // PNU 확실히 설정
+            const pnu = parcel.properties.PNU || parcel.properties.pnu;
+            window.currentSelectedPNU = pnu;
+            window.currentSelectedParcel = parcel;
+            console.log('🎯 필지 클릭 - PNU 설정:', pnu, formatJibun(parcel.properties));
+
             await toggleParcelSelection(parcel, polygon);
         });
         
@@ -343,7 +366,14 @@ async function drawParcelPolygon(parcel, isSelected = false) {
             data: parcel,
             color: fillColor
         });
-        
+
+        // 🗺️ 폴리곤 데이터를 Supabase + IndexedDB에 저장 (실시간 공유)
+        if (window.dataPersistenceManager) {
+            window.dataPersistenceManager.savePolygonData(pnu, geometry, properties)
+                .then(() => console.log('🗺️ 폴리곤 데이터 저장 완료:', pnu))
+                .catch(error => console.error('❌ 폴리곤 저장 실패:', error));
+        }
+
         return polygon; // 폴리곤 객체 반환
     }
 }
@@ -502,23 +532,57 @@ function selectParcel(parcel, polygon) {
     }
 }
 
-// 필지에 색상 적용
-function applyColorToParcel(parcel, color) {
+// 필지에 색상 적용 (즉시 저장 포함)
+async function applyColorToParcel(parcel, color) {
     const pnu = parcel.properties.PNU || parcel.properties.pnu;
     const parcelData = window.clickParcels.get(pnu);
-    
+
     if (parcelData) {
+        // 1. UI 즉시 업데이트
         parcelData.polygon.setOptions({
             fillColor: color,
             fillOpacity: 0.5
         });
         parcelData.color = color;
-        
-    // console.log('필지 색상 적용됨 (저장 안됨):', pnu, color);
-        
-        // 주의: localStorage 저장은 saveParcelData() 함수에서만 수행
-        // 클릭만으로는 임시 색상만 적용되고, 저장 버튼을 눌러야 실제 저장됨
+
+        // 2. 색상 즉시 저장 (DataPersistenceManager 사용)
+        if (window.dataPersistenceManager) {
+            const colorData = {
+                color: color,
+                is_colored: !!color,
+                color_index: getColorIndex(color)
+            };
+
+            await window.dataPersistenceManager.saveColorState(pnu, colorData);
+            console.log('🎨 색상 즉시 저장됨:', pnu, color);
+        } else {
+            // 폴백: 기존 방식으로 저장
+            console.log('⚠️ DataPersistenceManager 없음, 기존 방식 사용');
+        }
+
+        // 3. 마커 상태 평가 (색상 변경이 마커에 영향 없음)
+        if (window.dataPersistenceManager) {
+            const parcelInfo = {
+                parcel_number: parcel.properties.JIBUN || parcel.properties.jibun,
+                owner_name: document.getElementById('ownerName')?.value,
+                owner_address: document.getElementById('ownerAddress')?.value,
+                contact: document.getElementById('ownerContact')?.value,
+                memo: document.getElementById('memo')?.value
+            };
+            window.dataPersistenceManager.evaluateAndSaveMarkerState(pnu, parcelInfo);
+        }
     }
+}
+
+// 색상 인덱스 찾기 헬퍼 함수
+function getColorIndex(color) {
+    const colors = [
+        '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4',
+        '#FFEAA7', '#DDA0DD', '#98D8C8', '#FD79A8',
+        '#A29BFE', '#FDCB6E'
+    ];
+    const index = colors.indexOf(color);
+    return index >= 0 ? index : 0;
 }
 
 // 필지 정보 표시
@@ -555,11 +619,18 @@ function displayParcelInfo(parcel) {
 
 // 필지 데이터 저장 (개선된 버전 - 데이터 손실 방지)
 async function saveParcelData() {
-    const parcelNumber = document.getElementById('parcelNumber').value;
-    
-    if (!parcelNumber) {
-        console.warn('⚠️ 지번을 입력해주세요.');
+    let parcelNumber = document.getElementById('parcelNumber').value;
+
+    // PNU가 있으면 지번 체크 건너뛰기
+    if (!window.currentSelectedPNU && !parcelNumber) {
+        console.warn('⚠️ 필지를 선택하거나 지번을 입력해주세요.');
         return false;
+    }
+
+    // PNU가 있고 지번이 비어있으면 자동 설정
+    if (window.currentSelectedPNU && !parcelNumber) {
+        parcelNumber = '자동입력';
+        console.log('🎯 PNU로 저장 진행:', window.currentSelectedPNU);
     }
     
     console.log('💾 저장 시작:', parcelNumber);
@@ -759,10 +830,26 @@ async function saveParcelData() {
         // 이벤트 발생
         window.dispatchEvent(new Event('refreshParcelList'));
         
-        // 메모 마커 업데이트
-        if (window.memoMarkerManager && formData.memo && formData.memo.trim() !== '') {
-            await window.memoMarkerManager.createMemoMarker(formData);
-            console.log('📍 메모 마커 생성/업데이트:', formData.parcelNumber);
+        // 메모 마커 업데이트 (확장된 조건: PNU, 지번, 소유자명, 주소, 연락처, 메모 중 하나라도 있으면 마커 생성)
+        const hasAnyInfo = (formData.pnu) ||
+                          (formData.parcelNumber && formData.parcelNumber.trim() !== '') ||
+                          (formData.ownerName && formData.ownerName.trim() !== '') ||
+                          (formData.ownerAddress && formData.ownerAddress.trim() !== '') ||
+                          (formData.ownerContact && formData.ownerContact.trim() !== '') ||
+                          (formData.memo && formData.memo.trim() !== '');
+
+        if (window.memoMarkerManager) {
+            if (hasAnyInfo) {
+                await window.memoMarkerManager.createMemoMarker(formData);
+                console.log('📍 마커 생성/업데이트 (필지 정보 존재):', formData.parcelNumber);
+            } else {
+                // 모든 정보가 삭제되면 마커도 제거
+                const pnu = formData.pnu || currentPNU;
+                if (pnu && window.memoMarkerManager.markers.has(pnu)) {
+                    window.memoMarkerManager.removeMemoMarker(pnu);
+                    console.log('🗑️ 마커 제거 (필지 정보 없음):', formData.parcelNumber);
+                }
+            }
         }
         
         // ⚠️ 중요: 폼 초기화 제거 - 데이터 유지를 위해
