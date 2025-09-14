@@ -1411,30 +1411,34 @@ async function removeParcelAtLocation(lat, lng) {
             
             window.clickParcels.forEach((parcelData, pnu) => {
                 checkedCount++;
-                
-                if (parcelData.color !== 'transparent' && parcelData.polygon) {
-                    coloredCount++;
+
+                // 모든 필지에 대해 체크 (색상 유무와 관계없이)
+                if (parcelData.polygon) {
+                    if (parcelData.color !== 'transparent') {
+                        coloredCount++;
+                    }
+
                     const path = parcelData.polygon.getPath();
-                    
-                    if (path && path.length > 0) {
+
+                    if (path && path.getLength && path.getLength() > 0) {
                         // Point-in-Polygon 체크 - 클릭 위치가 폴리곤 내부에 있는지 확인
                         const isInside = isPointInPolygon(lat, lng, path);
-                        
+
                         polygonResults.push({
                             pnu,
                             color: parcelData.color,
-                            pathLength: path.length,
+                            pathLength: path.getLength(),
                             isInside
                         });
-                        
+
                         window.RightClickDebugger.log('POLYGON', `필지 ${pnu} 검사 완료`, {
                             pnu,
                             color: parcelData.color,
-                            pathPoints: path.length,
+                            pathPoints: path.getLength(),
                             isInside,
                             result: isInside ? '내부 - 삭제 대상' : '외부 - 제외'
                         });
-                        
+
                         if (isInside) {
                             targetParcel = { pnu, data: parcelData };
                             window.RightClickDebugger.log('POLYGON', '삭제 대상 필지 발견!', {
@@ -1447,7 +1451,7 @@ async function removeParcelAtLocation(lat, lng) {
                         window.RightClickDebugger.log('POLYGON', `필지 ${pnu} 경로 정보 없음`, {
                             pnu,
                             hasPath: !!path,
-                            pathLength: path ? path.length : 0
+                            pathLength: path ? path.getLength() : 0
                         });
                     }
                 }
@@ -1464,16 +1468,16 @@ async function removeParcelAtLocation(lat, lng) {
         // 클릭 위치가 정확히 폴리곤 내부에 있을 때만 삭제
         if (targetParcel) {
             const { pnu, data } = targetParcel;
-            
+
             window.RightClickDebugger.log('DELETE', '필지 삭제 처리 시작', {
                 pnu,
                 currentColor: data.color,
                 hasPolygon: !!data.polygon
             });
-            
-            console.log(`✅ 우클릭 삭제: ${pnu}`);
-            
-            // 색칠 해제 수행
+
+            console.log(`🗑️ 우클릭 삭제: ${pnu} - 색상과 모든 정보 삭제`);
+
+            // 1. 색칠 해제 수행
             if (data.polygon) {
                 data.polygon.setOptions({
                     fillColor: 'transparent',
@@ -1483,34 +1487,81 @@ async function removeParcelAtLocation(lat, lng) {
                     strokeWeight: 0.5
                 });
                 data.color = 'transparent';
-                
+
                 window.RightClickDebugger.log('DELETE', '폴리곤 색상 제거 완료', {
                     pnu,
                     newColor: 'transparent'
                 });
             }
-            
-            // LocalStorage에서 제거
+
+            // 2. 마커 제거
+            if (window.MemoMarkerManager) {
+                try {
+                    window.MemoMarkerManager.removeMemoMarker(pnu);
+                    console.log(`📍 마커 제거 완료: ${pnu}`);
+                    window.RightClickDebugger.log('DELETE', '마커 제거 완료', { pnu });
+                } catch (err) {
+                    console.warn('마커 제거 중 오류:', err);
+                }
+
+                // 마커 상태도 저장소에서 제거
+                if (window.DataPersistenceManager) {
+                    window.DataPersistenceManager.saveMarkerState(pnu, false);
+                }
+            }
+
+            // 3. LocalStorage에서 모든 정보 제거
             const savedData = JSON.parse(await window.migratedGetItem(CONFIG.STORAGE_KEY) || '[]');
             const beforeCount = savedData.length;
             const updatedData = savedData.filter(item => item.pnu !== pnu);
             const afterCount = updatedData.length;
             await window.migratedSetItem(CONFIG.STORAGE_KEY, JSON.stringify(updatedData));
-            
-            window.RightClickDebugger.log('DELETE', 'LocalStorage 데이터 제거 완료', {
+
+            // 4. parcelsData 배열에서도 제거
+            if (window.parcelsData) {
+                window.parcelsData = window.parcelsData.filter(item =>
+                    item.pnu !== pnu && item.parcelNumber !== data.data?.PNU
+                );
+            }
+
+            // 5. 색상 정보 제거
+            if (window.DataPersistenceManager) {
+                window.DataPersistenceManager.removeParcelColor(pnu);
+            }
+
+            // 6. Supabase에서도 삭제
+            if (window.SupabaseManager && window.SupabaseManager.client) {
+                try {
+                    // parcels 테이블에서 삭제
+                    const { error } = await window.SupabaseManager.client
+                        .from('parcels')
+                        .delete()
+                        .or(`pnu.eq.${pnu},parcel_name.eq.${data.data?.ADDR || ''}`);
+
+                    if (error) {
+                        console.warn('Supabase 삭제 실패:', error);
+                    } else {
+                        console.log('☁️ Supabase에서 삭제 완료');
+                    }
+                } catch (err) {
+                    console.warn('Supabase 삭제 중 오류:', err);
+                }
+            }
+
+            window.RightClickDebugger.log('DELETE', 'LocalStorage 및 전체 데이터 제거 완료', {
                 pnu,
                 beforeCount,
                 afterCount,
                 removed: beforeCount - afterCount
             });
-            
-            // 필지 목록 업데이트
+
+            // 7. 필지 목록 업데이트
             if (window.parcelManager && window.parcelManager.renderParcelList) {
                 window.parcelManager.renderParcelList();
                 window.RightClickDebugger.log('DELETE', '필지 목록 업데이트 완료');
             }
-            
-            // 현재 선택된 필지라면 폼도 초기화
+
+            // 8. 현재 선택된 필지라면 폼도 초기화
             if (window.currentSelectedPNU === pnu) {
                 document.getElementById('parcelNumber').value = '';
                 document.getElementById('ownerName').value = '';
@@ -1518,15 +1569,20 @@ async function removeParcelAtLocation(lat, lng) {
                 document.getElementById('ownerContact').value = '';
                 document.getElementById('memo').value = '';
                 window.currentSelectedPNU = null;
-                
+
                 window.RightClickDebugger.log('DELETE', '선택된 필지 폼 초기화 완료', {
                     clearedPNU: pnu
                 });
             }
-            
-            window.RightClickDebugger.log('SUCCESS', '필지 삭제 성공!', {
+
+            // 9. 실시간 동기화 트리거
+            if (window.autoSaveEnabled && window.triggerAutoSave) {
+                window.triggerAutoSave('parcel_delete');
+            }
+
+            window.RightClickDebugger.log('SUCCESS', '필지 완전 삭제 성공!', {
                 pnu,
-                totalOperations: '폴리곤 색상 제거, LocalStorage 업데이트, 목록 갱신 완료'
+                totalOperations: '색상, 마커, 정보, Supabase 모두 삭제 완료'
             });
             
         } else {
@@ -1581,20 +1637,32 @@ async function getParcelInfoForDeletion(lat, lng) {
 // 🎯 ULTRATHINK: Point-in-Polygon 헬퍼 함수 (Ray Casting Algorithm)
 function isPointInPolygon(pointLat, pointLng, polygonPath) {
     let inside = false;
-    const pathLength = polygonPath.length;
-    
+
+    // MVCArray인지 일반 배열인지 확인
+    const pathLength = polygonPath.length || polygonPath.getLength();
+    const getPoint = (index) => {
+        const point = polygonPath.getAt ? polygonPath.getAt(index) : polygonPath[index];
+        return {
+            lat: typeof point.lat === 'function' ? point.lat() : point.lat,
+            lng: typeof point.lng === 'function' ? point.lng() : point.lng
+        };
+    };
+
     for (let i = 0, j = pathLength - 1; i < pathLength; j = i++) {
-        const xi = polygonPath.getAt(i).lng();
-        const yi = polygonPath.getAt(i).lat();
-        const xj = polygonPath.getAt(j).lng();
-        const yj = polygonPath.getAt(j).lat();
-        
+        const pi = getPoint(i);
+        const pj = getPoint(j);
+
+        const xi = pi.lng;
+        const yi = pi.lat;
+        const xj = pj.lng;
+        const yj = pj.lat;
+
         if (((yi > pointLat) !== (yj > pointLat)) &&
             (pointLng < (xj - xi) * (pointLat - yi) / (yj - yi) + xi)) {
             inside = !inside;
         }
     }
-    
+
     return inside;
 }
 

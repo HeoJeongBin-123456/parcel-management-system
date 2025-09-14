@@ -374,69 +374,69 @@ function updateCalendar() {
     }
 }
 
-// 현재 선택된 필지 삭제 함수
+// 현재 선택된 필지 정보 초기화 함수 (색상과 마커는 유지)
 function deleteCurrentParcel() {
     const currentPNU = window.currentSelectedPNU;
     const parcelNumber = document.getElementById('parcelNumber').value;
-    
+
     if (!currentPNU && !parcelNumber) {
-        alert('삭제할 필지가 선택되지 않았습니다.');
+        alert('초기화할 필지가 선택되지 않았습니다.');
         return;
     }
-    
-    const confirmDelete = confirm(`필지 "${parcelNumber}"을(를) 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.`);
-    if (!confirmDelete) {
+
+    const confirmReset = confirm(`필지 "${parcelNumber}"의 정보를 초기화하시겠습니까?\n\n색상과 마커는 유지되며, 입력된 정보(소유자명, 주소, 연락처, 메모)만 삭제됩니다.`);
+    if (!confirmReset) {
         return;
     }
-    
+
     try {
-        // 1. 지도에서 폴리곤 제거
-        if (currentPNU && window.clickParcels && window.clickParcels.has(currentPNU)) {
-            const parcelData = window.clickParcels.get(currentPNU);
-            if (parcelData && parcelData.polygon) {
-                // 폴리곤 색상 완전히 제거
-                parcelData.polygon.setOptions({
-                    fillColor: 'transparent',
-                    fillOpacity: 0,
-                    strokeColor: '#0000FF',
-                    strokeOpacity: 0.6,
-                    strokeWeight: 0.5
-                });
-                parcelData.color = 'transparent';
-            }
-        }
-        
-        // 2. LocalStorage에서 제거
+        // 1. LocalStorage에서 해당 필지 정보만 초기화 (색상은 유지)
         const savedData = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEY) || '[]');
-        const updatedData = savedData.filter(item => 
-            item.pnu !== currentPNU && 
-            item.parcelNumber !== parcelNumber
-        );
+        const updatedData = savedData.map(item => {
+            if (item.pnu === currentPNU || item.parcelNumber === parcelNumber) {
+                // 색상 정보는 유지하고 나머지 정보만 초기화
+                return {
+                    ...item,
+                    ownerName: '',
+                    ownerAddress: '',
+                    ownerContact: '',
+                    memo: '',
+                    // 색상 관련 필드는 유지
+                    color: item.color,
+                    is_colored: item.is_colored,
+                    currentColor: item.currentColor
+                };
+            }
+            return item;
+        });
         localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(updatedData));
-        
-        // 3. 폼 초기화
-        document.getElementById('parcelNumber').value = '';
+
+        // 2. 폼만 초기화 (지번은 유지)
         document.getElementById('ownerName').value = '';
         document.getElementById('ownerAddress').value = '';
         document.getElementById('ownerContact').value = '';
         document.getElementById('memo').value = '';
-        window.currentSelectedPNU = null;
-        
-        // 4. 메모 마커 제거 (메모 저장 내역도 함께 삭제)
-        if (window.memoMarkerManager && currentPNU) {
-            window.memoMarkerManager.onParcelDeleted(currentPNU);
+
+        // 3. 마커 제거 (정보가 없으므로)
+        if (window.MemoMarkerManager && currentPNU) {
+            try {
+                window.MemoMarkerManager.removeMemoMarker(currentPNU);
+            } catch (err) {
+                console.warn('마커 제거 중 오류:', err);
+            }
         }
-        
-        // 5. 필지 목록 업데이트
+
+        // 4. 필지 목록 업데이트
         if (window.parcelManager && window.parcelManager.renderParcelList) {
             window.parcelManager.renderParcelList();
         }
         
-    // console.log('✅ 필지 삭제 완료:', currentPNU || parcelNumber);
-        alert(`필지 "${parcelNumber}"이(가) 삭제되었습니다.`);
+    // console.log('✅ 필지 정보 초기화 완료:', currentPNU || parcelNumber);
+        // 성공 메시지는 콘솔에만 표시 (알림 제거)
+        console.log(`✅ 필지 "${parcelNumber}"의 정보가 초기화되었습니다. 색상은 유지되었습니다.`);
         
     } catch (error) {
-        console.error('❌ 필지 삭제 실패:', error);
-        alert('필지 삭제 중 오류가 발생했습니다.');
+        console.error('❌ 필지 정보 초기화 실패:', error);
+        alert('필지 정보 초기화 중 오류가 발생했습니다.');
     }
 }
