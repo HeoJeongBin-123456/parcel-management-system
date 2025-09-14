@@ -1,0 +1,152 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Marker Management API",
+    "version": "1.0.0",
+    "description": "API for managing parcel markers based on field conditions"
+  },
+  "paths": {
+    "/api/parcels/with-markers": {
+      "get": {
+        "summary": "Get parcels that should display markers",
+        "description": "Retrieve all parcels that meet marker display conditions",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "bounds",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "north": { "type": "number" },
+                "south": { "type": "number" },
+                "east": { "type": "number" },
+                "west": { "type": "number" }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of parcels with marker data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ParcelWithMarker"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/parcels/{parcelId}/marker-state": {
+      "get": {
+        "summary": "Check if parcel should display marker",
+        "description": "Evaluate marker display conditions for a specific parcel",
+        "parameters": [
+          {
+            "name": "parcelId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Marker state evaluation result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarkerState"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Parcel not found"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ParcelWithMarker": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "lat": {
+            "type": "number"
+          },
+          "lng": {
+            "type": "number"
+          },
+          "parcel_number": {
+            "type": "string",
+            "nullable": true
+          },
+          "owner_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "owner_address": {
+            "type": "string",
+            "nullable": true
+          },
+          "contact": {
+            "type": "string",
+            "nullable": true
+          },
+          "memo": {
+            "type": "string",
+            "nullable": true
+          },
+          "marker_state": {
+            "$ref": "#/components/schemas/MarkerState"
+          }
+        }
+      },
+      "MarkerState": {
+        "type": "object",
+        "properties": {
+          "parcel_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "should_display": {
+            "type": "boolean",
+            "description": "Whether the marker should be displayed"
+          },
+          "trigger_fields": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["parcel_number", "owner_name", "owner_address", "contact", "memo"]
+            },
+            "description": "Fields that triggered marker display"
+          },
+          "last_evaluated": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    }
+  }
+}

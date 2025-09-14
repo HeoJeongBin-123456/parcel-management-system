@@ -102,12 +102,16 @@ class RealtimeSync {
     // Realtime 구독 설정
     setupRealtimeSubscription() {
         const supabase = window.SupabaseManager.supabase;
-        
+
         this.subscription = supabase
             .channel('parcels_realtime')
-            .on('postgres_changes', 
+            .on('postgres_changes',
                 { event: '*', schema: 'public', table: 'parcels' },
                 (payload) => this.handleRealtimeUpdate(payload)
+            )
+            .on('postgres_changes',
+                { event: '*', schema: 'public', table: 'parcel_polygons' },
+                (payload) => this.handlePolygonRealtimeUpdate(payload)
             )
             .subscribe((status) => {
                 console.log('📡 Realtime 구독 상태:', status);
@@ -145,6 +149,111 @@ class RealtimeSync {
     isOwnUpdate(payload) {
         // 간단한 시간 기반 체크 (100ms 이내)
         return Date.now() - this.lastUpdateTime < 100;
+    }
+
+    // 🗺️ 폴리곤 실시간 업데이트 처리
+    handlePolygonRealtimeUpdate(payload) {
+        const { eventType, new: newRecord, old: oldRecord } = payload;
+
+        // 자신이 보낸 업데이트는 무시
+        if (this.isOwnUpdate(payload)) {
+            return;
+        }
+
+        console.log('🗺️ 폴리곤 실시간 업데이트 수신:', eventType, newRecord || oldRecord);
+
+        switch (eventType) {
+            case 'INSERT':
+                this.handlePolygonAdded(newRecord);
+                break;
+            case 'UPDATE':
+                this.handlePolygonUpdated(newRecord);
+                break;
+            case 'DELETE':
+                this.handlePolygonDeleted(oldRecord);
+                break;
+        }
+
+        // 마지막 업데이트 시간 갱신
+        this.lastUpdateTime = Date.now();
+    }
+
+    // 🗺️ 새 폴리곤 추가 처리
+    async handlePolygonAdded(polygon) {
+        console.log('🗺️ 새 폴리곤 추가:', polygon.pnu);
+
+        // 지도에 폴리곤 그리기
+        if (window.drawParcelPolygon) {
+            const feature = {
+                geometry: polygon.geometry,
+                properties: polygon.properties || {
+                    PNU: polygon.pnu,
+                    pnu: polygon.pnu
+                }
+            };
+
+            await window.drawParcelPolygon(feature, false);
+
+            // IndexedDB에 캐싱
+            if (window.dataPersistenceManager && window.dataPersistenceManager.db) {
+                const tx = window.dataPersistenceManager.db.transaction('polygons', 'readwrite');
+                const store = tx.objectStore('polygons');
+                await store.put(polygon);
+            }
+
+            // UI 알림
+            this.showNotification(`🗺️ 새 필지가 추가되었습니다: ${polygon.pnu}`);
+        }
+    }
+
+    // 🗺️ 폴리곤 업데이트 처리
+    async handlePolygonUpdated(polygon) {
+        console.log('🗺️ 폴리곤 업데이트:', polygon.pnu);
+
+        // 기존 폴리곤 제거
+        const existingParcel = window.clickParcels?.get(polygon.pnu);
+        if (existingParcel && existingParcel.polygon) {
+            existingParcel.polygon.setMap(null);
+        }
+
+        // 새 폴리곤 그리기
+        if (window.drawParcelPolygon) {
+            const feature = {
+                geometry: polygon.geometry,
+                properties: polygon.properties || {
+                    PNU: polygon.pnu,
+                    pnu: polygon.pnu
+                }
+            };
+
+            await window.drawParcelPolygon(feature, false);
+
+            // IndexedDB 업데이트
+            if (window.dataPersistenceManager && window.dataPersistenceManager.db) {
+                const tx = window.dataPersistenceManager.db.transaction('polygons', 'readwrite');
+                const store = tx.objectStore('polygons');
+                await store.put(polygon);
+            }
+        }
+    }
+
+    // 🗺️ 폴리곤 삭제 처리
+    handlePolygonDeleted(polygon) {
+        console.log('🗺️ 폴리곤 삭제:', polygon.pnu);
+
+        // 지도에서 폴리곤 제거
+        const existingParcel = window.clickParcels?.get(polygon.pnu);
+        if (existingParcel && existingParcel.polygon) {
+            existingParcel.polygon.setMap(null);
+            window.clickParcels.delete(polygon.pnu);
+        }
+
+        // IndexedDB에서 제거
+        if (window.dataPersistenceManager && window.dataPersistenceManager.db) {
+            const tx = window.dataPersistenceManager.db.transaction('polygons', 'readwrite');
+            const store = tx.objectStore('polygons');
+            store.delete(polygon.pnu);
+        }
     }
 
     // 필지 추가 처리

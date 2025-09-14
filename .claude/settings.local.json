@@ -69,7 +69,17 @@
       "Read(//Users/ai-code-lab/Downloads/**)",
       "mcp__playwright__browser_navigate",
       "mcp__playwright__browser_click",
-      "mcp__playwright__browser_type"
+      "mcp__playwright__browser_type",
+      "Bash(node server.js)",
+      "Bash(.specify/scripts/bash/create-new-feature.sh:*)",
+      "Bash(.specify/scripts/bash/setup-plan.sh:*)",
+      "mcp__playwright__browser_evaluate",
+      "mcp__playwright__browser_handle_dialog",
+      "mcp__playwright__browser_snapshot",
+      "mcp__sequential-thinking__sequentialthinking",
+      "mcp__playwright__browser_tabs",
+      "mcp__playwright__browser_close",
+      "mcp__playwright__browser_wait_for"
     ],
     "deny": [],
     "ask": []

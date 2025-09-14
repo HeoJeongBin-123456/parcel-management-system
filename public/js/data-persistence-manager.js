@@ -6,7 +6,9 @@ class DataPersistenceManager {
             SESSION: 'parcelData_session',
             BACKUP: 'parcelData_backup',
             SNAPSHOT: 'parcelData_snapshot',
-            METADATA: 'parcelData_meta'
+            METADATA: 'parcelData_meta',
+            COLORS: 'parcelColors',
+            MARKERS: 'markerStates'
         };
         
         this.db = null;
@@ -15,53 +17,65 @@ class DataPersistenceManager {
         this.isSaving = false;
         this.lastSaveTime = 0;
         this.saveDebounceTime = 500; // 0.5초 디바운스
+
+        // 색상 및 마커 상태 관리
+        this.colorStates = new Map();
+        this.markerStates = new Map();
         
         console.log('🛡️ DataPersistenceManager 초기화');
         this.initializeIndexedDB();
         this.setupAutoSave();
+        this.initializeColorAndMarkerStates();
     }
 
     // IndexedDB 초기화
     async initializeIndexedDB() {
         try {
-            const request = indexedDB.open('ParcelDB', 1);
-            
+            const request = indexedDB.open('ParcelDB', 2); // 버전 업그레이드
+
             request.onerror = () => {
                 console.error('❌ IndexedDB 초기화 실패');
                 this.isIndexedDBReady = false;
             };
-            
+
             request.onsuccess = (event) => {
                 this.db = event.target.result;
                 this.isIndexedDBReady = true;
                 console.log('✅ IndexedDB 초기화 완료');
             };
-            
+
             request.onupgradeneeded = (event) => {
                 const db = event.target.result;
-                
+
                 // 필지 데이터 저장소
                 if (!db.objectStoreNames.contains('parcels')) {
                     const parcelStore = db.createObjectStore('parcels', { keyPath: 'id' });
                     parcelStore.createIndex('pnu', 'pnu', { unique: false });
                     parcelStore.createIndex('timestamp', 'timestamp', { unique: false });
                 }
-                
+
+                // 🗺️ 폴리곤 데이터 저장소 (새로 추가)
+                if (!db.objectStoreNames.contains('polygons')) {
+                    const polygonStore = db.createObjectStore('polygons', { keyPath: 'pnu' });
+                    polygonStore.createIndex('savedAt', 'savedAt', { unique: false });
+                    console.log('🗺️ 폴리곤 저장소 생성');
+                }
+
                 // 스냅샷 저장소 (히스토리)
                 if (!db.objectStoreNames.contains('snapshots')) {
                     const snapshotStore = db.createObjectStore('snapshots', { keyPath: 'timestamp' });
                     snapshotStore.createIndex('type', 'type', { unique: false });
                 }
-                
+
                 // 백업 메타데이터
                 if (!db.objectStoreNames.contains('backups')) {
                     const backupStore = db.createObjectStore('backups', { keyPath: 'id', autoIncrement: true });
                     backupStore.createIndex('date', 'date', { unique: false });
                 }
-                
+
                 console.log('🗄️ IndexedDB 스키마 생성 완료');
             };
-            
+
         } catch (error) {
             console.error('❌ IndexedDB 초기화 오류:', error);
             this.isIndexedDBReady = false;
@@ -532,6 +546,384 @@ class DataPersistenceManager {
             saveQueueLength: this.saveQueue.length,
             isSaving: this.isSaving
         };
+    }
+
+    // ===== 색상 및 마커 영속성 기능 추가 =====
+
+    /**
+     * 색상 상태 즉시 저장
+     * @param {string} parcelId - 필지 ID
+     * @param {Object} colorData - 색상 데이터
+     * @returns {Promise<boolean>} 저장 성공 여부
+     */
+    async saveColorState(parcelId, colorData) {
+        const colorState = {
+            parcel_id: parcelId,
+            color: colorData.color || colorData.selectedColor,
+            is_colored: colorData.is_colored !== undefined ? colorData.is_colored : !!colorData.color,
+            color_index: colorData.color_index || colorData.colorIndex || 0,
+            applied_at: new Date().toISOString(),
+            applied_by: this.getSessionId()
+        };
+
+        // 1. 메모리에 즉시 저장
+        this.colorStates.set(parcelId, colorState);
+
+        // 2. LocalStorage에 즉시 저장
+        this.saveColorStatesToLocalStorage();
+
+        // 3. UI 업데이트 이벤트 발생
+        this.triggerColorUpdate(parcelId, colorState);
+
+        // 4. Supabase 비동기 저장
+        if (window.SupabaseManager && window.SupabaseManager.isConnected) {
+            try {
+                await window.SupabaseManager.updateParcelColor(parcelId, {
+                    selectedColor: colorState.color,
+                    is_colored: colorState.is_colored,
+                    color_index: colorState.color_index
+                });
+            } catch (error) {
+                console.warn('Supabase 색상 저장 실패, 로컬 백업 유지:', error);
+            }
+        }
+
+        console.log(`🎨 색상 저장 완료: ${parcelId} -> ${colorState.color}`);
+        return true;
+    }
+
+    /**
+     * 마커 상태 평가 및 저장
+     * @param {string} parcelId - 필지 ID
+     * @param {Object} parcelData - 필지 데이터
+     * @returns {boolean} 마커 표시 여부
+     */
+    evaluateAndSaveMarkerState(parcelId, parcelData) {
+        const triggerFields = [];
+
+        // 확장된 마커 생성 조건 평가
+        if (parcelData.parcel_number || parcelData.parcelNumber) triggerFields.push('parcel_number');
+        if (parcelData.owner_name || parcelData.ownerName) triggerFields.push('owner_name');
+        if (parcelData.owner_address || parcelData.ownerAddress) triggerFields.push('owner_address');
+        if (parcelData.contact) triggerFields.push('contact');
+        if (parcelData.memo) triggerFields.push('memo');
+
+        const shouldDisplay = triggerFields.length > 0;
+
+        const markerState = {
+            parcel_id: parcelId,
+            should_display: shouldDisplay,
+            trigger_fields: triggerFields,
+            last_evaluated: new Date().toISOString()
+        };
+
+        // 메모리 및 LocalStorage 저장
+        this.markerStates.set(parcelId, markerState);
+        this.saveMarkerStatesToLocalStorage();
+
+        // UI 업데이트 이벤트 발생
+        this.triggerMarkerUpdate(parcelId, markerState);
+
+        return shouldDisplay;
+    }
+
+    /**
+     * 색상 상태 조회
+     * @param {string} parcelId - 필지 ID
+     * @returns {Object|null} 색상 상태
+     */
+    getColorState(parcelId) {
+        return this.colorStates.get(parcelId) || null;
+    }
+
+    /**
+     * 모든 색상 상태 조회
+     * @returns {Map} 모든 색상 상태
+     */
+    getAllColorStates() {
+        return this.colorStates;
+    }
+
+    /**
+     * 마커 상태 조회
+     * @param {string} parcelId - 필지 ID
+     * @returns {Object|null} 마커 상태
+     */
+    getMarkerState(parcelId) {
+        return this.markerStates.get(parcelId) || null;
+    }
+
+    /**
+     * 마커 상태 저장
+     * @param {string} parcelId - 필지 ID (PNU)
+     * @param {boolean} shouldDisplay - 마커 표시 여부
+     */
+    saveMarkerState(parcelId, shouldDisplay) {
+        if (!parcelId) return;
+
+        const markerState = {
+            parcel_id: parcelId,
+            should_display: shouldDisplay,
+            updated_at: new Date().toISOString()
+        };
+
+        this.markerStates.set(parcelId, markerState);
+        this.saveMarkerStatesToLocalStorage();
+        console.log(`📍 마커 상태 저장: ${parcelId} -> ${shouldDisplay ? '표시' : '숨김'}`);
+    }
+
+    /**
+     * 색상 상태 LocalStorage 저장
+     */
+    saveColorStatesToLocalStorage() {
+        try {
+            const colorData = Object.fromEntries(this.colorStates);
+            localStorage.setItem(this.STORAGE_KEYS.COLORS, JSON.stringify(colorData));
+        } catch (error) {
+            console.error('색상 상태 LocalStorage 저장 실패:', error);
+        }
+    }
+
+    /**
+     * 마커 상태 LocalStorage 저장
+     */
+    saveMarkerStatesToLocalStorage() {
+        try {
+            const markerData = Object.fromEntries(this.markerStates);
+            localStorage.setItem(this.STORAGE_KEYS.MARKERS, JSON.stringify(markerData));
+        } catch (error) {
+            console.error('마커 상태 LocalStorage 저장 실패:', error);
+        }
+    }
+
+    /**
+     * 색상 상태 LocalStorage에서 로드
+     */
+    loadColorStatesFromLocalStorage() {
+        try {
+            const colorData = localStorage.getItem(this.STORAGE_KEYS.COLORS);
+            if (colorData) {
+                const parsed = JSON.parse(colorData);
+                this.colorStates = new Map(Object.entries(parsed));
+                console.log(`🎨 ${this.colorStates.size}개 색상 상태 로드됨`);
+            }
+        } catch (error) {
+            console.error('색상 상태 로드 실패:', error);
+        }
+    }
+
+    /**
+     * 마커 상태 LocalStorage에서 로드
+     */
+    loadMarkerStatesFromLocalStorage() {
+        try {
+            const markerData = localStorage.getItem(this.STORAGE_KEYS.MARKERS);
+            if (markerData) {
+                const parsed = JSON.parse(markerData);
+                this.markerStates = new Map(Object.entries(parsed));
+                console.log(`📍 ${this.markerStates.size}개 마커 상태 로드됨`);
+            }
+        } catch (error) {
+            console.error('마커 상태 로드 실패:', error);
+        }
+    }
+
+    /**
+     * 색상 업데이트 이벤트 발생
+     */
+    triggerColorUpdate(parcelId, colorState) {
+        const event = new CustomEvent('parcelColorUpdate', {
+            detail: { parcelId, colorState }
+        });
+        window.dispatchEvent(event);
+    }
+
+    /**
+     * 마커 업데이트 이벤트 발생
+     */
+    triggerMarkerUpdate(parcelId, markerState) {
+        const event = new CustomEvent('parcelMarkerUpdate', {
+            detail: { parcelId, markerState }
+        });
+        window.dispatchEvent(event);
+    }
+
+    /**
+     * 세션 ID 조회
+     * @returns {string} 세션 ID
+     */
+    getSessionId() {
+        let sessionId = localStorage.getItem('user_session');
+        if (!sessionId) {
+            sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            localStorage.setItem('user_session', sessionId);
+        }
+        return sessionId;
+    }
+
+    /**
+     * 색상 및 마커 상태 초기화
+     */
+    initializeColorAndMarkerStates() {
+        this.loadColorStatesFromLocalStorage();
+        this.loadMarkerStatesFromLocalStorage();
+        console.log('🎨📍 색상 및 마커 상태 초기화 완료');
+    }
+
+    /**
+     * 배치 색상 업데이트
+     * @param {Array} updates - 업데이트 배열
+     */
+    async batchUpdateColors(updates) {
+        console.log(`🎨 ${updates.length}개 색상 배치 업데이트 시작`);
+        for (const update of updates) {
+            await this.saveColorState(update.parcelId, update.colorData);
+        }
+        console.log('✅ 배치 색상 업데이트 완료');
+    }
+
+    /**
+     * 색상 제거
+     * @param {string} parcelId - 필지 ID
+     */
+    async removeColorState(parcelId) {
+        this.colorStates.delete(parcelId);
+        this.saveColorStatesToLocalStorage();
+        this.triggerColorUpdate(parcelId, null);
+
+        if (window.SupabaseManager && window.SupabaseManager.isConnected) {
+            try {
+                await window.SupabaseManager.updateParcelColor(parcelId, {
+                    selectedColor: null,
+                    is_colored: false,
+                    color_index: 0
+                });
+            } catch (error) {
+                console.warn('Supabase 색상 제거 실패:', error);
+            }
+        }
+    }
+
+    /**
+     * 🗺️ 폴리곤 데이터 저장 (Supabase + IndexedDB)
+     * @param {string} pnu - 필지 고유번호
+     * @param {Object} geometry - 폴리곤 좌표 데이터
+     * @param {Object} properties - 필지 속성 정보
+     */
+    async savePolygonData(pnu, geometry, properties) {
+        console.log('🗺️ 폴리곤 저장 시작:', pnu);
+
+        try {
+            // 1. IndexedDB에 저장 (로컬 캐시)
+            if (this.db) {
+                const tx = this.db.transaction('polygons', 'readwrite');
+                const store = tx.objectStore('polygons');
+                await store.put({
+                    pnu: pnu,
+                    geometry: geometry,
+                    properties: properties,
+                    savedAt: new Date().toISOString()
+                });
+                await tx.complete;
+                console.log('💾 IndexedDB 폴리곤 저장 완료');
+            }
+
+            // 2. Supabase에 저장 (실시간 공유)
+            if (window.SupabaseManager && window.SupabaseManager.isConnected) {
+                const result = await window.SupabaseManager.savePolygonData(pnu, geometry, properties);
+                if (result) {
+                    console.log('☁️ Supabase 폴리곤 저장 완료');
+                    return true;
+                }
+            }
+
+            return true;
+        } catch (error) {
+            console.error('❌ 폴리곤 저장 실패:', error);
+            return false;
+        }
+    }
+
+    /**
+     * 🗺️ 폴리곤 데이터 조회
+     * @param {string} pnu - 필지 고유번호
+     * @returns {Object|null} 폴리곤 데이터
+     */
+    async getPolygonData(pnu) {
+        try {
+            // 1. IndexedDB에서 먼저 조회 (빠른 접근)
+            if (this.db) {
+                const tx = this.db.transaction('polygons', 'readonly');
+                const store = tx.objectStore('polygons');
+                const data = await store.get(pnu);
+                if (data) {
+                    console.log('💾 IndexedDB에서 폴리곤 찾음:', pnu);
+                    return data;
+                }
+            }
+
+            // 2. Supabase에서 조회
+            if (window.SupabaseManager && window.SupabaseManager.isConnected) {
+                const data = await window.SupabaseManager.getPolygonData(pnu);
+                if (data) {
+                    console.log('☁️ Supabase에서 폴리곤 찾음:', pnu);
+                    // IndexedDB에 캐싱
+                    if (this.db) {
+                        const tx = this.db.transaction('polygons', 'readwrite');
+                        const store = tx.objectStore('polygons');
+                        await store.put(data);
+                    }
+                    return data;
+                }
+            }
+
+            return null;
+        } catch (error) {
+            console.error('❌ 폴리곤 조회 실패:', error);
+            return null;
+        }
+    }
+
+    /**
+     * 🗺️ 모든 폴리곤 데이터 로드
+     * @returns {Array} 폴리곤 데이터 배열
+     */
+    async loadAllPolygons() {
+        console.log('🗺️ 모든 폴리곤 로드 시작');
+
+        try {
+            // Supabase에서 모든 폴리곤 로드
+            if (window.SupabaseManager && window.SupabaseManager.isConnected) {
+                const polygons = await window.SupabaseManager.loadAllPolygons();
+
+                // IndexedDB에 캐싱
+                if (this.db && polygons.length > 0) {
+                    const tx = this.db.transaction('polygons', 'readwrite');
+                    const store = tx.objectStore('polygons');
+                    for (const polygon of polygons) {
+                        await store.put(polygon);
+                    }
+                    await tx.complete;
+                    console.log(`💾 ${polygons.length}개 폴리곤 IndexedDB 캐싱 완료`);
+                }
+
+                return polygons;
+            }
+
+            // Supabase 연결 안 됨 - IndexedDB에서 로드
+            if (this.db) {
+                const tx = this.db.transaction('polygons', 'readonly');
+                const store = tx.objectStore('polygons');
+                const polygons = await store.getAll();
+                console.log(`💾 IndexedDB에서 ${polygons.length}개 폴리곤 로드`);
+                return polygons;
+            }
+
+            return [];
+        } catch (error) {
+            console.error('❌ 폴리곤 로드 실패:', error);
+            return [];
+        }
     }
 }
 

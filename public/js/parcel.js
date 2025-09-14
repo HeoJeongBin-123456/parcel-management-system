@@ -838,16 +838,33 @@ async function saveParcelData() {
                           (formData.ownerContact && formData.ownerContact.trim() !== '') ||
                           (formData.memo && formData.memo.trim() !== '');
 
-        if (window.memoMarkerManager) {
+        if (window.MemoMarkerManager) {
             if (hasAnyInfo) {
-                await window.memoMarkerManager.createMemoMarker(formData);
+                // 좌표를 포함한 전체 데이터 전달
+                const markerData = {
+                    ...formData,
+                    lat: parcelData.lat,
+                    lng: parcelData.lng,
+                    geometry: parcelData.geometry
+                };
+                await window.MemoMarkerManager.createMemoMarker(markerData);
                 console.log('📍 마커 생성/업데이트 (필지 정보 존재):', formData.parcelNumber);
+
+                // 마커 상태 저장
+                if (window.DataPersistenceManager) {
+                    window.DataPersistenceManager.saveMarkerState(formData.pnu || currentPNU, true);
+                }
             } else {
                 // 모든 정보가 삭제되면 마커도 제거
                 const pnu = formData.pnu || currentPNU;
-                if (pnu && window.memoMarkerManager.markers.has(pnu)) {
-                    window.memoMarkerManager.removeMemoMarker(pnu);
+                if (pnu && window.MemoMarkerManager.markers.has(pnu)) {
+                    window.MemoMarkerManager.removeMemoMarker(pnu);
                     console.log('🗑️ 마커 제거 (필지 정보 없음):', formData.parcelNumber);
+
+                    // 마커 상태 저장
+                    if (window.DataPersistenceManager) {
+                        window.DataPersistenceManager.saveMarkerState(pnu, false);
+                    }
                 }
             }
         }

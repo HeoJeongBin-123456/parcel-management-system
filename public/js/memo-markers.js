@@ -22,16 +22,50 @@ class MemoMarkerManager {
     // 초기화 (지도 로드 후 호출)
     async initialize() {
         if (this.isInitialized) return;
-        
+
         // 지도 로드 대기
         if (!window.map) {
             setTimeout(() => this.initialize(), 500);
             return;
         }
 
+        // 중복 마커 정리
+        this.cleanupDuplicateMarkers();
+
         await this.loadAllMemoMarkers();
         this.isInitialized = true;
         console.log('✅ MemoMarkerManager 초기화 완료');
+    }
+
+    // 중복 마커 정리
+    cleanupDuplicateMarkers() {
+        const pnuMap = new Map();
+
+        // PNU별로 마커 그룹화
+        for (const [key, markerInfo] of this.markers.entries()) {
+            const pnu = markerInfo.data?.pnu || key;
+            if (!pnuMap.has(pnu)) {
+                pnuMap.set(pnu, []);
+            }
+            pnuMap.get(pnu).push({ key, markerInfo });
+        }
+
+        // 중복 마커 제거 (각 PNU당 하나만 유지)
+        for (const [pnu, markers] of pnuMap.entries()) {
+            if (markers.length > 1) {
+                console.log(`🗑️ PNU ${pnu}에 중복 마커 ${markers.length}개 발견, 정리 시작`);
+
+                // 첫 번째 마커만 유지하고 나머지 제거
+                for (let i = 1; i < markers.length; i++) {
+                    const { key, markerInfo } = markers[i];
+                    if (markerInfo.marker) {
+                        markerInfo.marker.setMap(null);
+                    }
+                    this.markers.delete(key);
+                    console.log(`  ✅ 중복 마커 제거: ${key}`);
+                }
+            }
+        }
     }
 
     // 모든 메모 마커 로드 (Supabase 우선, localStorage 백업)
@@ -143,20 +177,24 @@ class MemoMarkerManager {
             console.log(`📋 최종 메모 필지 발견: ${allMemoData.length}개`);
             
             if (allMemoData.length > 0) {
-                console.log('📄 메모 필지 목록:');
+                console.log('📄 마커가 필요한 필지 목록:');
                 allMemoData.forEach((parcel, index) => {
                     console.log(`${index + 1}. ${parcel.parcelNumber || parcel.parcel_name || parcel.pnu}:`, {
-                        memo: parcel.memo.substring(0, 50),
+                        memo: parcel.memo ? parcel.memo.substring(0, 50) : '(메모 없음)',
                         hasLat: !!parcel.lat,
                         hasLng: !!parcel.lng,
-                        source: parcel.sourceKey
+                        source: parcel.sourceKey,
+                        shouldShow: this.shouldShowMarker(parcel)
                     });
                 });
             }
 
-            // 모든 메모 필지에 대해 마커 생성
+            // shouldShowMarker 조건을 만족하는 필지에 대해서만 마커 생성
             for (const parcel of allMemoData) {
-                await this.createMemoMarker(parcel);
+                if (this.shouldShowMarker(parcel)) {
+                    await this.createMemoMarker(parcel);
+                    console.log('✅ 마커 생성:', parcel.pnu || parcel.parcelNumber || parcel.id);
+                }
             }
         } catch (error) {
             console.error('❌ 메모 마커 로드 실패:', error);
@@ -166,8 +204,14 @@ class MemoMarkerManager {
     // 메모 마커 생성
     async createMemoMarker(parcelData) {
         try {
-            const pnu = parcelData.pnu || parcelData.id;
-            
+            // 일관된 키 생성: PNU 우선, 없으면 parcelNumber, 그것도 없으면 ID
+            const pnu = parcelData.pnu || parcelData.parcelNumber || parcelData.id;
+
+            if (!pnu) {
+                console.warn('⚠️ 마커 키(PNU/지번)가 없어 생성 불가');
+                return;
+            }
+
             console.log('🔥 메모 마커 생성 시작:', {
                 pnu: pnu,
                 parcelNumber: parcelData.parcelNumber,
@@ -177,14 +221,32 @@ class MemoMarkerManager {
                 lng: parcelData.lng,
                 hasGeometry: !!parcelData.geometry,
                 geometryType: parcelData.geometry?.type,
-                fullParcelData: parcelData
+                existingMarker: this.markers.has(pnu)
             });
-            
-            // 이미 마커가 있으면 업데이트
+
+            // 이미 마커가 있으면 기존 마커 제거 후 새로 생성
             if (this.markers.has(pnu)) {
-                console.log('🔄 기존 마커 업데이트:', pnu);
-                await this.updateMemoMarker(pnu, parcelData);
-                return;
+                console.log('🔄 기존 마커 제거 후 재생성:', pnu);
+                const existingMarker = this.markers.get(pnu);
+                if (existingMarker && existingMarker.marker) {
+                    existingMarker.marker.setMap(null);
+                }
+                this.markers.delete(pnu);
+            }
+
+            // 중복 마커 추가 체크: 같은 위치에 이미 마커가 있는지 확인
+            for (const [key, markerInfo] of this.markers.entries()) {
+                if (key !== pnu) {
+                    const existingData = markerInfo.data;
+                    if (existingData.pnu === parcelData.pnu ||
+                        (existingData.parcelNumber && existingData.parcelNumber === parcelData.parcelNumber)) {
+                        console.log('🗑️ 중복 마커 발견, 기존 마커 제거:', key);
+                        if (markerInfo.marker) {
+                            markerInfo.marker.setMap(null);
+                        }
+                        this.markers.delete(key);
+                    }
+                }
             }
 
             // 좌표 계산
@@ -480,8 +542,8 @@ class MemoMarkerManager {
         const markerInfo = this.markers.get(pnu);
         if (!markerInfo) return;
 
-        // 메모가 없어졌으면 마커 제거
-        if (!parcelData.memo || parcelData.memo.trim() === '') {
+        // shouldShowMarker 조건을 만족하지 않으면 마커 제거
+        if (!this.shouldShowMarker(parcelData)) {
             this.removeMemoMarker(pnu);
             return;
         }
@@ -544,14 +606,15 @@ class MemoMarkerManager {
 
     // 새 필지 메모 추가 시 호출
     async onParcelMemoAdded(parcelData) {
-        if (parcelData.memo && parcelData.memo.trim() !== '') {
+        // shouldShowMarker 조건 사용 (PNU, 지번, 메모, 소유자명 등 중 하나라도 있으면)
+        if (this.shouldShowMarker(parcelData)) {
             const pnu = parcelData.pnu || parcelData.id;
             // 이미 마커가 있으면 업데이트, 없으면 새로 생성
             if (this.markers.has(pnu)) {
-                console.log('🔄 기존 메모 마커 업데이트:', pnu);
+                console.log('🔄 기존 마커 업데이트:', pnu);
                 await this.updateMemoMarker(pnu, parcelData);
             } else {
-                console.log('📍 새 메모 마커 생성:', pnu);
+                console.log('📍 새 마커 생성:', pnu);
                 await this.createMemoMarker(parcelData);
             }
         }
@@ -596,6 +659,11 @@ class MemoMarkerManager {
         console.log('👁️‍🗨️ 모든 메모 마커 숨김');
     }
 
+    // createOrUpdateMarker 별칭 추가 (호환성을 위해)
+    async createOrUpdateMarker(parcelData) {
+        return await this.createMemoMarker(parcelData);
+    }
+
     // 상태 정보 반환
     getStatus() {
         return {
@@ -625,6 +693,20 @@ if (originalSaveParcelData) {
             const ownerContact = document.getElementById('ownerContact').value;
             const currentPNU = window.currentSelectedPNU;
 
+            // 현재 선택된 필지의 좌표 가져오기
+            let lat = null, lng = null;
+            if (window.selectedParcel) {
+                lat = window.selectedParcel.lat;
+                lng = window.selectedParcel.lng;
+            } else if (window.parcelsData) {
+                // parcelsData에서 찾기
+                const found = window.parcelsData.find(p => p.pnu === currentPNU || p.id === currentPNU);
+                if (found) {
+                    lat = found.lat;
+                    lng = found.lng;
+                }
+            }
+
             const parcelData = {
                 pnu: currentPNU,
                 id: currentPNU,
@@ -633,8 +715,8 @@ if (originalSaveParcelData) {
                 ownerName: ownerName,
                 ownerAddress: ownerAddress,
                 ownerContact: ownerContact,
-                lat: null, // createMemoMarker에서 좌표 계산
-                lng: null
+                lat: lat,
+                lng: lng
             };
 
             console.log('💾 저장 후 마커 업데이트:', {

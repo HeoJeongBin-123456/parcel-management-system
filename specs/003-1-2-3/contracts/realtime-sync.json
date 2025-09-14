@@ -1,0 +1,207 @@
+{
+  "asyncapi": "2.6.0",
+  "info": {
+    "title": "Parcel Realtime Sync API",
+    "version": "1.0.0",
+    "description": "WebSocket API for real-time parcel data synchronization"
+  },
+  "servers": {
+    "production": {
+      "url": "wss://cqfszcbifonxpfasodto.supabase.co/realtime/v1",
+      "protocol": "wss",
+      "description": "Supabase Realtime WebSocket server"
+    }
+  },
+  "channels": {
+    "parcels:color_changes": {
+      "subscribe": {
+        "summary": "Subscribe to parcel color changes",
+        "message": {
+          "$ref": "#/components/messages/ColorChangeEvent"
+        }
+      },
+      "publish": {
+        "summary": "Publish parcel color change",
+        "message": {
+          "$ref": "#/components/messages/ColorChangeCommand"
+        }
+      }
+    },
+    "parcels:data_changes": {
+      "subscribe": {
+        "summary": "Subscribe to parcel data changes",
+        "message": {
+          "$ref": "#/components/messages/DataChangeEvent"
+        }
+      },
+      "publish": {
+        "summary": "Publish parcel data change",
+        "message": {
+          "$ref": "#/components/messages/DataChangeCommand"
+        }
+      }
+    }
+  },
+  "components": {
+    "messages": {
+      "ColorChangeEvent": {
+        "name": "ColorChangeEvent",
+        "title": "Color Change Event",
+        "summary": "Event emitted when a parcel color is changed",
+        "payload": {
+          "type": "object",
+          "properties": {
+            "event_type": {
+              "type": "string",
+              "enum": ["INSERT", "UPDATE", "DELETE"]
+            },
+            "parcel_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "old": {
+              "$ref": "#/components/schemas/ColorState"
+            },
+            "new": {
+              "$ref": "#/components/schemas/ColorState"
+            },
+            "timestamp": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        }
+      },
+      "ColorChangeCommand": {
+        "name": "ColorChangeCommand",
+        "title": "Color Change Command",
+        "summary": "Command to change a parcel color",
+        "payload": {
+          "type": "object",
+          "required": ["parcel_id", "color", "is_colored"],
+          "properties": {
+            "parcel_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9A-Fa-f]{6}$"
+            },
+            "is_colored": {
+              "type": "boolean"
+            },
+            "session_id": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "DataChangeEvent": {
+        "name": "DataChangeEvent",
+        "title": "Data Change Event",
+        "summary": "Event emitted when parcel data is changed",
+        "payload": {
+          "type": "object",
+          "properties": {
+            "event_type": {
+              "type": "string",
+              "enum": ["INSERT", "UPDATE", "DELETE"]
+            },
+            "parcel_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "changed_fields": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "old": {
+              "$ref": "#/components/schemas/ParcelData"
+            },
+            "new": {
+              "$ref": "#/components/schemas/ParcelData"
+            },
+            "marker_affected": {
+              "type": "boolean"
+            },
+            "timestamp": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        }
+      },
+      "DataChangeCommand": {
+        "name": "DataChangeCommand",
+        "title": "Data Change Command",
+        "summary": "Command to change parcel data",
+        "payload": {
+          "type": "object",
+          "required": ["parcel_id", "data"],
+          "properties": {
+            "parcel_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "data": {
+              "$ref": "#/components/schemas/ParcelData"
+            },
+            "session_id": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "ColorState": {
+        "type": "object",
+        "properties": {
+          "color": {
+            "type": "string",
+            "pattern": "^#[0-9A-Fa-f]{6}$"
+          },
+          "is_colored": {
+            "type": "boolean"
+          },
+          "color_index": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9
+          },
+          "applied_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ParcelData": {
+        "type": "object",
+        "properties": {
+          "parcel_number": {
+            "type": "string"
+          },
+          "owner_name": {
+            "type": "string"
+          },
+          "owner_address": {
+            "type": "string"
+          },
+          "contact": {
+            "type": "string"
+          },
+          "memo": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    }
+  }
+}

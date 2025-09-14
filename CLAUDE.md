@@ -53,21 +53,30 @@ Frontend (Vanilla JS) → Express Proxy Server → External APIs
 - VWorld API 호출 및 필지 데이터 처리
 - 지도 폴리곤 렌더링 및 상호작용
 - 필지 정보 UI 업데이트
+- **[NEW] 색상 즉시 저장 메커니즘**
+- **[NEW] 확장된 마커 생성 조건 로직**
 
 **SupabaseManager**: 실시간 데이터베이스 관리
 - 무한루프 방지 로직 (`_loadCallCount` 제한)
 - 지수적 백오프 재시도 메커니즘
 - 오프라인 모드 자동 전환
+- **[NEW] 색상 데이터 영속성 관리**
 
 **ParcelManager**: 필지 목록 및 필터링 관리
 - 그리드/리스트 뷰 모드
 - 색상별 필터링 및 검색
 - 다중 선택 및 배치 작업
+- **[NEW] 색상 상태 복원 로직**
 
 **BackupManager**: 자동 백업 시스템
 - 일일 Supabase 백업
 - 월간 Google Sheets 백업
 - 백업 히스토리 관리
+
+**memo-markers.js**: 마커 관리 시스템
+- **[NEW] 확장된 마커 생성 조건 (지번, 소유자명, 주소, 연락처, 메모)**
+- **[NEW] 조건 기반 마커 표시/숨김**
+- **[NEW] 마커 상태 영속성**
 
 ### API 통합 패턴
 
@@ -94,6 +103,8 @@ await getParcelInfoViaJSONP(lat, lng, apiKey)
 
 **LocalStorage 키**:
 - `parcelData`: 필지 정보
+- `parcelColors`: **[NEW] 필지별 색상 상태 맵**
+- `markerStates`: **[NEW] 마커 표시 상태**
 - `backup_settings`: 백업 설정
 - `user_session`: 사용자 세션 ID
 
@@ -127,6 +138,28 @@ GOOGLE_CLIENT_ID=[Google OAuth 클라이언트 ID]
 - `memo`: 메모
 - `is_colored`: 색상 적용 여부
 - `created_at`, `updated_at`: 타임스탬프
+
+## 최근 변경사항 (2025-09-14) ✅
+
+### 🎨 색상 영속성 개선 (완료)
+- 색상 선택 즉시 자동 저장 (저장 버튼 불필요)
+- 새로고침 후에도 색상 상태 유지
+- LocalStorage와 Supabase 이중 백업
+- 100ms 이내 즉시 저장 보장
+- `applyColorToParcel()` 함수에 즉시 저장 로직 통합
+
+### 📍 마커 생성 조건 확장 (완료)
+- 기존: 메모만 있을 때 마커 표시
+- 개선: 지번, 소유자명, 소유자 주소, 연락처, 메모 중 하나라도 있으면 마커 표시
+- 모든 정보 삭제 시 마커 자동 제거
+- `MemoMarkerManager.shouldShowMarker()` 함수로 조건 통합 관리
+
+### 🔧 DataPersistenceManager 강화 (완료)
+- 색상 상태 관리: `saveColorState()`, `getColorState()`, `getAllColorStates()`
+- 마커 상태 평가: `evaluateAndSaveMarkerState()`, `getMarkerState()`
+- 이벤트 기반 UI 업데이트: `parcelColorUpdate`, `parcelMarkerUpdate` 이벤트
+- 오프라인 모드 지원 및 자동 동기화
+- 세션별 데이터 격리 관리
 
 ## 알려진 제한사항
 

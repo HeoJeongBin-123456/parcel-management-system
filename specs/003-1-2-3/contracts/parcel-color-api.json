@@ -1,0 +1,260 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Parcel Color Management API",
+    "version": "1.0.0",
+    "description": "API for managing parcel colors and persistence"
+  },
+  "paths": {
+    "/api/parcels/{parcelId}/color": {
+      "post": {
+        "summary": "Update parcel color",
+        "description": "Immediately save color selection for a parcel",
+        "parameters": [
+          {
+            "name": "parcelId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ColorUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Color updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ColorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "404": {
+            "description": "Parcel not found"
+          }
+        }
+      },
+      "get": {
+        "summary": "Get parcel color",
+        "description": "Retrieve current color state for a parcel",
+        "parameters": [
+          {
+            "name": "parcelId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Color state retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ColorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Parcel not found"
+          }
+        }
+      }
+    },
+    "/api/parcels/with-colors": {
+      "get": {
+        "summary": "Get all parcels with colors",
+        "description": "Retrieve all parcels that have colors applied",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "bounds",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "north": { "type": "number" },
+                "south": { "type": "number" },
+                "east": { "type": "number" },
+                "west": { "type": "number" }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of colored parcels",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ParcelWithColor"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/parcels/bulk-color": {
+      "post": {
+        "summary": "Update multiple parcel colors",
+        "description": "Batch update colors for multiple parcels",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/BulkColorUpdate"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bulk update successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "updated": { "type": "integer" },
+                    "failed": { "type": "integer" },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "parcelId": { "type": "string" },
+                          "error": { "type": "string" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ColorUpdate": {
+        "type": "object",
+        "required": ["color", "is_colored"],
+        "properties": {
+          "color": {
+            "type": "string",
+            "pattern": "^#[0-9A-Fa-f]{6}$",
+            "example": "#FF5733"
+          },
+          "is_colored": {
+            "type": "boolean"
+          },
+          "color_index": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9
+          }
+        }
+      },
+      "ColorResponse": {
+        "type": "object",
+        "properties": {
+          "parcel_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "color": {
+            "type": "string",
+            "pattern": "^#[0-9A-Fa-f]{6}$"
+          },
+          "is_colored": {
+            "type": "boolean"
+          },
+          "color_index": {
+            "type": "integer"
+          },
+          "applied_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "applied_by": {
+            "type": "string"
+          }
+        }
+      },
+      "ParcelWithColor": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "lat": {
+            "type": "number"
+          },
+          "lng": {
+            "type": "number"
+          },
+          "address": {
+            "type": "string"
+          },
+          "color_state": {
+            "$ref": "#/components/schemas/ColorResponse"
+          }
+        }
+      },
+      "BulkColorUpdate": {
+        "type": "object",
+        "required": ["parcel_id", "color", "is_colored"],
+        "properties": {
+          "parcel_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "color": {
+            "type": "string",
+            "pattern": "^#[0-9A-Fa-f]{6}$"
+          },
+          "is_colored": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}

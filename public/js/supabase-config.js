@@ -77,6 +77,35 @@ class SupabaseManager {
 
             console.log('✅ parcels 테이블 확인 완료');
 
+            // parcel_polygons 테이블 확인 (폴리곤 데이터 저장용)
+            try {
+                const { data: polygonData, error: polygonError } = await this.supabase
+                    .from('parcel_polygons')
+                    .select('pnu')
+                    .limit(1);
+
+                if (polygonError && polygonError.code === 'PGRST116') {
+                    console.log('⚠️ parcel_polygons 테이블이 존재하지 않습니다. 테이블 생성 필요');
+                    // 테이블이 없으면 Supabase 대시보드에서 생성해야 함
+                    console.log('📝 다음 SQL로 테이블을 생성하세요:');
+                    console.log(`
+                        CREATE TABLE parcel_polygons (
+                            pnu TEXT PRIMARY KEY,
+                            geometry JSONB NOT NULL,
+                            properties JSONB,
+                            simplified_geometry JSONB,
+                            created_at TIMESTAMP DEFAULT NOW(),
+                            updated_at TIMESTAMP DEFAULT NOW(),
+                            created_by TEXT
+                        );
+                    `);
+                } else {
+                    console.log('✅ parcel_polygons 테이블 확인 완료');
+                }
+            } catch (polygonError) {
+                console.log('📝 parcel_polygons 테이블 확인 중 오류 - 계속 진행');
+            }
+
             // user_settings 테이블 확인 (없어도 계속 진행)
             try {
                 const { data: settingsData, error: settingsError } = await this.supabase
@@ -666,6 +695,102 @@ class SupabaseManager {
         } catch (error) {
             console.error('❌ 마커 타입별 필지 로드 실패:', error);
             return [];
+        }
+    }
+
+    // 🗺️ 폴리곤 데이터 저장 (실시간 공유용)
+    async savePolygonData(pnu, geometry, properties) {
+        if (!this.isConnected) {
+            console.warn('⚠️ Supabase 미연결, IndexedDB에 저장');
+            // IndexedDB 백업 로직은 DataPersistenceManager에서 처리
+            return false;
+        }
+
+        try {
+            // 폴리곤 간소화 (크기 최적화)
+            const simplifiedGeometry = this.simplifyPolygon(geometry);
+
+            const { data, error } = await this.supabase
+                .from('parcel_polygons')
+                .upsert({
+                    pnu: pnu,
+                    geometry: geometry,
+                    properties: properties,
+                    simplified_geometry: simplifiedGeometry,
+                    updated_at: new Date().toISOString(),
+                    created_by: this.getUserSession()
+                }, {
+                    onConflict: 'pnu'
+                })
+                .select();
+
+            if (error) throw error;
+
+            console.log('🗺️ 폴리곤 데이터 Supabase 저장 완료:', pnu);
+            return data;
+        } catch (error) {
+            console.error('❌ 폴리곤 저장 실패:', error);
+            return false;
+        }
+    }
+
+    // 🗺️ 모든 폴리곤 데이터 조회
+    async loadAllPolygons() {
+        if (!this.isConnected) {
+            console.warn('⚠️ Supabase 미연결, 로컬 데이터 사용');
+            return [];
+        }
+
+        try {
+            const { data, error } = await this.supabase
+                .from('parcel_polygons')
+                .select('*')
+                .order('updated_at', { ascending: false });
+
+            if (error) throw error;
+
+            console.log(`🗺️ ${data.length}개 폴리곤 로드 완료`);
+            return data || [];
+        } catch (error) {
+            console.error('❌ 폴리곤 로드 실패:', error);
+            return [];
+        }
+    }
+
+    // 🗺️ 특정 폴리곤 데이터 조회
+    async getPolygonData(pnu) {
+        if (!this.isConnected) return null;
+
+        try {
+            const { data, error } = await this.supabase
+                .from('parcel_polygons')
+                .select('*')
+                .eq('pnu', pnu)
+                .single();
+
+            if (error && error.code !== 'PGRST116') throw error;
+            return data;
+        } catch (error) {
+            console.error('❌ 폴리곤 조회 실패:', error);
+            return null;
+        }
+    }
+
+    // 폴리곤 간소화 (Douglas-Peucker 알고리즘 간단 버전)
+    simplifyPolygon(geometry) {
+        if (!geometry || !geometry.coordinates) return geometry;
+
+        // 단순한 간소화 - 매 2번째 점만 유지 (실제로는 더 정교한 알고리즘 필요)
+        try {
+            const simplified = JSON.parse(JSON.stringify(geometry));
+            if (geometry.type === 'Polygon') {
+                simplified.coordinates[0] = geometry.coordinates[0].filter((point, index) =>
+                    index % 2 === 0 || index === geometry.coordinates[0].length - 1
+                );
+            }
+            return simplified;
+        } catch (error) {
+            return geometry;
         }
     }
 
