@@ -77,6 +77,36 @@ class SupabaseManager {
 
             console.log('✅ parcels 테이블 확인 완료');
 
+            // Phase 1: parcel_type 필드 확인 및 추가 안내
+            try {
+                const { data: typeCheckData, error: typeCheckError } = await this.supabase
+                    .from('parcels')
+                    .select('parcel_type')
+                    .limit(1);
+
+                if (typeCheckError && typeCheckError.code === '42703') {
+                    console.log('⚠️ parcel_type 필드가 존재하지 않습니다. 스키마 업데이트 필요');
+                    console.log('📝 다음 SQL로 필드를 추가하세요:');
+                    console.log(`
+                        ALTER TABLE parcels
+                        ADD COLUMN parcel_type TEXT DEFAULT 'click';
+
+                        -- 기존 데이터 업데이트 (보라색은 검색, 나머지는 클릭)
+                        UPDATE parcels
+                        SET parcel_type = 'search'
+                        WHERE color = '#9370DB';
+
+                        UPDATE parcels
+                        SET parcel_type = 'click'
+                        WHERE color != '#9370DB' OR color IS NULL;
+                    `);
+                } else if (!typeCheckError) {
+                    console.log('✅ parcel_type 필드 확인 완료');
+                }
+            } catch (typeError) {
+                console.log('📝 parcel_type 필드 확인 중 오류 - 계속 진행:', typeError.message);
+            }
+
             // parcel_polygons 테이블 확인 (폴리곤 데이터 저장용)
             try {
                 const { data: polygonData, error: polygonError } = await this.supabase
@@ -213,7 +243,7 @@ class SupabaseManager {
     }
 
     // 나머지 메서드들은 기존과 동일...
-    createParcelData(lat, lng, parcelName, memo = '', isColored = true, colorType = 'click') {
+    createParcelData(lat, lng, parcelName, memo = '', isColored = true, colorType = 'click', parcelType = 'click') {
         return {
             id: this.generateId(),
             lat: parseFloat(lat),
@@ -222,6 +252,7 @@ class SupabaseManager {
             memo: memo,
             is_colored: isColored,
             color_type: colorType,
+            parcel_type: parcelType, // Phase 1: parcel_type 필드 추가
             has_memo: memo.trim() !== '',
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
@@ -255,12 +286,223 @@ class SupabaseManager {
                 .upsert(parcels, { onConflict: 'id' });
 
             if (error) throw error;
-            
+
             console.log('✅ Supabase 저장 완료:', data?.length || parcels.length, '개 필지');
             return true;
         } catch (error) {
             console.error('❌ Supabase 저장 실패:', error);
             localStorage.setItem('parcels', JSON.stringify(parcels));
+            return false;
+        }
+    }
+
+    // =====================================================================
+    // Phase 1: 모드별 독립 저장/로드 메서드들
+    // =====================================================================
+
+    // 클릭 필지만 로드
+    async loadClickParcels() {
+        if (!this.isConnected) {
+            const clickData = window.getClickParcelData();
+            console.log('📁 클릭 필지 로컬 로드:', clickData.length, '개');
+            return clickData;
+        }
+
+        try {
+            const { data, error } = await this.supabase
+                .from('parcels')
+                .select('*')
+                .eq('parcel_type', 'click')
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+
+            console.log('📡 클릭 필지 Supabase 로드 완료:', data?.length || 0, '개');
+            return data || [];
+        } catch (error) {
+            console.error('❌ 클릭 필지 Supabase 로드 실패:', error);
+            const clickData = window.getClickParcelData();
+            return clickData;
+        }
+    }
+
+    // 검색 필지만 로드
+    async loadSearchParcels() {
+        if (!this.isConnected) {
+            const searchData = window.getSearchParcelData();
+            console.log('📁 검색 필지 로컬 로드:', searchData.length, '개');
+            return searchData;
+        }
+
+        try {
+            const { data, error } = await this.supabase
+                .from('parcels')
+                .select('*')
+                .eq('parcel_type', 'search')
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+
+            console.log('📡 검색 필지 Supabase 로드 완료:', data?.length || 0, '개');
+            return data || [];
+        } catch (error) {
+            console.error('❌ 검색 필지 Supabase 로드 실패:', error);
+            const searchData = window.getSearchParcelData();
+            return searchData;
+        }
+    }
+
+    // 클릭 필지 저장 (단일 또는 배치)
+    async saveClickParcel(parcelData) {
+        // parcel_type을 'click'으로 설정
+        if (Array.isArray(parcelData)) {
+            parcelData.forEach(p => p.parcel_type = 'click');
+        } else {
+            parcelData.parcel_type = 'click';
+        }
+
+        if (!this.isConnected) {
+            // 로컬 저장소에 추가
+            const currentData = window.getClickParcelData();
+            const parcelsArray = Array.isArray(parcelData) ? parcelData : [parcelData];
+
+            // 중복 제거 후 추가
+            parcelsArray.forEach(newParcel => {
+                const existingIndex = currentData.findIndex(p => p.id === newParcel.id || p.pnu === newParcel.pnu);
+                if (existingIndex >= 0) {
+                    currentData[existingIndex] = newParcel;
+                } else {
+                    currentData.push(newParcel);
+                }
+            });
+
+            window.saveClickParcelData(currentData);
+            console.log('💾 클릭 필지 로컬 저장 완료');
+            return true;
+        }
+
+        try {
+            const parcelsArray = Array.isArray(parcelData) ? parcelData : [parcelData];
+            const { data, error } = await this.supabase
+                .from('parcels')
+                .upsert(parcelsArray, { onConflict: 'id' });
+
+            if (error) throw error;
+
+            console.log('✅ 클릭 필지 Supabase 저장 완료:', parcelsArray.length, '개');
+            return true;
+        } catch (error) {
+            console.error('❌ 클릭 필지 Supabase 저장 실패:', error);
+            // 로컬 저장소에 폴백
+            const currentData = window.getClickParcelData();
+            const parcelsArray = Array.isArray(parcelData) ? parcelData : [parcelData];
+            parcelsArray.forEach(newParcel => {
+                const existingIndex = currentData.findIndex(p => p.id === newParcel.id || p.pnu === newParcel.pnu);
+                if (existingIndex >= 0) {
+                    currentData[existingIndex] = newParcel;
+                } else {
+                    currentData.push(newParcel);
+                }
+            });
+            window.saveClickParcelData(currentData);
+            return false;
+        }
+    }
+
+    // 검색 필지 저장 (단일 또는 배치)
+    async saveSearchParcel(parcelData) {
+        // parcel_type을 'search'로 설정
+        if (Array.isArray(parcelData)) {
+            parcelData.forEach(p => {
+                p.parcel_type = 'search';
+                p.color = '#9370DB'; // 검색 필지는 항상 보라색
+            });
+        } else {
+            parcelData.parcel_type = 'search';
+            parcelData.color = '#9370DB';
+        }
+
+        if (!this.isConnected) {
+            // 로컬 저장소에 추가
+            const currentData = window.getSearchParcelData();
+            const parcelsArray = Array.isArray(parcelData) ? parcelData : [parcelData];
+
+            // 중복 제거 후 추가
+            parcelsArray.forEach(newParcel => {
+                const existingIndex = currentData.findIndex(p => p.id === newParcel.id || p.pnu === newParcel.pnu);
+                if (existingIndex >= 0) {
+                    currentData[existingIndex] = newParcel;
+                } else {
+                    currentData.push(newParcel);
+                }
+            });
+
+            window.saveSearchParcelData(currentData);
+            console.log('💾 검색 필지 로컬 저장 완료');
+            return true;
+        }
+
+        try {
+            const parcelsArray = Array.isArray(parcelData) ? parcelData : [parcelData];
+            const { data, error } = await this.supabase
+                .from('parcels')
+                .upsert(parcelsArray, { onConflict: 'id' });
+
+            if (error) throw error;
+
+            console.log('✅ 검색 필지 Supabase 저장 완료:', parcelsArray.length, '개');
+            return true;
+        } catch (error) {
+            console.error('❌ 검색 필지 Supabase 저장 실패:', error);
+            // 로컬 저장소에 폴백
+            const currentData = window.getSearchParcelData();
+            const parcelsArray = Array.isArray(parcelData) ? parcelData : [parcelData];
+            parcelsArray.forEach(newParcel => {
+                const existingIndex = currentData.findIndex(p => p.id === newParcel.id || p.pnu === newParcel.pnu);
+                if (existingIndex >= 0) {
+                    currentData[existingIndex] = newParcel;
+                } else {
+                    currentData.push(newParcel);
+                }
+            });
+            window.saveSearchParcelData(currentData);
+            return false;
+        }
+    }
+
+    // 필지 삭제 (모드별 구분)
+    async deleteParcel(pnu, parcelType = null) {
+        if (!this.isConnected) {
+            // 로컬 저장소에서 삭제
+            if (!parcelType || parcelType === 'click') {
+                const clickData = window.getClickParcelData();
+                const updatedClickData = clickData.filter(p => p.pnu !== pnu && p.id !== pnu);
+                window.saveClickParcelData(updatedClickData);
+            }
+            if (!parcelType || parcelType === 'search') {
+                const searchData = window.getSearchParcelData();
+                const updatedSearchData = searchData.filter(p => p.pnu !== pnu && p.id !== pnu);
+                window.saveSearchParcelData(updatedSearchData);
+            }
+            console.log('💾 필지 로컬 삭제 완료:', pnu);
+            return true;
+        }
+
+        try {
+            let query = this.supabase.from('parcels').delete();
+
+            if (parcelType) {
+                query = query.eq('parcel_type', parcelType);
+            }
+
+            const { error } = await query.or(`pnu.eq.${pnu},id.eq.${pnu}`);
+
+            if (error) throw error;
+
+            console.log('✅ 필지 Supabase 삭제 완료:', pnu, parcelType ? `(${parcelType})` : '(전체)');
+            return true;
+        } catch (error) {
+            console.error('❌ 필지 Supabase 삭제 실패:', error);
             return false;
         }
     }

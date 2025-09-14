@@ -27,6 +27,12 @@ class AppInitializer {
                 this.initializeSupabaseParallel()
             ]);
 
+            // 🔄 기존 데이터 마이그레이션 실행 (Phase 1)
+            if (window.migrateOldParcelData) {
+                console.log('🔄 Phase 1: 필지 데이터 마이그레이션 실행');
+                window.migrateOldParcelData();
+            }
+
             // 데이터 로드는 의존성 완료 후 실행
             await this.loadAndDisplaySavedParcelsOptimized();
 

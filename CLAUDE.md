@@ -30,7 +30,7 @@ npx playwright test tests/specific-test.spec.js
 npx eslint public/js/*.js
 ```
 
-## 핵심 아키텍처 ⚠️ 중요 - 2025년 1월 14일 기준
+## 핵심 아키텍처 ⚠️ 중요 - 2025년 9월 14일 기준
 
 ### 현재 저장소 구조 (필독!)
 **⚠️ 중요: 2개 저장소만 사용**

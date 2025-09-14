@@ -264,8 +264,18 @@ class OptimizedAppManager {
     async _renderSingleParcel(parcelData) {
         if (!parcelData.polygonCoordinates || !window.map) return;
 
-        const key = parcelData.pnu || parcelData.id || `${parcelData.lat}_${parcelData.lng}`;
-        
+        // PNU 검증 - undefined, null, 빈 문자열 필터링
+        const pnu = parcelData.pnu || parcelData.id;
+        if (!pnu || pnu === 'undefined' || pnu === 'null' || pnu === '') {
+            console.warn('⚠️ 유효하지 않은 PNU로 인해 필지 렌더링 건너뜀:', {
+                pnu: pnu,
+                parcelData: parcelData
+            });
+            return;
+        }
+
+        const key = pnu;
+
         // 적절한 맵에 저장
         if (parcelData.colorType === 'search') {
             window.searchParcels = window.searchParcels || new Map();

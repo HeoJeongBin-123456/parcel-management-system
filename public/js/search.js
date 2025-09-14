@@ -72,6 +72,7 @@ function highlightParcel(parcelData) {
             strokeColor: '#6A0DAD', // 진한 보라색 테두리
             strokeWeight: 3,
             strokeOpacity: 1.0,
+            clickable: true, // 🖱️ 클릭 가능하도록 명시적으로 설정
             map: window.map
         });
 
@@ -132,51 +133,163 @@ function highlightParcel(parcelData) {
 
     // console.log('✅ 라벨 생성 완료:', displayText);
 
-        // window.searchParcels에 저장
-        const pnu = properties.PNU || properties.pnu || `search_${Date.now()}_${Math.random()}`;
+        // window.searchParcels에 저장 - PNU 검증 및 고유 ID 생성
+        let pnu = properties.PNU || properties.pnu;
+
+        // PNU가 없거나 유효하지 않으면 고유 ID 생성
+        if (!pnu || pnu === 'undefined' || pnu === 'null' || pnu === '') {
+            pnu = `search_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            console.log('🔍 검색 필지 고유 PNU 생성:', pnu);
+        }
+
         const searchResult = {
             pnu: pnu,
             polygon: highlightPolygon,
             label: label,
             data: parcelData,
-            displayText: displayText
+            displayText: displayText,
+            colorType: 'search' // 검색 필지 구분자 추가
         };
 
         window.searchParcels.set(pnu, searchResult);
     // console.log('💾 searchParcels에 저장 완료, 총 개수:', window.searchParcels.size);
 
+        // 검색 필지가 clickParcels에 잘못 추가되는 것을 방지
+        if (window.clickParcels && window.clickParcels.has(pnu)) {
+            console.log('🚫 검색 필지가 clickParcels에서 제거됨:', pnu);
+            window.clickParcels.delete(pnu);
+        }
+
         // currentSelectedPNU 설정 (저장 시 검색 필지로 인식되도록)
         window.currentSelectedPNU = pnu;
     // console.log('📌 currentSelectedPNU 설정:', pnu);
 
-        // localStorage에 저장
-        saveSearchResultsToStorage();
-        
-        // 왼쪽 폼에 지번 자동 입력
+        // 🚫 검색 필지는 자동 저장하지 않음 (사용자가 명시적으로 저장할 때만)
+        // saveSearchResultsToStorage(); // 주석 처리
+
+        // 왼쪽 폼에 지번 자동 입력 (저장 없이 표시만)
         const parcelNumberInput = document.getElementById('parcelNumber');
         if (parcelNumberInput) {
             // formatJibun 함수 사용하여 지번 포맷팅
             const jibun = formatJibun(properties);
-                         
+
+            // 🚫 자동 저장을 트리거하지 않도록 직접 값만 설정
             parcelNumberInput.value = jibun;
-    // console.log('📝 왼쪽 폼에 지번 자동 입력:', jibun);
-            
-            // 입력 이벤트 트리거 (다른 이벤트 리스너가 반응하도록)
-            parcelNumberInput.dispatchEvent(new Event('input'));
+            console.log('📝 왼쪽 폼에 지번 표시 (저장 없음):', jibun);
+
+            // 🚫 입력 이벤트 트리거 제거 (자동 저장 방지)
+            // parcelNumberInput.dispatchEvent(new Event('input')); // 주석 처리
         }
         
         // 폴리곤 클릭 이벤트 추가 - 클릭 시 왼쪽 폼에 정보 입력 및 메모 기능 활성화
-        naver.maps.Event.addListener(highlightPolygon, 'click', async function() {
-            const parcelNumberInput = document.getElementById('parcelNumber');
+        // ⚠️ 무한 루프 방지: 이벤트 중복 등록 체크
+        if (!highlightPolygon._searchEventAdded) {
+            highlightPolygon._searchEventAdded = true;
+            naver.maps.Event.addListener(highlightPolygon, 'click', async function(e) {
+                // 이벤트 전파 중지 (무한 루프 방지)
+                if (e && e.domEvent && typeof e.domEvent.stopPropagation === 'function') {
+                    e.domEvent.stopPropagation();
+                    e.domEvent.preventDefault();
+                }
+
+                console.log('🔍 검색 필지 전용 클릭 이벤트 실행:', pnu);
+
+                const parcelNumberInput = document.getElementById('parcelNumber');
             if (parcelNumberInput) {
                 // formatJibun 함수 사용하여 지번 포맷팅
                 const jibun = formatJibun(properties);
-                             
+
                 parcelNumberInput.value = jibun;
                 console.log('🖱️ 검색 필지 클릭 - 지번 입력:', jibun);
-                
-                // 기존 PNU 사용 (중복 생성 방지)
-                window.currentSelectedPNU = pnu;
+
+                // 현재 클릭된 폴리곤의 PNU 찾기 (클로저 문제 해결)
+                let clickedPNU = null;
+                window.searchParcels.forEach((searchResult, searchPNU) => {
+                    if (searchResult.polygon === highlightPolygon) {
+                        clickedPNU = searchPNU;
+                    }
+                });
+
+                if (!clickedPNU) {
+                    clickedPNU = pnu; // 백업으로 원래 PNU 사용
+                }
+
+                window.currentSelectedPNU = clickedPNU;
+                console.log('🎯 실제 클릭된 PNU:', clickedPNU);
+
+                // 🗑️ 이미 보라색인 검색 필지 클릭 시 삭제 확인 다이얼로그 표시
+                const searchParcel = window.searchParcels.get(clickedPNU);
+                console.log('🔍 검색 필지 클릭 확인:', { clickedPNU, searchParcel, hasPolygon: !!searchParcel?.polygon });
+                if (searchParcel && searchParcel.polygon) {
+                    if (confirm(`검색 필지 "${displayText}"를 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.`)) {
+                        console.log('🗑️ 검색 필지 삭제 시작:', clickedPNU);
+
+                        try {
+                            // ❌ 검색 필지는 Supabase에 저장된 데이터가 아니므로 삭제하지 않음
+                            // 검색 필지는 VWorld API에서 가져온 임시 데이터이므로 메모리에서만 제거
+                            console.log('🔍 검색 필지는 임시 데이터 - Supabase 삭제 건너뜀');
+
+                            // 1. LocalStorage에서 삭제 (혹시 저장된 검색 필지가 있다면)
+                            const savedData = JSON.parse(localStorage.getItem('parcelData') || '[]');
+                            const updatedData = savedData.filter(item => {
+                                return item.pnu !== clickedPNU && item.parcelNumber !== jibun;
+                            });
+                            localStorage.setItem('parcelData', JSON.stringify(updatedData));
+
+                            // 3. 색상 정보 삭제
+                            const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
+                            delete parcelColors[clickedPNU];
+                            localStorage.setItem('parcelColors', JSON.stringify(parcelColors));
+
+                            // 4. 마커 상태 삭제
+                            const markerStates = JSON.parse(localStorage.getItem('markerStates') || '{}');
+                            delete markerStates[clickedPNU];
+                            localStorage.setItem('markerStates', JSON.stringify(markerStates));
+
+                            // 5. 지도에서 마커 제거
+                            if (window.MemoMarkerManager && window.MemoMarkerManager.markers) {
+                                const markerInfo = window.MemoMarkerManager.markers.get(clickedPNU);
+                                if (markerInfo && markerInfo.marker) {
+                                    markerInfo.marker.setMap(null);
+                                    window.MemoMarkerManager.markers.delete(clickedPNU);
+                                    console.log('✅ 마커 제거 완료:', clickedPNU);
+                                }
+                            }
+
+                            // 6. 지도에서 폴리곤과 라벨 제거
+                            if (searchParcel.polygon) {
+                                searchParcel.polygon.setMap(null);
+                            }
+                            if (searchParcel.label) {
+                                searchParcel.label.setMap(null);
+                            }
+
+                            // 7. searchParcels Map에서 제거
+                            window.searchParcels.delete(clickedPNU);
+
+                            // 8. localStorage 업데이트 (삭제된 상태 저장)
+                            saveSearchResultsToStorage();
+
+                            // 9. clickParcels에서도 제거 (혹시 있다면)
+                            if (window.clickParcels && window.clickParcels.has(clickedPNU)) {
+                                window.clickParcels.delete(clickedPNU);
+                            }
+
+                            // 9. 폼 초기화
+                            document.getElementById('parcelForm').reset();
+                            window.currentSelectedPNU = null;
+
+                            console.log('✨ 검색 필지 삭제 완료:', jibun);
+                            alert(`검색 필지 "${displayText}"가 삭제되었습니다.`);
+
+                        } catch (error) {
+                            console.error('❌ 검색 필지 삭제 실패:', error);
+                            alert('필지 삭제 중 오류가 발생했습니다.');
+                        }
+
+                        return; // 삭제했으면 더 이상 진행하지 않음
+                    }
+                }
 
                 // 검색 필지 색상을 다시 고정
                 highlightPolygon.setOptions({
@@ -188,16 +301,17 @@ function highlightParcel(parcelData) {
                 });
 
                 console.log('🔍 검색 필지 클릭 - 보라색 유지:', pnu);
-                
+
                 // 기존 저장된 데이터 로드 (메모가 있다면)
                 await loadExistingParcelData(jibun, 'search');
-                
+
                 // 폼의 다른 필드도 초기화 또는 자동 입력 가능
                 document.getElementById('ownerName')?.focus();
-                
-                console.log('📝 검색 필지 메모 기능 활성화:', searchPNU);
+
+                console.log('📝 검색 필지 메모 기능 활성화:', pnu);
             }
-        });
+            });
+        }
 
     } catch (error) {
         console.error('💥 필지 하이라이트 실패:', error);
@@ -375,14 +489,29 @@ async function toggleSearchMode() {
         // 검색 모드: 클릭 필지 숨기고 검색 필지 표시
         toggleBtn.textContent = '검색 ON';
         toggleBtn.classList.add('active');
-        
+
     // console.log('>> 검색 ON 모드로 전환');
-        
+
+        // 🚫 검색 모드에서 저장 버튼 비활성화
+        const saveBtn = document.getElementById('saveBtn');
+        if (saveBtn) {
+            saveBtn.disabled = true;
+            saveBtn.style.opacity = '0.5';
+            saveBtn.style.cursor = 'not-allowed';
+            saveBtn.title = '검색 모드에서는 저장할 수 없습니다';
+            console.log('🚫 검색 모드 - 저장 버튼 비활성화');
+        }
+
+        // 📍 검색 모드에서 모든 마커 숨김
+        if (window.hideClickMarkers) window.hideClickMarkers();
+        if (window.hideSearchMarkers) window.hideSearchMarkers();
+        console.log('📍 검색 모드 - 모든 마커 숨김');
+
         // 클릭 필지 숨기기
     // console.log('클릭 필지 숨기기 시작...');
         window.hideClickParcels();
     // console.log('클릭 필지 숨기기 완료');
-        
+
         // 검색 필지 표시 및 복원
     // console.log('검색 필지 표시 시작...');
         // localStorage에서 검색 결과 복원
@@ -399,11 +528,27 @@ async function toggleSearchMode() {
 
     // console.log('>> 검색 OFF (클릭) 모드로 전환');
 
+        // ✅ 클릭 모드에서 저장 버튼 다시 활성화
+        const saveBtn = document.getElementById('saveBtn');
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.style.opacity = '1';
+            saveBtn.style.cursor = 'pointer';
+            saveBtn.title = '';
+            console.log('✅ 클릭 모드 - 저장 버튼 활성화');
+        }
+
         // 검색 필지 숨기기 (데이터는 보존)
     // console.log('검색 필지 숨기기 시작...');
         window.hideSearchParcels();
         // clearSearchResults(); // 메모리에서 검색 결과 완전 제거 - 주석 처리
         // removeSearchResultsFromStorage(); // localStorage에서도 제거 - 주석 처리
+
+        // 🧹 강화된 검색 필지 정리 시스템
+        if (window.cleanupSearchParcelsFromClickMap) {
+            window.cleanupSearchParcelsFromClickMap();
+        }
+
         console.log('🧹 검색 OFF - 검색 필지 숨김 (데이터 보존)');
     // console.log('검색 필지 완전 정리 완료');
 
@@ -411,8 +556,19 @@ async function toggleSearchMode() {
     // console.log('클릭 필지 표시 시작...');
         window.showClickParcels();
     // console.log('클릭 필지 표시 완료');
+
+        // Phase 3: 클릭 필지 마커 표시, 검색 필지 마커 숨김
+        if (window.hideSearchMarkers) window.hideSearchMarkers();
+        if (window.showClickMarkers) window.showClickMarkers();
     }
-    
+
+    // Phase 3: 검색 모드일 때 마커 처리
+    if (window.currentMode === 'search') {
+        // 클릭 필지 마커 숨김, 검색 필지 마커 표시
+        if (window.hideClickMarkers) window.hideClickMarkers();
+        if (window.showSearchMarkers) window.showSearchMarkers();
+    }
+
     // console.log('=== toggleSearchMode 완료 ===');
 }
 

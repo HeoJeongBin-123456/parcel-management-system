@@ -4,7 +4,7 @@
 - generic [ref=e2]:
   - banner [ref=e3]:
     - heading "네이버 지도 필지 관리 프로그램" [level=1] [ref=e4]
-    - generic [ref=e5]: 🟢 Supabase 연결됨
+    - generic [ref=e5]: 🟢 실시간 동기화 (1/999999명)
     - generic [ref=e6]:
       - generic [ref=e7]:
         - button "일반지도" [ref=e8] [cursor=pointer]

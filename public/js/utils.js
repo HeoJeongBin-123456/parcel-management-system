@@ -47,16 +47,10 @@ document.addEventListener('DOMContentLoaded', async function() {
                         searchToggleBtn.textContent = savedMode === 'search' ? '검색 ON' : '검색 OFF';
                     }
 
-                    // 검색 모드일 때 색상을 보라색으로 자동 설정
+                    // 🚫 검색 모드에서도 보라색으로 자동 설정하지 않음 (보라색은 검색 필지 전용)
                     if (savedMode === 'search') {
-                        currentColor = '#9370DB';
-                        const colorDisplay = document.getElementById('currentColor');
-                        if (colorDisplay) {
-                            colorDisplay.style.background = currentColor;
-                        }
-                        // 색상 팔레트에서 모든 항목 비활성화 (보라색은 팔레트에 없음)
-                        document.querySelectorAll('.color-item').forEach(c => c.classList.remove('active'));
-                        console.log('🟣 검색 모드 - 보라색 자동 설정');
+                        // 검색 모드여도 색상은 그대로 유지 (보라색으로 변경하지 않음)
+                        console.log('🔍 검색 모드 복원 - 기존 색상 유지');
 
                         // 🔍 검색 모드일 때 검색 결과 복원
                         if (typeof loadSearchResultsFromStorage === 'function') {
@@ -68,6 +62,14 @@ document.addEventListener('DOMContentLoaded', async function() {
                             }
                         } else {
                             console.warn('⚠️ loadSearchResultsFromStorage 함수가 없습니다');
+                        }
+                    } else {
+                        // 🧹 클릭 모드일 때 보라색 필지 완전 제거
+                        if (window.cleanupSearchParcelsFromClickMap) {
+                            setTimeout(() => {
+                                window.cleanupSearchParcelsFromClickMap();
+                                console.log('🧹 클릭 모드 - 보라색 필지 완전 제거 완료');
+                            }, 1000); // 지도 초기화 후 실행
                         }
                     }
 

@@ -6,14 +6,26 @@ class MemoMarkerManager {
         console.log('📍 MemoMarkerManager 초기화');
     }
 
-    // 마커 표시 조건 확인 (엄격한 조건 적용)
+    // 마커 표시 조건 확인 (지번 포함된 확장 조건)
     shouldShowMarker(parcelData) {
-        // 실제 사용자가 입력한 정보가 있는지 확인 (엄격한 조건)
+        // 실제 사용자가 입력한 정보가 있는지 확인 (지번 포함)
+        const hasValidParcelNumber = !!(
+            (parcelData.parcelNumber &&
+             parcelData.parcelNumber.trim() &&
+             parcelData.parcelNumber !== '예: 서울시 강남구 삼성동 123-4' &&
+             parcelData.parcelNumber !== '자동입력' &&
+             parcelData.parcelNumber !== '(지번 없음)') ||
+            (parcelData.parcel_name &&
+             parcelData.parcel_name.trim() &&
+             parcelData.parcel_name !== '(지번 없음)')
+        );
+
         const hasRealInfo = !!(
             (parcelData.memo && parcelData.memo.trim() && parcelData.memo.trim() !== '(메모 없음)') ||
             (parcelData.ownerName && parcelData.ownerName.trim() && parcelData.ownerName.trim() !== '홍길동') ||
             (parcelData.ownerAddress && parcelData.ownerAddress.trim() && parcelData.ownerAddress.trim() !== '서울시 강남구...') ||
-            (parcelData.ownerContact && parcelData.ownerContact.trim() && parcelData.ownerContact.trim() !== '010-1234-5678')
+            (parcelData.ownerContact && parcelData.ownerContact.trim() && parcelData.ownerContact.trim() !== '010-1234-5678') ||
+            hasValidParcelNumber
         );
 
         // 검색 필지인지 확인
@@ -23,6 +35,8 @@ class MemoMarkerManager {
             // 검색 필지는 실제 정보가 있어야만 마커 표시
             console.log('🔍 검색 필지 마커 조건 확인:', {
                 pnu: parcelData.pnu,
+                parcelNumber: parcelData.parcelNumber?.trim() || '(없음)',
+                hasValidParcelNumber: hasValidParcelNumber,
                 hasRealInfo: hasRealInfo,
                 memo: parcelData.memo?.trim() || '(없음)',
                 ownerName: parcelData.ownerName?.trim() || '(없음)',
@@ -32,9 +46,11 @@ class MemoMarkerManager {
             return hasRealInfo;
         }
 
-        // 일반 필지도 실제 정보가 있어야만 마커 표시 (지번만으로는 마커 생성하지 않음)
+        // 일반 필지도 실제 정보가 있어야만 마커 표시 (지번 포함)
         console.log('📍 일반 필지 마커 조건 확인:', {
             parcelName: parcelData.parcelName || parcelData.parcel_name,
+            parcelNumber: parcelData.parcelNumber?.trim() || '(없음)',
+            hasValidParcelNumber: hasValidParcelNumber,
             hasRealInfo: hasRealInfo,
             memo: parcelData.memo?.trim() || '(없음)',
             ownerName: parcelData.ownerName?.trim() || '(없음)',
@@ -234,6 +250,7 @@ class MemoMarkerManager {
             if (!this.shouldShowMarker(parcelData)) {
                 console.log('🚫 마커 생성 조건 미충족:', {
                     parcelName: parcelData.parcelName || parcelData.parcel_name,
+                    parcelNumber: parcelData.parcelNumber?.trim() || '(없음)',
                     memo: parcelData.memo?.trim() || '(없음)',
                     ownerName: parcelData.ownerName?.trim() || '(없음)',
                     ownerAddress: parcelData.ownerAddress?.trim() || '(없음)',
@@ -383,8 +400,18 @@ class MemoMarkerManager {
         }
         
         element.textContent = 'M';
-        element.title = `메모: ${parcelData.memo.substring(0, 50)}${parcelData.memo.length > 50 ? '...' : ''}`;
-        
+
+        // 지번만 있는 경우와 메모가 있는 경우 구분해서 title 설정
+        if (parcelData.memo && parcelData.memo.trim() && parcelData.memo.trim() !== '(메모 없음)') {
+            element.title = `메모: ${parcelData.memo.substring(0, 50)}${parcelData.memo.length > 50 ? '...' : ''}`;
+        } else if (parcelData.parcelNumber && parcelData.parcelNumber.trim()) {
+            element.title = `지번: ${parcelData.parcelNumber}`;
+        } else if (parcelData.parcel_name && parcelData.parcel_name.trim()) {
+            element.title = `지번: ${parcelData.parcel_name}`;
+        } else {
+            element.title = '필지 정보';
+        }
+
         return element;
     }
 

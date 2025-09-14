@@ -348,10 +348,24 @@ async function drawParcelPolygon(parcel, isSelected = false) {
         
         // 클릭 이벤트
         naver.maps.Event.addListener(polygon, 'click', async function(e) {
-            e.domEvent.stopPropagation(); // 지도 클릭 이벤트 방지
+            // 안전한 stopPropagation 호출
+            try {
+                if (e && e.domEvent && typeof e.domEvent.stopPropagation === 'function') {
+                    e.domEvent.stopPropagation(); // 지도 클릭 이벤트 방지
+                }
+            } catch (error) {
+                console.warn('⚠️ stopPropagation 호출 실패:', error);
+            }
 
-            // PNU 확실히 설정
+            // PNU 확실히 설정 및 검증
             const pnu = parcel.properties.PNU || parcel.properties.pnu;
+
+            // PNU 유효성 검사
+            if (!pnu || pnu === 'undefined' || pnu === 'null' || pnu === '') {
+                console.warn('⚠️ 유효하지 않은 PNU로 클릭 이벤트 건너뜀:', pnu);
+                return;
+            }
+
             window.currentSelectedPNU = pnu;
             window.currentSelectedParcel = parcel;
             console.log('🎯 필지 클릭 - PNU 설정:', pnu, formatJibun(parcel.properties));
@@ -567,11 +581,27 @@ function createPolygonFromParcel(parcel) {
             clickable: true
         });
 
-        // 클릭 이벤트 추가
-        naver.maps.Event.addListener(polygon, 'click', async function(e) {
-            e.domEvent.stopPropagation();
+        // 클릭 이벤트 추가 - 중복 등록 방지
+        if (!polygon._parcelEventAdded) {
+            polygon._parcelEventAdded = true;
+            naver.maps.Event.addListener(polygon, 'click', async function(e) {
+            // 안전한 stopPropagation 호출
+            try {
+                if (e && e.domEvent && typeof e.domEvent.stopPropagation === 'function') {
+                    e.domEvent.stopPropagation();
+                }
+            } catch (error) {
+                console.warn('⚠️ stopPropagation 호출 실패:', error);
+            }
 
             const pnu = parcel.properties.PNU || parcel.properties.pnu;
+
+            // PNU 유효성 검사
+            if (!pnu || pnu === 'undefined' || pnu === 'null' || pnu === '') {
+                console.warn('⚠️ 유효하지 않은 PNU로 클릭 이벤트 건너뜀:', pnu);
+                return;
+            }
+
             window.currentSelectedPNU = pnu;
             window.currentSelectedParcel = parcel;
             console.log('🎯 재생성된 필지 클릭 - PNU 설정:', pnu, formatJibun(parcel.properties));
@@ -582,7 +612,8 @@ function createPolygonFromParcel(parcel) {
             if (window.currentColor && window.currentColor !== 'transparent') {
                 await applyColorToParcel(parcel, window.currentColor);
             }
-        });
+            });
+        }
 
         return polygon;
     } catch (error) {
@@ -1188,6 +1219,374 @@ async function saveParcelData() {
     }
 }
 
+// =====================================================================
+// Phase 2: 모드별로 분리된 저장 함수들
+// =====================================================================
+
+// 클릭 필지 전용 저장 함수
+async function saveClickParcelData() {
+    let parcelNumber = document.getElementById('parcelNumber').value;
+
+    // PNU가 있으면 지번 체크 건너뛰기
+    if (!window.currentSelectedPNU && !parcelNumber) {
+        console.warn('⚠️ 필지를 선택하거나 지번을 입력해주세요.');
+        return false;
+    }
+
+    // PNU가 있고 지번이 비어있으면 자동 설정
+    if (window.currentSelectedPNU && !parcelNumber) {
+        parcelNumber = '자동입력';
+        console.log('🎯 클릭 필지 PNU로 저장 진행:', window.currentSelectedPNU);
+    }
+
+    console.log('💾 클릭 필지 저장 시작:', parcelNumber);
+
+    try {
+        // 현재 선택된 필지의 PNU 사용
+        let currentPNU = window.currentSelectedPNU;
+        let geometry = null;
+
+        // PNU가 있으면 clickParcels에서 geometry 가져오기
+        if (currentPNU) {
+            let parcelData = window.clickParcels.get(currentPNU);
+            if (parcelData && parcelData.data) {
+                geometry = parcelData.data.geometry;
+            }
+        } else {
+            // PNU가 없으면 지번으로 clickParcels에서 검색
+            window.clickParcels.forEach((parcelData, pnu) => {
+                const jibun = formatJibun(parcelData.data?.properties || {});
+                if (jibun === parcelNumber) {
+                    currentPNU = pnu;
+                    geometry = parcelData.data?.geometry;
+                }
+            });
+        }
+
+        const formData = {
+            parcelNumber: parcelNumber,
+            pnu: currentPNU,
+            ownerName: document.getElementById('ownerName').value,
+            ownerAddress: document.getElementById('ownerAddress').value,
+            ownerContact: document.getElementById('ownerContact').value,
+            memo: document.getElementById('memo').value,
+            color: currentColor,
+            geometry: geometry,
+            timestamp: new Date().toISOString(),
+            isSearchParcel: false,
+            parcel_type: 'click'
+        };
+
+        // 📍 geometry에서 중심 좌표 추출 (메모 마커용)
+        if (geometry && geometry.coordinates) {
+            let centerLat, centerLng;
+
+            if (geometry.type === 'Point') {
+                [centerLng, centerLat] = geometry.coordinates;
+            } else if (geometry.type === 'Polygon') {
+                const center = calculatePolygonCenter(geometry.coordinates[0]);
+                [centerLng, centerLat] = center;
+            } else if (geometry.type === 'MultiPolygon') {
+                const center = calculatePolygonCenter(geometry.coordinates[0][0]);
+                [centerLng, centerLat] = center;
+            }
+
+            if (centerLat && centerLng) {
+                formData.lat = parseFloat(centerLat);
+                formData.lng = parseFloat(centerLng);
+            }
+        }
+
+        console.log('📄 클릭 필지 저장할 데이터:', formData);
+
+        // 1단계: 새로운 분리된 localStorage 저장
+        let localStorageSuccess = false;
+        try {
+            let savedData = window.getClickParcelData();
+            const existingIndex = savedData.findIndex(item =>
+                (item.pnu && item.pnu === currentPNU) ||
+                item.parcelNumber === formData.parcelNumber
+            );
+
+            if (existingIndex > -1) {
+                savedData[existingIndex] = formData;
+            } else {
+                savedData.push(formData);
+            }
+
+            window.saveClickParcelData(savedData);
+            localStorageSuccess = true;
+            console.log('✅ 클릭 필지 localStorage 저장 성공');
+        } catch (localError) {
+            console.error('❌ 클릭 필지 localStorage 저장 실패:', localError);
+        }
+
+        // 2단계: Supabase에 클릭 필지로 저장
+        let supabaseSuccess = false;
+        try {
+            if (window.SupabaseManager && window.SupabaseManager.isConnected) {
+                await window.SupabaseManager.saveClickParcel(formData);
+                supabaseSuccess = true;
+                console.log('✅ 클릭 필지 Supabase 저장 성공:', currentPNU);
+            } else {
+                console.warn('⚠️ SupabaseManager 연결 없음 - localStorage만 사용');
+            }
+        } catch (supabaseError) {
+            console.error('❌ 클릭 필지 Supabase 저장 실패:', supabaseError);
+        }
+
+        // 3단계: clickParcels Map 업데이트
+        const parcelData = window.clickParcels.get(currentPNU);
+        if (parcelData) {
+            // Map에 저장된 데이터 업데이트
+            parcelData.ownerName = formData.ownerName;
+            parcelData.ownerAddress = formData.ownerAddress;
+            parcelData.ownerContact = formData.ownerContact;
+            parcelData.memo = formData.memo;
+            parcelData.color = formData.color;
+            parcelData.savedInfo = formData;
+
+            // 폴리곤 색상 업데이트
+            if (parcelData.polygon) {
+                parcelData.polygon.setOptions({
+                    fillColor: formData.color,
+                    fillOpacity: 0.5,
+                    strokeColor: formData.color
+                });
+            }
+
+            console.log('✅ 클릭 필지 지도 업데이트 성공');
+        }
+
+        // 4단계: UI 업데이트
+        await updateParcelList();
+        if (window.parcelManager) {
+            window.parcelManager.loadParcels();
+            window.parcelManager.applyFilters();
+            window.parcelManager.render();
+        }
+        window.dispatchEvent(new Event('refreshParcelList'));
+
+        // 5단계: 마커 업데이트
+        const hasRealInfo = (formData.ownerName && formData.ownerName.trim() !== '') ||
+                           (formData.ownerAddress && formData.ownerAddress.trim() !== '') ||
+                           (formData.ownerContact && formData.ownerContact.trim() !== '') ||
+                           (formData.memo && formData.memo.trim() !== '');
+
+        const shouldCreateMarker = hasRealInfo || (formData.parcelNumber && formData.parcelNumber.trim() !== '');
+
+        if (window.MemoMarkerManager) {
+            if (shouldCreateMarker) {
+                const markerData = {
+                    ...formData,
+                    lat: formData.lat,
+                    lng: formData.lng,
+                    geometry: formData.geometry
+                };
+                await window.MemoMarkerManager.createMemoMarker(markerData);
+                console.log('📍 클릭 필지 마커 생성/업데이트:', formData.parcelNumber);
+            } else {
+                const pnu = formData.pnu || currentPNU;
+                if (pnu && window.MemoMarkerManager.markers.has(pnu)) {
+                    window.MemoMarkerManager.removeMemoMarker(pnu);
+                    console.log('🗑️ 클릭 필지 마커 제거:', formData.parcelNumber);
+                }
+            }
+        }
+
+        const saveStatus = [];
+        if (localStorageSuccess) saveStatus.push('로컬저장');
+        if (supabaseSuccess) saveStatus.push('클라우드저장');
+
+        const statusText = saveStatus.length > 0 ? `(${saveStatus.join(', ')})` : '(오프라인저장)';
+        console.log(`✅ 클릭 필지 저장 완료 ${statusText}`);
+
+        return true;
+
+    } catch (error) {
+        console.error('🚨 클릭 필지 저장 중 오류:', error);
+        return false;
+    }
+}
+
+// 검색 필지 전용 저장 함수
+async function saveSearchParcelData() {
+    let parcelNumber = document.getElementById('parcelNumber').value;
+
+    // PNU가 있으면 지번 체크 건너뛰기
+    if (!window.currentSelectedPNU && !parcelNumber) {
+        console.warn('⚠️ 필지를 선택하거나 지번을 입력해주세요.');
+        return false;
+    }
+
+    // PNU가 있고 지번이 비어있으면 자동 설정
+    if (window.currentSelectedPNU && !parcelNumber) {
+        parcelNumber = '자동입력';
+        console.log('🎯 검색 필지 PNU로 저장 진행:', window.currentSelectedPNU);
+    }
+
+    console.log('💾 검색 필지 저장 시작:', parcelNumber);
+
+    try {
+        // 현재 선택된 필지의 PNU 사용
+        let currentPNU = window.currentSelectedPNU;
+        let geometry = null;
+
+        // PNU가 있으면 searchParcels에서 geometry 가져오기
+        if (currentPNU) {
+            let parcelData = window.searchParcels.get(currentPNU);
+            if (parcelData) {
+                geometry = parcelData.data ? parcelData.data.geometry : parcelData.geometry;
+            }
+        } else {
+            // PNU가 없으면 지번으로 searchParcels에서 검색
+            window.searchParcels.forEach((parcelData, pnu) => {
+                const jibun = formatJibun(parcelData.data?.properties || {});
+                if (jibun === parcelNumber && !currentPNU) {
+                    currentPNU = pnu;
+                    geometry = parcelData.data ? parcelData.data.geometry : parcelData.geometry;
+                }
+            });
+        }
+
+        const formData = {
+            parcelNumber: parcelNumber,
+            pnu: currentPNU,
+            ownerName: document.getElementById('ownerName').value,
+            ownerAddress: document.getElementById('ownerAddress').value,
+            ownerContact: document.getElementById('ownerContact').value,
+            memo: document.getElementById('memo').value,
+            color: '#9370DB', // 검색 필지는 항상 보라색
+            geometry: geometry,
+            timestamp: new Date().toISOString(),
+            isSearchParcel: true,
+            parcel_type: 'search'
+        };
+
+        // 📍 geometry에서 중심 좌표 추출 (메모 마커용)
+        if (geometry && geometry.coordinates) {
+            let centerLat, centerLng;
+
+            if (geometry.type === 'Point') {
+                [centerLng, centerLat] = geometry.coordinates;
+            } else if (geometry.type === 'Polygon') {
+                const center = calculatePolygonCenter(geometry.coordinates[0]);
+                [centerLng, centerLat] = center;
+            } else if (geometry.type === 'MultiPolygon') {
+                const center = calculatePolygonCenter(geometry.coordinates[0][0]);
+                [centerLng, centerLat] = center;
+            }
+
+            if (centerLat && centerLng) {
+                formData.lat = parseFloat(centerLat);
+                formData.lng = parseFloat(centerLng);
+            }
+        }
+
+        console.log('📄 검색 필지 저장할 데이터:', formData);
+
+        // 1단계: 새로운 분리된 localStorage 저장
+        let localStorageSuccess = false;
+        try {
+            let savedData = window.getSearchParcelData();
+            const existingIndex = savedData.findIndex(item =>
+                (item.pnu && item.pnu === currentPNU) ||
+                item.parcelNumber === formData.parcelNumber
+            );
+
+            if (existingIndex > -1) {
+                savedData[existingIndex] = formData;
+            } else {
+                savedData.push(formData);
+            }
+
+            window.saveSearchParcelData(savedData);
+            localStorageSuccess = true;
+            console.log('✅ 검색 필지 localStorage 저장 성공');
+        } catch (localError) {
+            console.error('❌ 검색 필지 localStorage 저장 실패:', localError);
+        }
+
+        // 2단계: Supabase에 검색 필지로 저장
+        let supabaseSuccess = false;
+        try {
+            if (window.SupabaseManager && window.SupabaseManager.isConnected) {
+                await window.SupabaseManager.saveSearchParcel(formData);
+                supabaseSuccess = true;
+                console.log('✅ 검색 필지 Supabase 저장 성공:', currentPNU);
+            } else {
+                console.warn('⚠️ SupabaseManager 연결 없음 - localStorage만 사용');
+            }
+        } catch (supabaseError) {
+            console.error('❌ 검색 필지 Supabase 저장 실패:', supabaseError);
+        }
+
+        // 3단계: searchParcels Map 업데이트
+        const parcelData = window.searchParcels.get(currentPNU);
+        if (parcelData) {
+            // Map에 저장된 데이터 업데이트
+            parcelData.ownerName = formData.ownerName;
+            parcelData.ownerAddress = formData.ownerAddress;
+            parcelData.ownerContact = formData.ownerContact;
+            parcelData.memo = formData.memo;
+            parcelData.color = formData.color;
+            parcelData.savedInfo = formData;
+
+            // 검색 필지는 보라색 유지
+            console.log('🔍 검색 필지는 보라색 유지:', currentPNU);
+
+            console.log('✅ 검색 필지 지도 업데이트 성공');
+        }
+
+        // 4단계: UI 업데이트
+        await updateParcelList();
+        if (window.parcelManager) {
+            window.parcelManager.loadParcels();
+            window.parcelManager.applyFilters();
+            window.parcelManager.render();
+        }
+        window.dispatchEvent(new Event('refreshParcelList'));
+
+        // 5단계: 마커 업데이트 (검색 필지는 더 엄격하게)
+        const hasRealInfo = (formData.ownerName && formData.ownerName.trim() !== '') ||
+                           (formData.ownerAddress && formData.ownerAddress.trim() !== '') ||
+                           (formData.ownerContact && formData.ownerContact.trim() !== '') ||
+                           (formData.memo && formData.memo.trim() !== '');
+
+        if (window.MemoMarkerManager) {
+            if (hasRealInfo) {
+                const markerData = {
+                    ...formData,
+                    lat: formData.lat,
+                    lng: formData.lng,
+                    geometry: formData.geometry
+                };
+                await window.MemoMarkerManager.createMemoMarker(markerData);
+                console.log('📍 검색 필지 마커 생성/업데이트:', formData.parcelNumber);
+            } else {
+                const pnu = formData.pnu || currentPNU;
+                if (pnu && window.MemoMarkerManager.markers.has(pnu)) {
+                    window.MemoMarkerManager.removeMemoMarker(pnu);
+                    console.log('🗑️ 검색 필지 마커 제거:', formData.parcelNumber);
+                }
+            }
+        }
+
+        const saveStatus = [];
+        if (localStorageSuccess) saveStatus.push('로컬저장');
+        if (supabaseSuccess) saveStatus.push('클라우드저장');
+
+        const statusText = saveStatus.length > 0 ? `(${saveStatus.join(', ')})` : '(오프라인저장)';
+        console.log(`✅ 검색 필지 저장 완료 ${statusText}`);
+
+        return true;
+
+    } catch (error) {
+        console.error('🚨 검색 필지 저장 중 오류:', error);
+        return false;
+    }
+}
+
 // 저장된 필지 데이터 가져오기
 async function getSavedParcelData(pnu) {
     const savedData = JSON.parse(await window.migratedGetItem(CONFIG.STORAGE_KEY) || '[]');
@@ -1528,9 +1927,19 @@ function initializeEventListeners() {
         });
     });
     
-    // 저장 버튼
+    // 저장 버튼 - Phase 4: 모드별 함수 호출
     document.getElementById('saveBtn').addEventListener('click', async () => {
-        await saveParcelData();
+        // 🚫 검색 모드에서는 저장 불가
+        if (window.currentMode === 'search') {
+            console.warn('🚫 검색 모드에서는 저장할 수 없습니다');
+            alert('검색 모드에서는 저장할 수 없습니다.\n\n' +
+                  '• 검색 필지를 삭제하려면 해당 필지를 클릭하세요\n' +
+                  '• 필지에 정보를 저장하려면 검색 OFF 모드로 전환하세요');
+            return;
+        }
+
+        console.log('🎯 클릭 모드에서 saveClickParcelData() 호출');
+        await saveClickParcelData();
     });
     
     // 초기화 버튼들 (제거된 버튼들은 안전하게 체크)
