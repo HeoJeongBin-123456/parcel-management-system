@@ -317,23 +317,22 @@ async function drawParcelPolygon(parcel, isSelected = false) {
             savedParcel = await getSavedParcelDataByJibun(jibun);
         }
 
-        // DataPersistenceManager에서 색상 상태 확인 (우선순위: DataPersistenceManager > savedParcel)
+        // LocalStorage에서 색상 상태 확인
         let fillColor = 'transparent';
         let fillOpacity = 0;
 
-        if (window.dataPersistenceManager) {
-            const colorState = window.dataPersistenceManager.getColorState(pnu);
-            if (colorState && colorState.is_colored && colorState.color) {
-                fillColor = colorState.color;
-                fillOpacity = 0.5;
-                console.log('🎨 DataPersistenceManager에서 색상 복원:', pnu, fillColor);
-            } else if (savedParcel && savedParcel.color) {
-                fillColor = savedParcel.color;
-                fillOpacity = savedParcel.color !== 'transparent' ? 0.5 : 0;
-            }
-        } else if (savedParcel && savedParcel.color) {
+        // 1. parcelColors에서 색상 확인 (우선순위 높음)
+        const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
+        if (parcelColors[pnu] && parcelColors[pnu].color) {
+            fillColor = parcelColors[pnu].color;
+            fillOpacity = fillColor !== 'transparent' ? 0.5 : 0;
+            console.log('🎨 parcelColors에서 색상 복원:', pnu, fillColor);
+        }
+        // 2. savedParcel에서 색상 확인 (대체 옵션)
+        else if (savedParcel && savedParcel.color && savedParcel.color !== 'transparent') {
             fillColor = savedParcel.color;
-            fillOpacity = savedParcel.color !== 'transparent' ? 0.5 : 0;
+            fillOpacity = 0.5;
+            console.log('🎨 savedParcel에서 색상 복원:', pnu, fillColor);
         }
         
         const polygon = new naver.maps.Polygon({
@@ -367,7 +366,7 @@ async function drawParcelPolygon(parcel, isSelected = false) {
             color: fillColor
         });
 
-        // 🗺️ 폴리곤 데이터를 Supabase + IndexedDB에 저장 (실시간 공유)
+        // 🗺️ 폴리곤 데이터를 Supabase + LocalStorage에 저장 (실시간 공유)
         if (window.dataPersistenceManager) {
             window.dataPersistenceManager.savePolygonData(pnu, geometry, properties)
                 .then(() => console.log('🗺️ 폴리곤 데이터 저장 완료:', pnu))
@@ -532,44 +531,328 @@ function selectParcel(parcel, polygon) {
     }
 }
 
-// 필지에 색상 적용 (즉시 저장 포함)
-async function applyColorToParcel(parcel, color) {
-    const pnu = parcel.properties.PNU || parcel.properties.pnu;
-    const parcelData = window.clickParcels.get(pnu);
+// 필지로부터 폴리곤 생성 함수
+function createPolygonFromParcel(parcel) {
+    try {
+        const pnu = parcel.properties.PNU || parcel.properties.pnu;
 
-    if (parcelData) {
-        // 1. UI 즉시 업데이트
-        parcelData.polygon.setOptions({
-            fillColor: color,
-            fillOpacity: 0.5
-        });
-        parcelData.color = color;
-
-        // 2. 색상 즉시 저장 (DataPersistenceManager 사용)
-        if (window.dataPersistenceManager) {
-            const colorData = {
-                color: color,
-                is_colored: !!color,
-                color_index: getColorIndex(color)
-            };
-
-            await window.dataPersistenceManager.saveColorState(pnu, colorData);
-            console.log('🎨 색상 즉시 저장됨:', pnu, color);
-        } else {
-            // 폴백: 기존 방식으로 저장
-            console.log('⚠️ DataPersistenceManager 없음, 기존 방식 사용');
+        // 좌표 데이터 처리
+        let paths = [];
+        if (parcel.geometry) {
+            if (parcel.geometry.type === 'Polygon') {
+                paths = parcel.geometry.coordinates[0].map(coord =>
+                    new naver.maps.LatLng(coord[1], coord[0])
+                );
+            } else if (parcel.geometry.type === 'MultiPolygon') {
+                paths = parcel.geometry.coordinates[0][0].map(coord =>
+                    new naver.maps.LatLng(coord[1], coord[0])
+                );
+            }
         }
 
-        // 3. 마커 상태 평가 (색상 변경이 마커에 영향 없음)
-        if (window.dataPersistenceManager) {
-            const parcelInfo = {
-                parcel_number: parcel.properties.JIBUN || parcel.properties.jibun,
-                owner_name: document.getElementById('ownerName')?.value,
-                owner_address: document.getElementById('ownerAddress')?.value,
-                contact: document.getElementById('ownerContact')?.value,
-                memo: document.getElementById('memo')?.value
+        if (paths.length === 0) {
+            console.warn('폴리곤 좌표 데이터 없음:', pnu);
+            return null;
+        }
+
+        // 폴리곤 생성
+        const polygon = new naver.maps.Polygon({
+            map: map,
+            paths: paths,
+            fillColor: 'transparent',
+            fillOpacity: 0,
+            strokeColor: '#0000FF',
+            strokeOpacity: 0.6,
+            strokeWeight: 0.5,
+            clickable: true
+        });
+
+        // 클릭 이벤트 추가
+        naver.maps.Event.addListener(polygon, 'click', async function(e) {
+            e.domEvent.stopPropagation();
+
+            const pnu = parcel.properties.PNU || parcel.properties.pnu;
+            window.currentSelectedPNU = pnu;
+            window.currentSelectedParcel = parcel;
+            console.log('🎯 재생성된 필지 클릭 - PNU 설정:', pnu, formatJibun(parcel.properties));
+
+            await toggleParcelSelection(parcel, polygon);
+
+            // 색상 적용
+            if (window.currentColor && window.currentColor !== 'transparent') {
+                await applyColorToParcel(parcel, window.currentColor);
+            }
+        });
+
+        return polygon;
+    } catch (error) {
+        console.error('폴리곤 생성 중 오류:', error);
+        return null;
+    }
+}
+
+// 필지에 색상 적용 (즉시 저장 포함) - 같은 색상 클릭 시 제거
+async function applyColorToParcel(parcel, color) {
+    const pnu = parcel.properties.PNU || parcel.properties.pnu;
+
+    // 검색 필지인지 확인
+    const searchParcelData = window.searchParcels && window.searchParcels.get(pnu);
+    if (searchParcelData) {
+        // 검색 필지는 보라색(#9370DB)으로만 삭제 가능
+        if (color === '#9370DB') {
+            console.log('🔍 검색 필지 삭제 요청:', pnu);
+
+            // 삭제 확인 다이얼로그
+            const displayText = searchParcelData.displayText || pnu;
+            if (confirm(`검색 필지 "${displayText}"를 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.`)) {
+                // 지도에서 제거
+                if (searchParcelData.polygon) {
+                    searchParcelData.polygon.setMap(null);
+                }
+                if (searchParcelData.label) {
+                    searchParcelData.label.setMap(null);
+                }
+
+                // searchParcels에서 제거
+                window.searchParcels.delete(pnu);
+
+                // localStorage에서도 제거
+                const searchStorage = JSON.parse(localStorage.getItem('searchParcels') || '{}');
+                delete searchStorage[pnu];
+                localStorage.setItem('searchParcels', JSON.stringify(searchStorage));
+
+                console.log('✅ 검색 필지 삭제 완료:', displayText);
+            }
+        } else {
+            console.log('🔍 검색 필지는 보라색으로만 삭제 가능. 현재 선택 색상:', color);
+        }
+        return; // 검색 필지는 다른 색상 변경 불가
+    }
+
+    let parcelData = window.clickParcels.get(pnu);
+
+    // 필지 데이터가 없다면 새로 생성 (삭제된 필지 재색칠 대응)
+    if (!parcelData) {
+        console.log('🔄 삭제된 필지에 색상 재적용 - 폴리곤 재생성:', pnu);
+
+        // 폴리곤 재생성
+        const polygon = createPolygonFromParcel(parcel);
+        if (polygon) {
+            parcelData = {
+                polygon: polygon,
+                color: 'transparent',
+                parcel: parcel
             };
-            window.dataPersistenceManager.evaluateAndSaveMarkerState(pnu, parcelInfo);
+            window.clickParcels.set(pnu, parcelData);
+            console.log('✅ 필지 폴리곤 재생성 완료:', pnu);
+        } else {
+            console.error('❌ 폴리곤 생성 실패:', pnu);
+            return;
+        }
+    }
+
+    if (parcelData) {
+        // 현재 색상과 같은 색상으로 클릭하면 색상 제거
+        const currentColor = parcelData.color;
+        const newColor = (currentColor === color) ? 'transparent' : color;
+        const isRemoving = (currentColor === color);
+
+        // 1. UI 즉시 업데이트
+        parcelData.polygon.setOptions({
+            fillColor: newColor,
+            fillOpacity: newColor === 'transparent' ? 0 : 0.5,
+            strokeColor: newColor === 'transparent' ? 'transparent' : newColor,
+            strokeOpacity: newColor === 'transparent' ? 0 : 0.7
+        });
+        parcelData.color = newColor;
+
+        // 2. 색상 즉시 저장 (Supabase와 LocalStorage만 사용)
+        if (isRemoving) {
+            console.log('🎨 색상 제거 처리:', pnu);
+        } else {
+            console.log('🎨 색상 적용:', pnu, newColor);
+
+            // Supabase에 색상 저장
+            if (window.SupabaseManager && window.SupabaseManager.isConnected) {
+                try {
+                    const parcelToSave = {
+                        id: pnu,
+                        pnu: pnu,
+                        color: newColor,
+                        is_colored: true,
+                        updated_at: new Date().toISOString()
+                    };
+                    await window.SupabaseManager.saveParcels([parcelToSave]);
+                    console.log('✅ Supabase에 색상 저장 완료');
+                } catch (error) {
+                    console.error('❌ Supabase 색상 저장 실패:', error);
+                }
+            }
+        }
+
+        // 3. LocalStorage 업데이트
+        const savedData = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEY) || '[]');
+        const existingIndex = savedData.findIndex(item => item.pnu === pnu);
+
+        if (existingIndex >= 0) {
+            if (isRemoving) {
+                // 색상 정보만 제거
+                savedData[existingIndex].color = 'transparent';
+                savedData[existingIndex].is_colored = false;
+                delete savedData[existingIndex].currentColor;
+            } else {
+                // 색상 정보 업데이트
+                savedData[existingIndex].color = newColor;
+                savedData[existingIndex].is_colored = true;
+                savedData[existingIndex].currentColor = newColor;
+                // geometry 정보가 없으면 추가
+                if (!savedData[existingIndex].geometry && parcel.geometry) {
+                    savedData[existingIndex].geometry = parcel.geometry;
+                }
+            }
+            localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(savedData));
+        } else if (!isRemoving) {
+            // 🔥 새로운 필지 데이터 완전 저장 (geometry 포함)
+            const jibun = formatJibun(parcel.properties);
+
+            // 중심 좌표 계산
+            let centerLat, centerLng;
+            if (parcel.geometry) {
+                if (parcel.geometry.type === 'Point') {
+                    [centerLng, centerLat] = parcel.geometry.coordinates;
+                } else if (parcel.geometry.type === 'Polygon' && parcel.geometry.coordinates[0]) {
+                    const coords = parcel.geometry.coordinates[0];
+                    let totalLat = 0, totalLng = 0, count = 0;
+                    for (const coord of coords) {
+                        if (coord && coord.length >= 2) {
+                            totalLng += coord[0];
+                            totalLat += coord[1];
+                            count++;
+                        }
+                    }
+                    if (count > 0) {
+                        centerLng = totalLng / count;
+                        centerLat = totalLat / count;
+                    }
+                } else if (parcel.geometry.type === 'MultiPolygon' && parcel.geometry.coordinates[0] && parcel.geometry.coordinates[0][0]) {
+                    const coords = parcel.geometry.coordinates[0][0];
+                    let totalLat = 0, totalLng = 0, count = 0;
+                    for (const coord of coords) {
+                        if (coord && coord.length >= 2) {
+                            totalLng += coord[0];
+                            totalLat += coord[1];
+                            count++;
+                        }
+                    }
+                    if (count > 0) {
+                        centerLng = totalLng / count;
+                        centerLat = totalLat / count;
+                    }
+                }
+            }
+
+            const newParcelData = {
+                parcelNumber: jibun,
+                pnu: pnu,
+                ownerName: '',
+                ownerAddress: '',
+                ownerContact: '',
+                memo: '',
+                color: newColor,
+                geometry: parcel.geometry,
+                timestamp: new Date().toISOString(),
+                isSearchParcel: false,
+                is_colored: true,
+                currentColor: newColor
+            };
+
+            // 중심 좌표가 계산되었으면 추가
+            if (centerLat && centerLng) {
+                newParcelData.lat = parseFloat(centerLat);
+                newParcelData.lng = parseFloat(centerLng);
+            }
+
+            savedData.push(newParcelData);
+            localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(savedData));
+            console.log('✅ 새 필지 완전 데이터 저장 완료:', pnu, jibun);
+        }
+
+        // 3-1. parcelColors에도 저장 (색상 전용 저장소)
+        const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
+        if (isRemoving) {
+            delete parcelColors[pnu];
+        } else {
+            parcelColors[pnu] = {
+                parcel_id: pnu,
+                color: newColor,
+                is_colored: true,
+                updated_at: new Date().toISOString()
+            };
+        }
+        localStorage.setItem('parcelColors', JSON.stringify(parcelColors));
+
+        // 4. 마커 상태 평가는 제거 (DataPersistenceManager 사용 안 함)
+
+        // 5. 색상 제거 시 필지 정보와 마커도 삭제
+        if (isRemoving) {
+            // 삭제 확인 알림
+            const jibun = parcel.properties.JIBUN || parcel.properties.jibun || pnu;
+            if (confirm(`필지 "${jibun}"의 색상과 정보를 모두 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.`)) {
+                // 1. Supabase에서 삭제 (실시간 동기화를 위해 중요)
+                if (window.SupabaseManager && window.SupabaseManager.isConnected) {
+                    try {
+                        // Supabase에서 필지 삭제
+                        await window.SupabaseManager.deleteParcel(pnu);
+                        console.log('✅ Supabase에서 필지 삭제 완료');
+                    } catch (error) {
+                        console.error('❌ Supabase 삭제 실패:', error);
+                    }
+                }
+
+                // 2. LocalStorage에서도 삭제 (로컬 백업)
+                const savedData = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEY) || '[]');
+                const updatedData = savedData.filter(item => {
+                    return item.pnu !== pnu && item.parcelNumber !== jibun;
+                });
+                localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(updatedData));
+
+                // 3. 색상 정보 삭제
+                const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
+                delete parcelColors[pnu];
+                localStorage.setItem('parcelColors', JSON.stringify(parcelColors));
+
+                // 4. 마커 상태 삭제
+                const markerStates = JSON.parse(localStorage.getItem('markerStates') || '{}');
+                delete markerStates[pnu];
+                localStorage.setItem('markerStates', JSON.stringify(markerStates));
+
+                // 5. 지도에서 마커 제거
+                if (window.MemoMarkerManager && window.MemoMarkerManager.markers) {
+                    const markerInfo = window.MemoMarkerManager.markers.get(pnu);
+                    if (markerInfo && markerInfo.marker) {
+                        markerInfo.marker.setMap(null);
+                        window.MemoMarkerManager.markers.delete(pnu);
+                        console.log('✅ 마커 제거 완료:', pnu);
+                    }
+                }
+
+                // 6. clickParcels Map에서는 제거하지 않음 - 대신 투명 상태로 유지
+                // (재색칠이 가능하도록 폴리곤 정보는 보존)
+                console.log('✅ 필지 데이터는 투명 상태로 보존 (재색칠 가능):', pnu);
+
+                console.log(`✨ 필지 ${jibun}의 모든 데이터가 삭제되었습니다.`);
+            } else {
+                // 취소 시 색상 복원
+                parcelData.polygon.setOptions({
+                    fillColor: currentColor,
+                    fillOpacity: 0.5,
+                    strokeColor: currentColor,
+                    strokeOpacity: 0.7
+                });
+                parcelData.color = currentColor;
+                console.log('색상 제거가 취소되었습니다.');
+                return; // 함수 종료
+            }
         }
     }
 }
@@ -805,13 +1088,16 @@ async function saveParcelData() {
             parcelData.color = formData.color;
             parcelData.savedInfo = formData;
             
-            // 폴리곤 색상 업데이트
-            if (parcelData.polygon) {
+            // 폴리곤 색상 업데이트 (검색 필지 제외)
+            if (parcelData.polygon && !isSearchParcel) {
                 parcelData.polygon.setOptions({
                     fillColor: formData.color,
-                    fillOpacity: isSearchParcel ? 0.7 : 0.5,
+                    fillOpacity: 0.5,
                     strokeColor: formData.color
                 });
+            } else if (isSearchParcel) {
+                // 검색 필지는 보라색 고정
+                console.log('🔍 검색 필지는 보라색 유지:', currentPNU);
             }
             
             console.log('✅ 지도 업데이트 성공');
@@ -830,22 +1116,24 @@ async function saveParcelData() {
         // 이벤트 발생
         window.dispatchEvent(new Event('refreshParcelList'));
         
-        // 메모 마커 업데이트 (확장된 조건: PNU, 지번, 소유자명, 주소, 연락처, 메모 중 하나라도 있으면 마커 생성)
-        const hasAnyInfo = (formData.pnu) ||
-                          (formData.parcelNumber && formData.parcelNumber.trim() !== '') ||
-                          (formData.ownerName && formData.ownerName.trim() !== '') ||
-                          (formData.ownerAddress && formData.ownerAddress.trim() !== '') ||
-                          (formData.ownerContact && formData.ownerContact.trim() !== '') ||
-                          (formData.memo && formData.memo.trim() !== '');
+        // 메모 마커 업데이트 (실제 정보만 확인: 소유자명, 주소, 연락처, 메모)
+        const hasRealInfo = (formData.ownerName && formData.ownerName.trim() !== '') ||
+                           (formData.ownerAddress && formData.ownerAddress.trim() !== '') ||
+                           (formData.ownerContact && formData.ownerContact.trim() !== '') ||
+                           (formData.memo && formData.memo.trim() !== '');
+
+        // 검색 필지는 더 엄격하게 확인
+        const shouldCreateMarker = isSearchParcel ? hasRealInfo :
+                                  (hasRealInfo || (formData.parcelNumber && formData.parcelNumber.trim() !== ''));
 
         if (window.MemoMarkerManager) {
-            if (hasAnyInfo) {
-                // 좌표를 포함한 전체 데이터 전달
+            if (shouldCreateMarker) {
+                // 좌표를 포함한 전체 데이터 전달 (formData에서 좌표 가져오기)
                 const markerData = {
                     ...formData,
-                    lat: parcelData.lat,
-                    lng: parcelData.lng,
-                    geometry: parcelData.geometry
+                    lat: formData.lat,
+                    lng: formData.lng,
+                    geometry: formData.geometry
                 };
                 await window.MemoMarkerManager.createMemoMarker(markerData);
                 console.log('📍 마커 생성/업데이트 (필지 정보 존재):', formData.parcelNumber);

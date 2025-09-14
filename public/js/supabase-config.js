@@ -870,6 +870,42 @@ class SupabaseManager {
             return false;
         }
     }
+
+    // 필지 삭제 메서드
+    async deleteParcel(pnu) {
+        if (!this.isConnected) {
+            console.warn('⚠️ Supabase 미연결 상태');
+            return false;
+        }
+
+        try {
+            // parcels 테이블에서 삭제
+            const { error: parcelError } = await this.supabase
+                .from('parcels')
+                .delete()
+                .or(`pnu.eq.${pnu},id.eq.${pnu}`);
+
+            if (parcelError) {
+                console.error('❌ parcels 테이블 삭제 실패:', parcelError);
+            }
+
+            // parcel_polygons 테이블에서도 삭제
+            const { error: polygonError } = await this.supabase
+                .from('parcel_polygons')
+                .delete()
+                .eq('parcel_id', pnu);
+
+            if (polygonError) {
+                console.error('❌ parcel_polygons 테이블 삭제 실패:', polygonError);
+            }
+
+            console.log('✅ Supabase에서 필지 완전 삭제:', pnu);
+            return true;
+        } catch (error) {
+            console.error('❌ 필지 삭제 중 오류:', error);
+            return false;
+        }
+    }
 }
 
 // 전역 인스턴스 생성 - 중복 생성 방지

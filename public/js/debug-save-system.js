@@ -117,26 +117,21 @@ window.debugSaveProcess = function() {
     console.log('🎯 디버깅 활성화 완료 - 이제 저장 버튼을 눌러보세요');
 };
 
-// 페이지 로드 시 자동 디버깅
+// 페이지 로드 시 자동 디버깅 - 비활성화
 window.autoDebugOnLoad = function() {
-    console.group('🔍 페이지 로드 시 자동 디버깅');
-    
-    // localStorage 테스트
-    testLocalStorageSave();
-    
-    // 현재 상태 확인
-    checkCurrentStorage();
-    
-    // CONFIG 확인
-    console.log('⚙️ CONFIG 설정:', {
-        STORAGE_KEY: CONFIG?.STORAGE_KEY,
-        CONFIG_객체: CONFIG
-    });
-    
-    // 필수 함수들 존재 여부 확인
-    console.log('🔧 함수 존재 여부:', {
-        saveParcelData: typeof window.saveParcelData,
-        migratedSetItem: typeof window.migratedSetItem,
+    // 디버그 로그 비활성화
+    return;
+
+    // console.group('🔍 페이지 로드 시 자동 디버깅');
+    // testLocalStorageSave();
+    // checkCurrentStorage();
+    // console.log('⚙️ CONFIG 설정:', {
+    //     STORAGE_KEY: CONFIG?.STORAGE_KEY,
+    //     CONFIG_객체: CONFIG
+    // });
+    // console.log('🔧 함수 존재 여부:', {
+    //     saveParcelData: typeof window.saveParcelData,
+    //     migratedSetItem: typeof window.migratedSetItem,
         migratedGetItem: typeof window.migratedGetItem,
         supabaseAdapter: typeof window.supabaseAdapter
     });

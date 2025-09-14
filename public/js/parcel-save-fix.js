@@ -169,13 +169,16 @@ async function saveParcelDataFixed() {
             parcelData.color = formData.color;
             parcelData.savedInfo = formData;
             
-            // 폴리곤 색상 업데이트
-            if (parcelData.polygon) {
+            // 폴리곤 색상 업데이트 (검색 필지 제외)
+            if (parcelData.polygon && !isSearchParcel) {
                 parcelData.polygon.setOptions({
                     fillColor: formData.color,
-                    fillOpacity: isSearchParcel ? 0.7 : 0.5,
+                    fillOpacity: 0.5,
                     strokeColor: formData.color
                 });
+            } else if (isSearchParcel) {
+                // 검색 필지는 보라색 고정
+                console.log('🔍 검색 필지는 보라색 유지:', currentPNU);
             }
             
             console.log('✅ 지도 업데이트 성공');

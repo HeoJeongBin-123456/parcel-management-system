@@ -36,10 +36,11 @@ window.CONFIG = {
 
 // 전역 변수
 let map = null;
-let currentColor = window.CONFIG.COLORS.red;
+// 색상은 모드에 따라 결정: 검색 모드면 보라색, 클릭 모드면 빨간색
+let currentColor = window.currentMode === 'search' ? '#9370DB' : window.CONFIG.COLORS.red;
 
-// 필지 모드 관리 - window에 직접 정의
-window.currentMode = 'click'; // 'search' 또는 'click' - 기본값은 클릭 모드 (검색 OFF)
+// 필지 모드 관리 - window에 직접 정의 (localStorage에서 복원)
+window.currentMode = localStorage.getItem('current_mode') || 'click'; // 'search' 또는 'click' - 기본값은 클릭 모드 (검색 OFF)
 window.clickParcels = new Map(); // 클릭으로 선택한 필지 데이터 저장
 window.searchParcels = new Map(); // 검색으로 찾은 필지 데이터 저장
 

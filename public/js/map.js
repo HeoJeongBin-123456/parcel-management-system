@@ -156,9 +156,19 @@ async function initMap() {
             streetLayer.setMap(null);
             
             // 항상 지도 표시 (파노라마 컨테이너 숨김)
+            // 거리뷰 모드 해제
+            if (type !== 'street' && window.isStreetViewMode) {
+                window.isStreetViewMode = false;
+                if (window.activeStreetLayer) {
+                    window.activeStreetLayer.setMap(null);
+                    window.activeStreetLayer = null;
+                }
+                console.log('🚶 거리뷰 모드 해제');
+            }
+
             document.getElementById('map').style.display = 'block';
             document.getElementById('pano').style.display = 'none';
-            
+
             switch(type) {
                 case 'normal':
                     map.setMapTypeId(naver.maps.MapTypeId.NORMAL);
@@ -185,14 +195,59 @@ async function initMap() {
     
     // 지도 클릭 이벤트 (안전한 함수 호출)
     naver.maps.Event.addListener(map, 'click', function(e) {
+        const coord = e.coord;
+        console.log('🖱️ 지도 클릭:', coord.lat(), coord.lng());
+
+        // 거리뷰 모드에서는 파노라마 열기
+        if (window.isStreetViewMode) {
+            console.log('🚶 거리뷰 클릭 - 파노라마 열기:', coord.lat(), coord.lng());
+
+            // 지도 숨기고 파노라마 표시
+            document.getElementById('map').style.display = 'none';
+            document.getElementById('pano').style.display = 'block';
+
+            // 파노라마 닫기 버튼 추가
+            if (!document.querySelector('.pano-close-btn')) {
+                const closeBtn = document.createElement('button');
+                closeBtn.className = 'pano-close-btn';
+                closeBtn.innerHTML = '×';
+                closeBtn.onclick = function() {
+                    document.getElementById('map').style.display = 'block';
+                    document.getElementById('pano').style.display = 'none';
+                    console.log('🔙 버튼으로 파노라마 닫기');
+                };
+                document.getElementById('pano').appendChild(closeBtn);
+            }
+
+            // 파노라마 생성 또는 위치 업데이트
+            if (!window.panorama) {
+                window.panorama = new naver.maps.Panorama('pano', {
+                    position: coord,
+                    pov: { pan: 0, tilt: 0, fov: 100 },
+                    logoControl: false,
+                    zoomControl: true,
+                    arrowControl: true
+                });
+
+                // ESC 키로 파노라마 닫기
+                document.addEventListener('keydown', function(event) {
+                    if (event.key === 'Escape' && document.getElementById('pano').style.display === 'block') {
+                        document.getElementById('map').style.display = 'block';
+                        document.getElementById('pano').style.display = 'none';
+                        console.log('🔙 ESC로 파노라마 닫기');
+                    }
+                });
+            } else {
+                window.panorama.setPosition(coord);
+            }
+            return;
+        }
+
         // 검색 모드에서는 클릭으로 필지를 추가하지 않음
         if (window.currentMode === 'search') {
     // console.log('검색 모드에서는 클릭으로 필지를 추가하지 않습니다.');
             return;
         }
-
-        const coord = e.coord;
-        console.log('🖱️ 지도 클릭:', coord.lat(), coord.lng());
 
         // getParcelInfo 함수가 로드되었는지 확인 후 호출
         if (typeof getParcelInfo === 'function') {
@@ -413,19 +468,39 @@ function moveToCurrentLocation() {
 // 거리뷰 표시 - 무조건 동작하도록 개선
 function showStreetView() {
     const mapCenter = map.getCenter();
-    
-    // console.log('🚶 거리뷰 모드 시작:', mapCenter.toString());
-    
-    // 지도 숨기고 파노라마 표시
-    document.getElementById('map').style.display = 'none';
-    document.getElementById('pano').style.display = 'block';
-    
+
+    console.log('🚶 거리뷰 모드 시작:', mapCenter.toString());
+
     // 기존 거리뷰 레이어 제거
     if (window.activeStreetLayer) {
         window.activeStreetLayer.setMap(null);
         window.activeStreetLayer = null;
     }
-    
+
+    // 즉시 StreetLayer 활성화 (거리뷰 선 표시)
+    try {
+        window.activeStreetLayer = new naver.maps.StreetLayer();
+        window.activeStreetLayer.setMap(map);
+
+        // 지도를 현재 위치로 이동하고 줌 조정
+        map.setCenter(mapCenter);
+        map.setZoom(18);
+
+        console.log('✅ 거리뷰 레이어 즉시 활성화 성공');
+
+        // 거리뷰 모드 플래그 설정
+        window.isStreetViewMode = true;
+
+        // 지도 표시 유지 (파노라마는 숨김)
+        document.getElementById('map').style.display = 'block';
+        document.getElementById('pano').style.display = 'none';
+
+    } catch (layerError) {
+        console.error('💥 거리뷰 레이어 실패:', layerError);
+        fallbackToMapView();
+    }
+
+    // 파노라마 기능 활성화
     if (!window.panorama) {
         // 1단계: 파노라마 시도
         try {
@@ -437,11 +512,11 @@ function showStreetView() {
                 zoomControl: true,
                 arrowControl: true
             });
-            
+
             naver.maps.Event.addListener(window.panorama, 'pano_changed', function() {
     // console.log('📍 파노라마 위치 변경됨');
             });
-            
+
             // 파노라마 로드 완료 대기
             setTimeout(() => {
                 try {
@@ -454,7 +529,7 @@ function showStreetView() {
                     fallbackToStreetLayer();
                 }
             }, 2000);
-            
+
         } catch (panoError) {
             console.error('💥 파노라마 초기화 실패:', panoError);
             fallbackToStreetLayer();

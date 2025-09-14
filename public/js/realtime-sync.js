@@ -1,13 +1,13 @@
-// 실시간 동기화 관리자 (최대 5명 동시 사용)
+// 실시간 동기화 관리자 (사용자 제한 없음)
 class RealtimeSync {
     constructor() {
         this.isConnected = false;
         this.currentUsers = new Set();
-        this.maxUsers = 5;
+        this.maxUsers = 999999; // 제한 없음으로 변경
         this.userId = this.generateUserId();
         this.lastUpdateTime = Date.now();
         this.subscription = null;
-        
+
         console.log('🔄 RealtimeSync 초기화:', this.userId);
     }
 
@@ -26,12 +26,9 @@ class RealtimeSync {
                 return false;
             }
 
-            // 사용자 수 체크
+            // 사용자 수 체크 (제한 해제)
             const userCount = await this.checkActiveUsers();
-            if (userCount >= this.maxUsers) {
-                alert(`최대 ${this.maxUsers}명까지만 동시 사용 가능합니다. 현재 ${userCount}명 사용 중입니다.`);
-                return false;
-            }
+            // 제한 없음 - 경고 메시지 제거
 
             // 현재 사용자 등록
             await this.registerUser();

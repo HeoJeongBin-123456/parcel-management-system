@@ -167,6 +167,18 @@ class AppInitializer {
             // 메모 마커 지연 로드
             setTimeout(() => this.initializeMemoMarkers(), 500);
 
+            // 🔍 검색 모드인 경우 검색 결과 복원
+            if (window.currentMode === 'search' && typeof loadSearchResultsFromStorage === 'function') {
+                try {
+                    setTimeout(() => {
+                        loadSearchResultsFromStorage();
+                        console.log('🔍 초기화 시 검색 결과 복원 완료');
+                    }, 800); // 메모 마커 로드 후 실행
+                } catch (error) {
+                    console.error('❌ 초기화 시 검색 결과 복원 실패:', error);
+                }
+            }
+
         } catch (error) {
             console.error('❌ 데이터 로드 실패:', error);
             this.dataLoadComplete = false;
@@ -309,9 +321,53 @@ class AppInitializer {
 
                 if (typeof window.drawParcelPolygon === 'function') {
                     await window.drawParcelPolygon(feature, false);
+
+                    // 색상 복원 - localStorage의 parcelColors도 확인
+                    let colorToApply = null;
+
+                    // 1. parcel 객체에서 색상 확인
+                    if (parcel.color && parcel.color !== 'transparent') {
+                        colorToApply = parcel.color;
+                    }
+
+                    // 2. localStorage의 parcelColors에서 색상 확인
+                    if (!colorToApply) {
+                        const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
+                        if (parcelColors[parcel.pnu]) {
+                            colorToApply = parcelColors[parcel.pnu].color;
+                        }
+                    }
+
+                    // 색상 적용
+                    if (colorToApply && window.clickParcels) {
+                        const parcelData = window.clickParcels.get(parcel.pnu);
+                        if (parcelData && parcelData.polygon) {
+                            parcelData.polygon.setOptions({
+                                fillColor: colorToApply,
+                                fillOpacity: 0.5,
+                                strokeColor: colorToApply,
+                                strokeOpacity: 0.7
+                            });
+                            parcelData.color = colorToApply;
+                            console.log(`🎨 색상 복원: ${parcel.pnu} - ${colorToApply}`);
+                        }
+                    }
                 }
             } else {
-                this.restoreParcelAsMarker(parcel);
+                // 🛡️ 마커 생성 조건 확인 - 실제 정보가 있을 때만 마커 생성
+                const hasRealInfo = !!(
+                    (parcel.memo && parcel.memo.trim() && parcel.memo.trim() !== '(메모 없음)') ||
+                    (parcel.ownerName && parcel.ownerName.trim() && parcel.ownerName.trim() !== '홍길동') ||
+                    (parcel.ownerAddress && parcel.ownerAddress.trim() && parcel.ownerAddress.trim() !== '서울시 강남구...') ||
+                    (parcel.ownerContact && parcel.ownerContact.trim() && parcel.ownerContact.trim() !== '010-1234-5678')
+                );
+
+                if (hasRealInfo) {
+                    this.restoreParcelAsMarker(parcel);
+                    console.log('✅ 조건 충족으로 마커 복원:', parcel.pnu || parcel.parcelNumber);
+                } else {
+                    console.log('🚫 마커 생성 조건 미충족으로 건너뜀:', parcel.pnu || parcel.parcelNumber);
+                }
             }
         } catch (error) {
             console.warn(`⚠️ 필지 복원 실패: ${parcel.pnu}`);
@@ -482,15 +538,26 @@ class AppInitializer {
                     if (typeof window.drawParcelPolygon === 'function') {
                         await window.drawParcelPolygon(feature, false);
                         
-                        // 🎨 색상 적용 (새로운 color_info 필드 우선 처리)
+                        // 🎨 색상 적용 (localStorage의 parcelColors도 확인)
                         let colorToApply = null;
 
+                        // 1. Supabase color_info 필드 확인
                         if (parcel.color_info && parcel.color_info.color) {
                             colorToApply = parcel.color_info.color;
                             console.log('🎨 Supabase color_info에서 색상 복원:', colorToApply);
-                        } else if (parcel.color && parcel.color !== 'transparent') {
+                        }
+                        // 2. 기존 color 필드 확인
+                        else if (parcel.color && parcel.color !== 'transparent') {
                             colorToApply = parcel.color;
                             console.log('🎨 기존 color 필드에서 색상 복원:', colorToApply);
+                        }
+                        // 3. localStorage의 parcelColors 확인
+                        else {
+                            const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
+                            if (parcelColors[parcel.pnu]) {
+                                colorToApply = parcelColors[parcel.pnu].color;
+                                console.log('🎨 localStorage parcelColors에서 색상 복원:', colorToApply);
+                            }
                         }
 
                         if (colorToApply) {
@@ -502,9 +569,22 @@ class AppInitializer {
                         restoredCount++;
                     }
                 } else if (parcel.lat && parcel.lng) {
-                    // 점 마커로 복원
-                    this.restoreParcelAsMarker(parcel);
-                    restoredCount++;
+                    // 🛡️ 마커 생성 조건 확인 - 실제 정보가 있을 때만 마커 생성
+                    const hasRealInfo = !!(
+                        (parcel.memo && parcel.memo.trim() && parcel.memo.trim() !== '(메모 없음)') ||
+                        (parcel.ownerName && parcel.ownerName.trim() && parcel.ownerName.trim() !== '홍길동') ||
+                        (parcel.ownerAddress && parcel.ownerAddress.trim() && parcel.ownerAddress.trim() !== '서울시 강남구...') ||
+                        (parcel.ownerContact && parcel.ownerContact.trim() && parcel.ownerContact.trim() !== '010-1234-5678')
+                    );
+
+                    if (hasRealInfo) {
+                        // 점 마커로 복원
+                        this.restoreParcelAsMarker(parcel);
+                        console.log('✅ 조건 충족으로 점 마커 복원:', parcel.parcelNumber || parcel.pnu);
+                        restoredCount++;
+                    } else {
+                        console.log('🚫 점 마커 생성 조건 미충족으로 건너뜀:', parcel.parcelNumber || parcel.pnu);
+                    }
                 }
             } catch (error) {
                 console.warn(`⚠️ 필지 복원 실패: ${parcel.parcelNumber || parcel.pnu}`, error);
@@ -518,20 +598,33 @@ class AppInitializer {
     // 필지 색상 적용
     applyParcelColor(parcel) {
         const targetMap = parcel.isSearchParcel ? window.searchParcels : window.clickParcels;
-        
+
         if (!targetMap) return;
-        
+
         const existingParcel = targetMap.get(parcel.pnu);
-        
+
         if (existingParcel && existingParcel.polygon) {
-            existingParcel.polygon.setOptions({
-                fillColor: parcel.color,
-                fillOpacity: parcel.isSearchParcel ? 0.7 : 0.5,
-                strokeColor: parcel.color,
-                strokeWeight: 2
-            });
-            existingParcel.color = parcel.color;
-            console.log(`🎨 필지 색상 적용: ${parcel.parcelNumber} → ${parcel.color}`);
+            if (parcel.isSearchParcel) {
+                // 검색 필지는 보라색 고정
+                existingParcel.polygon.setOptions({
+                    fillColor: '#9370DB',
+                    fillOpacity: 0.7,
+                    strokeColor: '#6A0DAD',
+                    strokeWeight: 3
+                });
+                existingParcel.color = '#9370DB';
+                console.log(`🔍 검색 필지 보라색 고정: ${parcel.parcelNumber}`);
+            } else {
+                // 일반 필지만 색상 변경
+                existingParcel.polygon.setOptions({
+                    fillColor: parcel.color,
+                    fillOpacity: 0.5,
+                    strokeColor: parcel.color,
+                    strokeWeight: 2
+                });
+                existingParcel.color = parcel.color;
+                console.log(`🎨 필지 색상 적용: ${parcel.parcelNumber} → ${parcel.color}`);
+            }
         }
     }
 

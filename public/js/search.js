@@ -75,6 +75,22 @@ function highlightParcel(parcelData) {
             map: window.map
         });
 
+        // 검색 필지 색상 고정 - setOptions 메서드 오버라이드
+        const originalSetOptions = highlightPolygon.setOptions;
+        highlightPolygon.setOptions = function(options) {
+            // 검색 필지는 색상 변경을 무시하고 보라색 유지
+            const fixedOptions = {
+                ...options,
+                fillColor: '#9370DB',
+                fillOpacity: 0.7,
+                strokeColor: '#6A0DAD',
+                strokeWeight: 3,
+                strokeOpacity: 1.0
+            };
+            console.log('🔍 검색 필지 색상 고정:', pnu);
+            return originalSetOptions.call(this, fixedOptions);
+        };
+
     // console.log('✅ 형광색 폴리곤 생성 완료');
     // console.log('🔍 폴리곤 paths 확인:', highlightPolygon.getPaths());
         
@@ -159,24 +175,19 @@ function highlightParcel(parcelData) {
                 parcelNumberInput.value = jibun;
                 console.log('🖱️ 검색 필지 클릭 - 지번 입력:', jibun);
                 
-                // PNU 생성 (검색 필지용)
-                const searchPNU = `search_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-                window.currentSelectedPNU = searchPNU;
-                
-                // searchParcels Map에 저장 (메모 기능을 위해)
-                if (!window.searchParcels.has(searchPNU)) {
-                    window.searchParcels.set(searchPNU, {
-                        data: parcelData,
-                        polygon: highlightPolygon,
-                        label: null,
-                        properties: properties,
-                        jibun: jibun,
-                        ownerName: '',
-                        ownerAddress: '',
-                        ownerContact: '',
-                        memo: ''
-                    });
-                }
+                // 기존 PNU 사용 (중복 생성 방지)
+                window.currentSelectedPNU = pnu;
+
+                // 검색 필지 색상을 다시 고정
+                highlightPolygon.setOptions({
+                    fillColor: '#9370DB',
+                    fillOpacity: 0.7,
+                    strokeColor: '#6A0DAD',
+                    strokeWeight: 3,
+                    strokeOpacity: 1.0
+                });
+
+                console.log('🔍 검색 필지 클릭 - 보라색 유지:', pnu);
                 
                 // 기존 저장된 데이터 로드 (메모가 있다면)
                 await loadExistingParcelData(jibun, 'search');
@@ -196,7 +207,7 @@ function highlightParcel(parcelData) {
 
 // window.searchParcels가 정의되지 않았다면 초기화
 if (typeof window.searchParcels === 'undefined') {
-    window.window.searchParcels = new Map();
+    window.searchParcels = new Map();
 }
 
 // localStorage 키 정의
@@ -206,7 +217,7 @@ const SEARCH_STORAGE_KEY = 'window.searchParcels';
 function saveSearchResultsToStorage() {
     try {
         const searchData = [];
-        window.window.searchParcels.forEach((result, pnu) => {
+        window.searchParcels.forEach((result, pnu) => {
             // 폴리곤과 라벨은 저장하지 않고, 데이터만 저장
             searchData.push({
                 pnu: result.pnu,
@@ -339,7 +350,10 @@ async function toggleSearchMode() {
     window.currentMode = newMode;
     const toggleBtn = document.getElementById('searchToggleBtn');
 
-    // 🎯 새로운 모드를 Supabase에 저장
+    // 🎯 새로운 모드를 localStorage와 Supabase에 저장
+    localStorage.setItem('current_mode', newMode);
+    console.log('💾 localStorage에 모드 저장:', newMode);
+
     if (window.SupabaseManager) {
         try {
             await window.SupabaseManager.saveCurrentMode(newMode);
@@ -369,8 +383,12 @@ async function toggleSearchMode() {
         window.hideClickParcels();
     // console.log('클릭 필지 숨기기 완료');
         
-        // 검색 필지 표시  
+        // 검색 필지 표시 및 복원
     // console.log('검색 필지 표시 시작...');
+        // localStorage에서 검색 결과 복원
+        if (typeof loadSearchResultsFromStorage === 'function') {
+            loadSearchResultsFromStorage();
+        }
         window.showSearchParcels();
     // console.log('검색 필지 표시 완료');
         
@@ -378,14 +396,17 @@ async function toggleSearchMode() {
         // 클릭 모드: 검색 필지 숨기고 클릭 필지 표시
         toggleBtn.textContent = '검색 OFF';
         toggleBtn.classList.remove('active');
-        
+
     // console.log('>> 검색 OFF (클릭) 모드로 전환');
-        
-        // 검색 필지 숨기기
+
+        // 검색 필지 숨기기 (데이터는 보존)
     // console.log('검색 필지 숨기기 시작...');
         window.hideSearchParcels();
-    // console.log('검색 필지 숨기기 완료');
-        
+        // clearSearchResults(); // 메모리에서 검색 결과 완전 제거 - 주석 처리
+        // removeSearchResultsFromStorage(); // localStorage에서도 제거 - 주석 처리
+        console.log('🧹 검색 OFF - 검색 필지 숨김 (데이터 보존)');
+    // console.log('검색 필지 완전 정리 완료');
+
         // 클릭 필지 표시
     // console.log('클릭 필지 표시 시작...');
         window.showClickParcels();
@@ -557,14 +578,19 @@ async function searchAddress(query) {
 
 // 지번으로 필지 검색
 async function searchParcelByJibun(jibun) {
-    // console.log('지번 검색 시작:', jibun);
-    
+    console.log('🔍 새로운 검색 시작:', jibun);
+
     // map 객체 확인
     if (!window.map) {
         console.error('지도가 초기화되지 않았습니다.');
         alert('지도가 아직 로딩 중입니다. 잠시 후 다시 시도해주세요.');
         return;
     }
+
+    // 🔥 새로운 검색 시작 시 기존 검색 결과 완전 정리
+    console.log('🧹 기존 검색 결과 정리 중...');
+    clearSearchResults();
+    removeSearchResultsFromStorage();
     
     // 더 넓은 범위로 검색 - 서울 전체 영역
     const center = window.map.getCenter();
@@ -1047,3 +1073,6 @@ function clearAllSearchResults() {
 
 // 전역 함수로 노출
 window.clearAllSearchResults = clearAllSearchResults;
+window.loadSearchResultsFromStorage = loadSearchResultsFromStorage;
+window.saveSearchResultsToStorage = saveSearchResultsToStorage;
+window.removeSearchResultsFromStorage = removeSearchResultsFromStorage;

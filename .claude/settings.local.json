@@ -79,7 +79,8 @@
       "mcp__sequential-thinking__sequentialthinking",
       "mcp__playwright__browser_tabs",
       "mcp__playwright__browser_close",
-      "mcp__playwright__browser_wait_for"
+      "mcp__playwright__browser_wait_for",
+      "mcp__playwright__browser_console_messages"
     ],
     "deny": [],
     "ask": []

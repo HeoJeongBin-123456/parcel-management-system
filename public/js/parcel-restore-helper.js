@@ -9,31 +9,36 @@ class ParcelRestoreHelper {
     }
 
     async ensureDataPersistence() {
-        console.log('🔒 필지 데이터 영속성 확보 시작');
-        
-        // 1. 페이지 언로드 전 데이터 저장 보장
-        this.setupBeforeUnloadHandler();
-        
-        // 2. 페이지 로드 후 데이터 복원 보장
-        this.setupPageLoadRestorer();
-        
-        // 3. 주기적 데이터 검증 및 복원
-        this.startPeriodicValidation();
+        // 자동 복원 비활성화 - 사용자가 명시적으로 저장한 것만 유지
+        console.log('🔒 자동 복원 시스템 비활성화');
+        return;
+
+        // // 1. 페이지 언로드 전 데이터 저장 보장
+        // this.setupBeforeUnloadHandler();
+
+        // // 2. 페이지 로드 후 데이터 복원 보장
+        // this.setupPageLoadRestorer();
+
+        // // 3. 주기적 데이터 검증 및 복원
+        // this.startPeriodicValidation();
     }
 
     setupBeforeUnloadHandler() {
-        window.addEventListener('beforeunload', () => {
-            console.log('💾 페이지 종료 전 필지 데이터 저장');
-            this.saveAllParcelData();
-        });
+        // 자동 저장 비활성화
+        return;
 
-        // 페이지 숨김 시에도 저장 (모바일 대응)
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'hidden') {
-                console.log('👁️ 페이지 숨김 시 필지 데이터 저장');
-                this.saveAllParcelData();
-            }
-        });
+        // window.addEventListener('beforeunload', () => {
+        //     console.log('💾 페이지 종료 전 필지 데이터 저장');
+        //     this.saveAllParcelData();
+        // });
+
+        // // 페이지 숨김 시에도 저장 (모바일 대응)
+        // document.addEventListener('visibilitychange', () => {
+        //     if (document.visibilityState === 'hidden') {
+        //         console.log('👁️ 페이지 숨김 시 필지 데이터 저장');
+        //         this.saveAllParcelData();
+        //     }
+        // });
     }
 
     setupPageLoadRestorer() {
@@ -194,16 +199,28 @@ class ParcelRestoreHelper {
         }
 
         const parcel = targetMap.get(parcelData.pnu);
-        
+
         if (parcel && parcel.polygon) {
-            parcel.polygon.setOptions({
-                fillColor: parcelData.color,
-                fillOpacity: parcelData.isSearchParcel ? 0.7 : 0.5,
-                strokeColor: parcelData.color,
-                strokeWeight: 2
-            });
-            parcel.color = parcelData.color;
-            console.log(`🎨 필지 색상 적용: ${parcelData.parcelNumber} → ${parcelData.color}`);
+            if (parcelData.isSearchParcel) {
+                // 검색 필지는 보라색 고정
+                parcel.polygon.setOptions({
+                    fillColor: '#9370DB',
+                    fillOpacity: 0.7,
+                    strokeColor: '#6A0DAD',
+                    strokeWeight: 3
+                });
+                parcel.color = '#9370DB';
+                console.log(`🔍 검색 필지 보라색 고정: ${parcelData.parcelNumber}`);
+            } else {
+                parcel.polygon.setOptions({
+                    fillColor: parcelData.color,
+                    fillOpacity: 0.5,
+                    strokeColor: parcelData.color,
+                    strokeWeight: 2
+                });
+                parcel.color = parcelData.color;
+                console.log(`🎨 필지 색상 적용: ${parcelData.parcelNumber} → ${parcelData.color}`);
+            }
         }
     }
 

@@ -46,6 +46,31 @@ document.addEventListener('DOMContentLoaded', async function() {
                     if (searchToggleBtn) {
                         searchToggleBtn.textContent = savedMode === 'search' ? '검색 ON' : '검색 OFF';
                     }
+
+                    // 검색 모드일 때 색상을 보라색으로 자동 설정
+                    if (savedMode === 'search') {
+                        currentColor = '#9370DB';
+                        const colorDisplay = document.getElementById('currentColor');
+                        if (colorDisplay) {
+                            colorDisplay.style.background = currentColor;
+                        }
+                        // 색상 팔레트에서 모든 항목 비활성화 (보라색은 팔레트에 없음)
+                        document.querySelectorAll('.color-item').forEach(c => c.classList.remove('active'));
+                        console.log('🟣 검색 모드 - 보라색 자동 설정');
+
+                        // 🔍 검색 모드일 때 검색 결과 복원
+                        if (typeof loadSearchResultsFromStorage === 'function') {
+                            try {
+                                loadSearchResultsFromStorage();
+                                console.log('🔍 검색 결과 복원 완료');
+                            } catch (error) {
+                                console.error('❌ 검색 결과 복원 실패:', error);
+                            }
+                        } else {
+                            console.warn('⚠️ loadSearchResultsFromStorage 함수가 없습니다');
+                        }
+                    }
+
                     console.log('🔄 지도 모드 복원:', savedMode);
                 }
 

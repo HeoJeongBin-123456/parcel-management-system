@@ -1,0 +1,94 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - heading "네이버 지도 필지 관리 프로그램" [level=1] [ref=e4]
+    - generic [ref=e5]: 🟢 실시간 동기화 (1/999999명)
+    - generic [ref=e6]:
+      - generic [ref=e7]:
+        - button "일반지도" [ref=e8] [cursor=pointer]
+        - button "위성지도" [ref=e9] [cursor=pointer]
+        - button "지적편집도" [ref=e10] [cursor=pointer]
+        - button "거리뷰" [ref=e11] [cursor=pointer]
+      - generic [ref=e12]:
+        - textbox "지번 또는 주소 검색" [ref=e13]
+        - button "검색" [ref=e14] [cursor=pointer]
+        - button "검색 OFF" [ref=e15] [cursor=pointer]
+      - button "캘린더" [ref=e16] [cursor=pointer]:
+        - img [ref=e17] [cursor=pointer]
+        - generic [ref=e22] [cursor=pointer]: 캘린더
+      - button "백업" [ref=e23] [cursor=pointer]:
+        - img [ref=e24] [cursor=pointer]
+        - generic [ref=e27] [cursor=pointer]: 백업
+  - generic [ref=e28]:
+    - complementary [ref=e29]:
+      - generic [ref=e30]:
+        - heading "필지 색상" [level=3] [ref=e31]
+        - generic [ref=e42]: "선택된 색상:"
+      - generic [ref=e44]:
+        - heading "필지 정보" [level=3] [ref=e45]
+        - generic [ref=e46]:
+          - generic [ref=e47]:
+            - generic [ref=e48]: 지번
+            - 'textbox "예: 123-4" [ref=e49]'
+          - generic [ref=e50]:
+            - generic [ref=e51]: 소유자 이름
+            - textbox "홍길동" [ref=e52]
+          - generic [ref=e53]:
+            - generic [ref=e54]: 소유자 주소
+            - textbox "서울시 강남구..." [ref=e55]
+          - generic [ref=e56]:
+            - generic [ref=e57]: 연락처
+            - textbox "010-1234-5678" [ref=e58]
+          - generic [ref=e59]:
+            - generic [ref=e60]: 메모
+            - textbox "추가 메모..." [ref=e61]
+          - generic [ref=e62]:
+            - button "저장" [ref=e63] [cursor=pointer]
+            - button "필지 정보 초기화" [ref=e64] [cursor=pointer]
+          - generic [ref=e65]:
+            - button "구글 시트 전송" [ref=e66] [cursor=pointer]
+            - button "엑셀 복사" [ref=e67] [cursor=pointer]
+    - generic [ref=e69]:
+      - generic:
+        - generic [ref=e103]: 300m
+        - link "NAVER" [ref=e104]:
+          - /url: https://ssl.pstatic.net/static/maps/mantle/notice/legal.html
+          - img "NAVER" [ref=e105]
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - generic: © NAVER Corp.
+      - generic [ref=e107]:
+        - link "지도 확대" [ref=e108]:
+          - /url: "#"
+          - img "지도 확대" [ref=e109]
+        - link "지도 확대/축소 슬라이더" [ref=e113]:
+          - /url: "#"
+          - img "지도 확대/축소 슬라이더" [ref=e114]
+        - link "지도 축소" [ref=e115]:
+          - /url: "#"
+          - img "지도 축소" [ref=e116]
+      - generic:
+        - generic [ref=e150]: 300m
+        - link "NAVER" [ref=e151]:
+          - /url: https://ssl.pstatic.net/static/maps/mantle/notice/legal.html
+          - img "NAVER" [ref=e152]
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - generic: © NAVER Corp.
+      - generic [ref=e154]:
+        - link "지도 확대" [ref=e155]:
+          - /url: "#"
+          - img "지도 확대" [ref=e156]
+        - link "지도 확대/축소 슬라이더" [ref=e160]:
+          - /url: "#"
+          - img "지도 확대/축소 슬라이더" [ref=e161]
+        - link "지도 축소" [ref=e162]:
+          - /url: "#"
+          - img "지도 축소" [ref=e163]
+```

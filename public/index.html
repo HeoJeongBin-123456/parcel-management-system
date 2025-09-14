@@ -269,16 +269,7 @@
     
 
     <!-- JavaScript -->
-    <script>
-        // 디버깅용
-        window.addEventListener('load', function() {
-            console.log('window load event');
-        });
-        
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('DOMContentLoaded event');
-        });
-    </script>
+    <script src="/js/log-config.js"></script>
     <script src="/js/config-client.js"></script>
     <script src="/js/supabase-config.js"></script>
     <script src="/js/supabase-adapter.js"></script>
@@ -294,7 +285,8 @@
     <script src="/js/backup-manager.js"></script>
     <script src="/js/sheets.js"></script>
     <script src="/js/mobile-handler.js"></script>
-    <script src="/js/data-persistence-manager.js"></script>
+    <!-- data-persistence-manager.js 비활성화 - LocalStorage와 Supabase만 사용 -->
+    <!-- <script src="/js/data-persistence-manager.js"></script> -->
     <script src="/js/parcel-restore-helper.js"></script>
     <script src="/js/advanced-backup-manager.js"></script>
     <script src="/js/backup-ui.js"></script>

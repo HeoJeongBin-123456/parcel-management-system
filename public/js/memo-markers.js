@@ -6,17 +6,43 @@ class MemoMarkerManager {
         console.log('📍 MemoMarkerManager 초기화');
     }
 
-    // 마커 표시 조건 확인 (확장된 조건)
+    // 마커 표시 조건 확인 (엄격한 조건 적용)
     shouldShowMarker(parcelData) {
-        // PNU, 지번, 메모, 소유자명, 소유자주소, 연락처 중 하나라도 있으면 마커 표시
-        return !!(
-            (parcelData.pnu) ||
-            (parcelData.parcelNumber && parcelData.parcelNumber.trim()) ||
-            (parcelData.memo && parcelData.memo.trim()) ||
-            (parcelData.ownerName && parcelData.ownerName.trim()) ||
-            (parcelData.ownerAddress && parcelData.ownerAddress.trim()) ||
-            (parcelData.ownerContact && parcelData.ownerContact.trim())
+        // 실제 사용자가 입력한 정보가 있는지 확인 (엄격한 조건)
+        const hasRealInfo = !!(
+            (parcelData.memo && parcelData.memo.trim() && parcelData.memo.trim() !== '(메모 없음)') ||
+            (parcelData.ownerName && parcelData.ownerName.trim() && parcelData.ownerName.trim() !== '홍길동') ||
+            (parcelData.ownerAddress && parcelData.ownerAddress.trim() && parcelData.ownerAddress.trim() !== '서울시 강남구...') ||
+            (parcelData.ownerContact && parcelData.ownerContact.trim() && parcelData.ownerContact.trim() !== '010-1234-5678')
         );
+
+        // 검색 필지인지 확인
+        const isSearchParcel = parcelData.pnu && window.searchParcels && window.searchParcels.has(parcelData.pnu);
+
+        if (isSearchParcel) {
+            // 검색 필지는 실제 정보가 있어야만 마커 표시
+            console.log('🔍 검색 필지 마커 조건 확인:', {
+                pnu: parcelData.pnu,
+                hasRealInfo: hasRealInfo,
+                memo: parcelData.memo?.trim() || '(없음)',
+                ownerName: parcelData.ownerName?.trim() || '(없음)',
+                ownerAddress: parcelData.ownerAddress?.trim() || '(없음)',
+                ownerContact: parcelData.ownerContact?.trim() || '(없음)'
+            });
+            return hasRealInfo;
+        }
+
+        // 일반 필지도 실제 정보가 있어야만 마커 표시 (지번만으로는 마커 생성하지 않음)
+        console.log('📍 일반 필지 마커 조건 확인:', {
+            parcelName: parcelData.parcelName || parcelData.parcel_name,
+            hasRealInfo: hasRealInfo,
+            memo: parcelData.memo?.trim() || '(없음)',
+            ownerName: parcelData.ownerName?.trim() || '(없음)',
+            ownerAddress: parcelData.ownerAddress?.trim() || '(없음)',
+            ownerContact: parcelData.ownerContact?.trim() || '(없음)'
+        });
+
+        return hasRealInfo;
     }
 
     // 초기화 (지도 로드 후 호출)
@@ -204,6 +230,18 @@ class MemoMarkerManager {
     // 메모 마커 생성
     async createMemoMarker(parcelData) {
         try {
+            // 🛡️ 마커 생성 조건 확인 (가장 중요한 체크)
+            if (!this.shouldShowMarker(parcelData)) {
+                console.log('🚫 마커 생성 조건 미충족:', {
+                    parcelName: parcelData.parcelName || parcelData.parcel_name,
+                    memo: parcelData.memo?.trim() || '(없음)',
+                    ownerName: parcelData.ownerName?.trim() || '(없음)',
+                    ownerAddress: parcelData.ownerAddress?.trim() || '(없음)',
+                    ownerContact: parcelData.ownerContact?.trim() || '(없음)'
+                });
+                return;
+            }
+
             // 일관된 키 생성: PNU 우선, 없으면 parcelNumber, 그것도 없으면 ID
             const pnu = parcelData.pnu || parcelData.parcelNumber || parcelData.id;
 
