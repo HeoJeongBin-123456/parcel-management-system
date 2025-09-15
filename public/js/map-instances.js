@@ -282,13 +282,50 @@ function setupMapTypeButtons() {
             // 거리뷰 모드 처리
             if (mapType === 'street') {
                 window.isStreetViewMode = true;
-                console.log('🚶 거리뷰 모드 활성화');
+
+                // 현재 활성 지도에 StreetLayer 추가
+                const currentMap = getCurrentActiveMap();
+                if (currentMap) {
+                    // 모드별 StreetLayer 관리
+                    if (!window.streetLayers) {
+                        window.streetLayers = {
+                            click: null,
+                            search: null,
+                            hand: null
+                        };
+                    }
+
+                    // 기존 StreetLayer가 있으면 제거
+                    if (window.streetLayers[currentMode]) {
+                        window.streetLayers[currentMode].setMap(null);
+                        window.streetLayers[currentMode] = null;
+                    }
+
+                    // 새 StreetLayer 생성 및 추가
+                    try {
+                        window.streetLayers[currentMode] = new naver.maps.StreetLayer();
+                        window.streetLayers[currentMode].setMap(currentMap);
+                        console.log(`🚶 거리뷰 레이어 활성화 (${currentMode} 모드) - 파란 선을 클릭하세요`);
+
+                        // 거리뷰 선 클릭 이벤트 등록
+                        setupStreetViewClickEvent(currentMap, currentMode);
+                    } catch (error) {
+                        console.error('거리뷰 레이어 생성 실패:', error);
+                    }
+                }
             } else if (window.isStreetViewMode) {
                 window.isStreetViewMode = false;
-                document.getElementById('map-click').style.display = 'block';
-                document.getElementById('map-search').style.display = 'block';
-                document.getElementById('map-hand').style.display = 'block';
-                document.getElementById('pano').style.display = 'none';
+
+                // 모든 모드의 StreetLayer 제거
+                if (window.streetLayers) {
+                    Object.keys(window.streetLayers).forEach(mode => {
+                        if (window.streetLayers[mode]) {
+                            window.streetLayers[mode].setMap(null);
+                            window.streetLayers[mode] = null;
+                        }
+                    });
+                }
+
                 console.log('🚶 거리뷰 모드 해제');
             }
         });
@@ -322,12 +359,148 @@ function getMapByMode(mode) {
     return maps[mode];
 }
 
+/**
+ * 거리뷰 클릭 이벤트 설정
+ */
+function setupStreetViewClickEvent(map, mode) {
+    // 기존 이벤트 리스너 제거 (중복 방지)
+    if (window.streetViewClickListener && window.streetViewClickListener[mode]) {
+        naver.maps.Event.removeListener(window.streetViewClickListener[mode]);
+    }
+
+    if (!window.streetViewClickListener) {
+        window.streetViewClickListener = {};
+    }
+
+    // 지도 클릭 이벤트 등록
+    window.streetViewClickListener[mode] = naver.maps.Event.addListener(map, 'click', function(e) {
+        // 거리뷰 모드가 활성화되어 있을 때만
+        if (window.isStreetViewMode && window.streetLayers && window.streetLayers[mode]) {
+            const coord = e.coord;
+
+            // 파노라마 열기
+            openPanorama(coord.lat(), coord.lng());
+        }
+    });
+}
+
+/**
+ * 파노라마 열기
+ */
+function openPanorama(lat, lng) {
+    console.log(`🚶 파노라마 열기: ${lat}, ${lng}`);
+
+    // 모든 지도 숨기기
+    document.getElementById('map-click').style.display = 'none';
+    document.getElementById('map-search').style.display = 'none';
+    document.getElementById('map-hand').style.display = 'none';
+
+    // 파노라마 레이어 표시
+    const panoElement = document.getElementById('pano');
+    if (panoElement) {
+        panoElement.style.display = 'block';
+        panoElement.style.width = '100%';
+        panoElement.style.height = '100%';
+
+        try {
+            // 파노라마 초기화
+            if (!window.pano) {
+                window.pano = new naver.maps.Panorama(panoElement, {
+                    position: new naver.maps.LatLng(lat, lng),
+                    pov: {
+                        pan: -90,
+                        tilt: 0,
+                        fov: 100
+                    }
+                });
+
+                // 파노라마 닫기 버튼 추가
+                addPanoramaCloseButton();
+            } else {
+                // 기존 파노라마가 있으면 재생성
+                window.pano = null;
+                window.pano = new naver.maps.Panorama(panoElement, {
+                    position: new naver.maps.LatLng(lat, lng),
+                    pov: {
+                        pan: -90,
+                        tilt: 0,
+                        fov: 100
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('파노라마 초기화 실패:', error);
+            alert('이 위치에서는 거리뷰를 사용할 수 없습니다.');
+            closePanorama();
+        }
+    }
+}
+
+/**
+ * 파노라마 닫기 버튼 추가
+ */
+function addPanoramaCloseButton() {
+    if (document.querySelector('.pano-close-btn')) {
+        return; // 이미 버튼이 있으면 중복 추가하지 않음
+    }
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'pano-close-btn';
+    closeBtn.innerHTML = '✖';
+    closeBtn.title = '거리뷰 닫기';
+    closeBtn.style.cssText = `
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        width: 40px;
+        height: 40px;
+        background: white;
+        border: none;
+        border-radius: 50%;
+        cursor: pointer;
+        font-size: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    `;
+
+    closeBtn.addEventListener('click', closePanorama);
+    document.getElementById('pano').appendChild(closeBtn);
+}
+
+/**
+ * 파노라마 닫기
+ */
+function closePanorama() {
+    console.log('🚶 파노라마 닫기');
+
+    // 파노라마 숨기기
+    const panoElement = document.getElementById('pano');
+    if (panoElement) {
+        panoElement.style.display = 'none';
+    }
+
+    // 현재 모드의 지도 다시 표시
+    const currentMode = window.currentMode || 'click';
+    document.getElementById(`map-${currentMode}`).style.display = 'block';
+
+    // 닫기 버튼 제거
+    const closeBtn = document.querySelector('.pano-close-btn');
+    if (closeBtn) {
+        closeBtn.remove();
+    }
+}
+
 // 전역 함수로 노출
 window.initAllMapInstances = initAllMapInstances;
 window.syncMapPosition = syncMapPosition;
 window.getCurrentActiveMap = getCurrentActiveMap;
 window.getMapByMode = getMapByMode;
 window.setMapTypeForMode = setMapTypeForMode;
+window.openPanorama = openPanorama;
+window.closePanorama = closePanorama;
 
 // 초기화 완료 후 자동 실행하지 않음 (mode-manager에서 호출)
 console.log('🗺️ map-instances.js 로드 완료');
