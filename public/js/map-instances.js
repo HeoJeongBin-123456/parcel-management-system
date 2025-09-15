@@ -397,43 +397,81 @@ function openPanorama(lat, lng) {
 
     // 파노라마 레이어 표시
     const panoElement = document.getElementById('pano');
-    if (panoElement) {
-        panoElement.style.display = 'block';
-        panoElement.style.width = '100%';
-        panoElement.style.height = '100%';
+    if (!panoElement) {
+        console.error('파노라마 엘리먼트를 찾을 수 없습니다');
+        return;
+    }
 
+    // 기존 닫기 버튼 제거
+    const existingCloseBtn = panoElement.querySelector('.pano-close-btn');
+    if (existingCloseBtn) {
+        existingCloseBtn.remove();
+    }
+
+    // 파노라마 엘리먼트 스타일 설정 - 각 속성을 개별적으로 설정
+    panoElement.style.setProperty('display', 'block', 'important');
+    panoElement.style.setProperty('width', '100vw', 'important');
+    panoElement.style.setProperty('height', '100vh', 'important');
+    panoElement.style.setProperty('position', 'fixed', 'important');
+    panoElement.style.setProperty('top', '0', 'important');
+    panoElement.style.setProperty('left', '0', 'important');
+    panoElement.style.setProperty('z-index', '10000', 'important');
+    panoElement.style.setProperty('background-color', '#000', 'important');
+
+    // 잠시 대기 후 파노라마 초기화 (DOM 렌더링 대기)
+    setTimeout(() => {
         try {
-            // 파노라마 초기화
-            if (!window.pano) {
-                window.pano = new naver.maps.Panorama(panoElement, {
-                    position: new naver.maps.LatLng(lat, lng),
-                    pov: {
-                        pan: -90,
-                        tilt: 0,
-                        fov: 100
-                    }
-                });
-
-                // 파노라마 닫기 버튼 추가
-                addPanoramaCloseButton();
-            } else {
-                // 기존 파노라마가 있으면 재생성
+            // 기존 파노라마 인스턴스 정리
+            if (window.pano) {
                 window.pano = null;
-                window.pano = new naver.maps.Panorama(panoElement, {
-                    position: new naver.maps.LatLng(lat, lng),
-                    pov: {
-                        pan: -90,
-                        tilt: 0,
-                        fov: 100
-                    }
-                });
             }
+
+            // 새 파노라마 생성
+            window.pano = new naver.maps.Panorama(panoElement, {
+                position: new naver.maps.LatLng(lat, lng),
+                pov: {
+                    pan: 0,
+                    tilt: 0,
+                    fov: 100
+                },
+                visible: true,
+                minZoom: 0,
+                maxZoom: 3,
+                flightSpot: true,
+                aroundControl: true,
+                zoomControl: true
+            });
+
+            // 파노라마 로드 완료 이벤트
+            naver.maps.Event.addListener(window.pano, 'pano_changed', function() {
+                console.log('✅ 파노라마 로드 완료');
+                // 파노라마 로드 후 display 확실히 설정
+                const panoEl = document.getElementById('pano');
+                if (panoEl) {
+                    panoEl.style.setProperty('display', 'block', 'important');
+                }
+            });
+
+            // 파노라마 에러 이벤트
+            naver.maps.Event.addListener(window.pano, 'pano_error', function() {
+                console.error('❌ 파노라마 로드 실패');
+                alert('이 위치에서는 거리뷰를 사용할 수 없습니다.');
+                closePanorama();
+            });
+
+            // 파노라마 닫기 버튼 추가
+            addPanoramaCloseButton();
+
+            console.log('✅ 파노라마 초기화 성공');
+
+            // 파노라마 초기화 후 display 확실히 설정
+            panoElement.style.setProperty('display', 'block', 'important');
         } catch (error) {
             console.error('파노라마 초기화 실패:', error);
-            alert('이 위치에서는 거리뷰를 사용할 수 없습니다.');
+            alert('거리뷰를 사용할 수 없습니다.\n' + error.message);
             closePanorama();
         }
-    }
+    }, 100);
 }
 
 /**
@@ -460,10 +498,10 @@ function addPanoramaCloseButton() {
         cursor: pointer;
         font-size: 20px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-        z-index: 1000;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        z-index: 10001;
+        display: block;
+        line-height: 40px;
+        text-align: center;
     `;
 
     closeBtn.addEventListener('click', closePanorama);

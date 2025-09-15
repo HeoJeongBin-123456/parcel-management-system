@@ -1,0 +1,79 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - heading "네이버 지도 필지 관리 프로그램" [level=1] [ref=e4]
+    - generic [ref=e6]:
+      - button "일반지도" [ref=e7] [cursor=pointer]
+      - button "위성지도" [ref=e8] [cursor=pointer]
+      - button "지적편집도" [ref=e9] [cursor=pointer]
+      - button "거리뷰" [active] [ref=e10] [cursor=pointer]
+    - generic [ref=e11]:
+      - generic [ref=e12]: 🟢 실시간 동기화
+      - button "캘린더" [ref=e13] [cursor=pointer]:
+        - img [ref=e14] [cursor=pointer]
+        - generic [ref=e19] [cursor=pointer]: 캘린더
+      - button "백업" [ref=e20] [cursor=pointer]:
+        - img [ref=e21] [cursor=pointer]
+        - generic [ref=e24] [cursor=pointer]: 백업
+  - generic [ref=e25]:
+    - complementary [ref=e26]:
+      - generic [ref=e27]:
+        - heading "필지 색상 클릭 모드" [level=3] [ref=e28]:
+          - text: 필지 색상
+          - generic [ref=e29]: 클릭 모드
+        - generic [ref=e40]: "선택된 색상:"
+      - generic [ref=e42]:
+        - heading "필지 정보" [level=3] [ref=e43]
+        - generic [ref=e44]:
+          - generic [ref=e45]:
+            - generic [ref=e46]: 지번
+            - 'textbox "예: 123-4" [ref=e47]'
+          - generic [ref=e48]:
+            - generic [ref=e49]: 소유자 이름
+            - textbox "홍길동" [ref=e50]
+          - generic [ref=e51]:
+            - generic [ref=e52]: 소유자 주소
+            - textbox "서울시 강남구..." [ref=e53]
+          - generic [ref=e54]:
+            - generic [ref=e55]: 연락처
+            - textbox "010-1234-5678" [ref=e56]
+          - generic [ref=e57]:
+            - generic [ref=e58]: 메모
+            - textbox "추가 메모..." [ref=e59]
+          - generic [ref=e60]:
+            - button "저장" [ref=e61] [cursor=pointer]
+            - button "필지 정보 초기화" [ref=e62] [cursor=pointer]
+            - generic: ✅ 자동저장 완료
+          - generic [ref=e63]:
+            - button "구글 시트 전송" [ref=e64] [cursor=pointer]
+            - button "엑셀 복사" [ref=e65] [cursor=pointer]
+    - generic [ref=e66]:
+      - generic [ref=e67]:
+        - button "🎯 클릭" [ref=e68] [cursor=pointer]
+        - button "🔍 검색" [ref=e69] [cursor=pointer]
+        - button "✋ 손" [ref=e70] [cursor=pointer]
+      - generic [ref=e71]: 클릭 모드
+      - generic [ref=e72]:
+        - generic:
+          - generic [ref=e106]: 300m
+          - link "NAVER" [ref=e107]:
+            - /url: https://ssl.pstatic.net/static/maps/mantle/notice/legal.html
+            - img "NAVER" [ref=e108]
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic: © NAVER Corp.
+        - generic [ref=e110]:
+          - link "지도 확대" [ref=e111]:
+            - /url: "#"
+            - img "지도 확대" [ref=e112]
+          - link "지도 확대/축소 슬라이더" [ref=e116]:
+            - /url: "#"
+            - img "지도 확대/축소 슬라이더" [ref=e117]
+          - link "지도 축소" [ref=e118]:
+            - /url: "#"
+            - img "지도 축소" [ref=e119]
+```
