@@ -1051,9 +1051,14 @@ document.addEventListener('DOMContentLoaded', async function() {
     });
 
     // 2. 나머지는 비동기로 로드
-    requestIdleCallback(() => {
+    requestIdleCallback(async () => {
         if (window.appInitializer && !window.appInitializer.isInitialized) {
-            window.appInitializer.initialize();
+            await window.appInitializer.initialize();
+        }
+
+        // 클릭 모드 저장된 필지 복원
+        if (window.loadSavedClickModeParcels) {
+            await window.loadSavedClickModeParcels();
         }
     });
 });
@@ -1061,11 +1066,17 @@ document.addEventListener('DOMContentLoaded', async function() {
 // 윈도우 로드 후 추가 체크 (fallback)
 window.addEventListener('load', function() {
     console.log('🎯 윈도우 로드 완료');
-    
-    setTimeout(() => {
+
+    setTimeout(async () => {
         if (window.appInitializer && !window.appInitializer.isInitialized) {
             console.log('🔄 DOM 후 초기화 재시도');
-            window.appInitializer.initialize();
+            await window.appInitializer.initialize();
+        }
+
+        // 클릭 모드 저장된 필지 복원 (백업)
+        if (window.loadSavedClickModeParcels && !window.clickModeParcelsLoaded) {
+            window.clickModeParcelsLoaded = true;
+            await window.loadSavedClickModeParcels();
         }
     }, 2000);
 });

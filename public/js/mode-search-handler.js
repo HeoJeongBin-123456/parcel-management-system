@@ -427,7 +427,7 @@ async function handleSearchModeRightClick(lat, lng) {
                 const path = paths.getAt(0);
 
                 // 폴리곤 내부 클릭 확인
-                if (naver.maps.geometry.isPointInPolygon(clickedPoint, path)) {
+                if (window.isPointInPolygon && window.isPointInPolygon(lat, lng, path)) {
                     targetPNU = pnu;
                     targetPolygon = polygon;
                     break;
@@ -443,7 +443,7 @@ async function handleSearchModeRightClick(lat, lng) {
                     const path = paths.getAt(0);
 
                     // 폴리곤 내부 클릭 확인
-                    if (naver.maps.geometry.isPointInPolygon(clickedPoint, path)) {
+                    if (window.isPointInPolygon && window.isPointInPolygon(lat, lng, path)) {
                         targetPNU = pnu;
                         targetPolygon = polygon;
                         break;

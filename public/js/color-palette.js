@@ -11,8 +11,8 @@ class ColorPaletteManager {
             { index: 3, hex: '#00FF00', name: '초록', isActive: false, usageCount: 0 },
             { index: 4, hex: '#0000FF', name: '파랑', isActive: false, usageCount: 0 },
             { index: 5, hex: '#000000', name: '검정', isActive: false, usageCount: 0 },
-            { index: 6, hex: '#87CEEB', name: '하늘색', isActive: false, usageCount: 0 },
-            { index: 7, hex: '#FFFFFF', name: '흰색', isActive: false, usageCount: 0 }
+            { index: 6, hex: '#FFFFFF', name: '흰색', isActive: false, usageCount: 0 },
+            { index: 7, hex: '#87CEEB', name: '하늘색', isActive: false, usageCount: 0 }
         ];
 
         this.currentSelection = null;

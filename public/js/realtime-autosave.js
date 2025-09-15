@@ -257,20 +257,49 @@ class RealtimeAutoSave {
     // 현재 데이터 수집
     async collectCurrentData() {
         let data = [];
-        
+
         try {
-            // 1. 전역 변수에서
-            if (window.parcelsData && Array.isArray(window.parcelsData)) {
-                data = [...window.parcelsData];
+            // 1. localStorage에서 기존 데이터 먼저 불러오기 (클릭 모드 데이터 포함)
+            const savedData = JSON.parse(localStorage.getItem('parcelData') || '[]');
+            if (Array.isArray(savedData)) {
+                data = [...savedData];
+                console.log(`📦 localStorage에서 ${savedData.length}개 필지 로드`);
             }
-            
-            // 2. 폼 데이터 추가/업데이트
+
+            // 2. window.parcelsData가 있으면 병합 (중복 제거)
+            if (window.parcelsData && Array.isArray(window.parcelsData)) {
+                // PNU 기준으로 중복 제거하며 병합
+                const existingPNUs = new Set(data.map(item => item.pnu || item.properties?.PNU || item.properties?.pnu));
+
+                window.parcelsData.forEach(parcel => {
+                    const pnu = parcel.pnu || parcel.properties?.PNU || parcel.properties?.pnu;
+                    if (pnu && !existingPNUs.has(pnu)) {
+                        data.push(parcel);
+                        existingPNUs.add(pnu);
+                    } else if (pnu && existingPNUs.has(pnu)) {
+                        // 기존 데이터 업데이트 (최신 데이터로)
+                        const index = data.findIndex(item =>
+                            (item.pnu || item.properties?.PNU || item.properties?.pnu) === pnu
+                        );
+                        if (index >= 0) {
+                            // updatedAt 비교하여 최신 데이터 유지
+                            const existingTime = data[index].updatedAt || 0;
+                            const newTime = parcel.updatedAt || 0;
+                            if (newTime > existingTime) {
+                                data[index] = parcel;
+                            }
+                        }
+                    }
+                });
+            }
+
+            // 3. 폼 데이터 추가/업데이트
             const formData = this.getCurrentFormData();
             if (formData) {
                 data = this.mergeFormData(data, formData);
             }
-            
-            // 3. 지도 상태 정보 추가
+
+            // 4. 지도 상태 정보 추가
             const mapState = this.getMapState();
             
             // 4. 메타데이터 추가
@@ -562,17 +591,44 @@ class RealtimeAutoSave {
     // 페이지 언로드 처리
     setupUnloadHandler() {
         window.addEventListener('beforeunload', () => {
-            if (this.saveQueue.size > 0) {
-                console.log('📤 페이지 종료 전 최종 저장');
-                
-                // 동기적 저장 (간단한 버전)
-                try {
-                    const data = window.parcelsData || [];
-                    localStorage.setItem('parcelData', JSON.stringify(data));
-                    localStorage.setItem('lastAutoSave', new Date().toISOString());
-                } catch (error) {
-                    console.error('❌ 최종 저장 실패:', error);
+            console.log('💾 페이지 종료 전 긴급 백업');
+
+            // 동기적 저장 (간단한 버전)
+            try {
+                // 1. 기존 localStorage 데이터 보존
+                const existingData = JSON.parse(localStorage.getItem('parcelData') || '[]');
+                const dataMap = new Map();
+
+                // 기존 데이터를 Map에 추가 (PNU를 키로 사용)
+                existingData.forEach(item => {
+                    const pnu = item.pnu || item.properties?.PNU || item.properties?.pnu;
+                    if (pnu) {
+                        dataMap.set(pnu, item);
+                    }
+                });
+
+                // 2. window.parcelsData가 있으면 업데이트 (덮어쓰지 않고 병합)
+                if (window.parcelsData && Array.isArray(window.parcelsData)) {
+                    window.parcelsData.forEach(parcel => {
+                        const pnu = parcel.pnu || parcel.properties?.PNU || parcel.properties?.pnu;
+                        if (pnu) {
+                            // 기존 데이터가 있으면 updatedAt 비교
+                            const existing = dataMap.get(pnu);
+                            if (!existing || (parcel.updatedAt > (existing.updatedAt || 0))) {
+                                dataMap.set(pnu, parcel);
+                            }
+                        }
+                    });
                 }
+
+                // 3. Map을 배열로 변환하여 저장
+                const finalData = Array.from(dataMap.values());
+                localStorage.setItem('parcelData', JSON.stringify(finalData));
+                localStorage.setItem('lastAutoSave', new Date().toISOString());
+
+                console.log(`✅ 긴급 백업 완료: ${finalData.length}개 필지`);
+            } catch (error) {
+                console.error('❌ 최종 저장 실패:', error);
             }
         });
     }

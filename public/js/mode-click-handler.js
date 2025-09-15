@@ -7,6 +7,11 @@
 const clickModePolygons = new Map(); // PNU -> polygon 맵핑
 const clickModeParcelData = new Map(); // PNU -> parcel data 맵핑
 
+// clickParcels Map 초기화 (전역)
+if (!window.clickParcels) {
+    window.clickParcels = new Map();
+}
+
 // 디바운싱 타이머
 let clickModeDebounceTimer = null;
 
@@ -29,7 +34,7 @@ function setupClickModeEventListeners() {
             return;
         }
 
-        // 디바운싱 적용 (500ms)
+        // 디바운싱 적용 (100ms로 단축 - 성능 개선)
         if (clickModeDebounceTimer) {
             clearTimeout(clickModeDebounceTimer);
         }
@@ -37,7 +42,7 @@ function setupClickModeEventListeners() {
         clickModeDebounceTimer = setTimeout(() => {
             // 왼쪽 클릭: 색칠 기능
             handleClickModeLeftClick(coord.lat(), coord.lng());
-        }, 500);
+        }, 100);
     });
 
     // 오른쪽 클릭 이벤트 (필지 삭제)
@@ -99,7 +104,9 @@ async function getParcelInfoViaProxyForClickMode(lat, lng) {
 
             if (features && features.length > 0) {
                 const feature = features[0];
+                const pnu = feature.properties.PNU || feature.properties.pnu;
                 const parcelData = {
+                    pnu: pnu,  // PNU를 최상위에 추가
                     properties: feature.properties,
                     geometry: feature.geometry,
                     source: 'click',          // 🆕 클릭으로 추가됨
@@ -126,6 +133,7 @@ async function getParcelInfoViaProxyForClickMode(lat, lng) {
                     }
                     // 데이터 저장
                     await saveClickModeParcelData(parcelData);
+                    console.log(`💾 클릭 모드 필지 저장 완료: ${pnu}, 색상: ${currentColor}`);
                 }
 
                 return true;
@@ -282,6 +290,15 @@ async function applyClickModeColorToParcel(parcel, color, polygon) {
             updatedAt: Date.now()
         };
 
+        // clickParcels Map에 추가
+        if (window.clickParcels) {
+            window.clickParcels.set(pnu, {
+                parcel: parcelDataWithSource,
+                polygon: polygon,
+                color: color
+            });
+        }
+
         await saveClickModeParcelData(parcelDataWithSource);
 
         console.log(`🎨 클릭 모드 색상 적용: ${pnu} -> ${color}`);
@@ -315,14 +332,23 @@ async function saveClickModeParcelData(parcelData) {
             });
         }
 
-        // LocalStorage 백업
+        // LocalStorage 백업 - pnu를 포함한 완전한 데이터 구조 저장
         const savedData = JSON.parse(localStorage.getItem('parcelData') || '[]');
-        const existingIndex = savedData.findIndex(item => item.pnu === pnu);
+        const saveData = {
+            pnu: pnu,
+            properties: parcelData.properties,
+            geometry: parcelData.geometry,
+            color: parcelData.color,
+            source: 'click',
+            mode: 'click',
+            updatedAt: Date.now()
+        };
 
+        const existingIndex = savedData.findIndex(item => item.pnu === pnu);
         if (existingIndex >= 0) {
-            savedData[existingIndex] = parcelData;
+            savedData[existingIndex] = saveData;
         } else {
-            savedData.push(parcelData);
+            savedData.push(saveData);
         }
 
         localStorage.setItem('parcelData', JSON.stringify(savedData));
@@ -424,8 +450,8 @@ async function handleClickModeRightClick(lat, lng) {
                 const paths = polygon.getPaths();
                 const path = paths.getAt(0);
 
-                // 폴리곤 내부 클릭 확인
-                if (naver.maps.geometry.isPointInPolygon(clickedPoint, path)) {
+                // 폴리곤 내부 클릭 확인 - 자체 구현 함수 사용
+                if (window.isPointInPolygon && window.isPointInPolygon(lat, lng, path)) {
                     targetPNU = pnu;
                     targetPolygon = polygon;
                     break;
@@ -504,10 +530,75 @@ async function getParcelColorFromStorage(pnu) {
     }
 }
 
+/**
+ * 📥 저장된 클릭 모드 필지 데이터 복원
+ */
+async function loadSavedClickModeParcels() {
+    console.log('📥 클릭 모드 저장된 필지 복원 시작...');
+
+    try {
+        // LocalStorage에서 데이터 로드
+        const savedParcels = JSON.parse(localStorage.getItem('parcelData') || '[]');
+        const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
+
+        let restoredCount = 0;
+
+        for (const parcelData of savedParcels) {
+            // 클릭 모드에서 생성된 필지만 복원
+            if (parcelData.mode === 'click' || parcelData.source === 'click') {
+                const pnu = parcelData.properties?.PNU || parcelData.properties?.pnu || parcelData.pnu;
+
+                if (pnu && parcelData.geometry) {
+                    // 폴리곤 그리기
+                    const polygon = await drawClickModeParcelPolygon(parcelData, true);
+
+                    if (polygon) {
+                        // 저장된 색상 적용
+                        const savedColor = parcelColors[pnu] || parcelData.color;
+                        if (savedColor) {
+                            polygon.setOptions({
+                                fillColor: savedColor,
+                                strokeColor: savedColor,
+                                fillOpacity: 0.5,
+                                strokeOpacity: 0.8
+                            });
+                        }
+
+                        // clickParcels Map에 추가 (중요!)
+                        if (window.clickParcels) {
+                            window.clickParcels.set(pnu, {
+                                parcel: parcelData,
+                                polygon: polygon,
+                                color: savedColor
+                            });
+                        }
+
+                        // clickModePolygons와 clickModeParcelData에도 추가
+                        clickModePolygons.set(pnu, polygon);
+                        clickModeParcelData.set(pnu, parcelData);
+
+                        restoredCount++;
+                        console.log(`✅ 클릭 모드 필지 복원: ${pnu} (색상: ${savedColor})`);
+                    }
+                }
+            }
+        }
+
+        console.log(`📥 클릭 모드 필지 복원 완료: ${restoredCount}개`);
+        return restoredCount;
+
+    } catch (error) {
+        console.error('❌ 클릭 모드 필지 복원 실패:', error);
+        return 0;
+    }
+}
+
 // 전역 함수로 노출
 window.setupClickModeEventListeners = setupClickModeEventListeners;
 window.getParcelInfoForClickMode = getParcelInfoForClickMode;
 window.clickModePolygons = clickModePolygons;
 window.clickModeParcelData = clickModeParcelData;
+window.loadSavedClickModeParcels = loadSavedClickModeParcels;
+window.handleClickModeLeftClick = handleClickModeLeftClick;  // 테스트용 노출
 
 console.log('🎯 mode-click-handler.js 로드 완료');

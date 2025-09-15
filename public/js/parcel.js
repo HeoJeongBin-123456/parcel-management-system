@@ -2365,6 +2365,9 @@ function isPointInPolygon(pointLat, pointLng, polygonPath) {
     return inside;
 }
 
+// 전역으로 노출 (mode-click-handler.js와 mode-search-handler.js에서 사용)
+window.isPointInPolygon = isPointInPolygon;
+
 // 🎯 ULTRATHINK: 점에서 폴리곤 경계까지의 최단 거리 계산
 function getDistanceToPolygonEdge(pointLat, pointLng, polygonPath) {
     let minDistance = Infinity;
