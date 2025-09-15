@@ -225,16 +225,16 @@ class ModeManager {
         }
 
         // 모드 버튼 활성화 상태 업데이트
-        document.querySelectorAll('.mode-button').forEach(btn => {
+        document.querySelectorAll('.mode-button, .mode-btn').forEach(btn => {
             btn.classList.remove('active');
             if (btn.dataset.mode === mode) {
                 btn.classList.add('active');
             }
         });
 
-        // 지도 커서 스타일 업데이트
+        // 지도 커서는 CSS에서 처리 (손 모드의 경우 CSS !important로 설정됨)
         const mapElement = document.getElementById('map');
-        if (mapElement) {
+        if (mapElement && mode !== 'hand') {
             switch(mode) {
                 case 'click':
                     mapElement.style.cursor = 'crosshair';
@@ -242,12 +242,12 @@ class ModeManager {
                 case 'search':
                     mapElement.style.cursor = 'pointer';
                     break;
-                case 'hand':
-                    mapElement.style.cursor = 'grab';
-                    break;
                 default:
                     mapElement.style.cursor = 'default';
             }
+        } else if (mapElement && mode === 'hand') {
+            // 손 모드는 CSS에서 처리하므로 인라인 스타일 제거
+            mapElement.style.cursor = '';
         }
     }
 
@@ -300,6 +300,21 @@ class ModeManager {
     }
 
     /**
+     * 모드 버튼 이벤트 리스너 설정
+     */
+    setupModeButtons() {
+        document.querySelectorAll('.mode-btn, .mode-button').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.preventDefault();
+                const mode = btn.dataset.mode;
+                if (mode) {
+                    await this.switchMode(mode);
+                }
+            });
+        });
+    }
+
+    /**
      * 초기화
      */
     async initialize() {
@@ -313,6 +328,9 @@ class ModeManager {
         this.currentMode = savedMode;
         document.body.className = `mode-${savedMode}`;
         this.updateUI(savedMode);
+
+        // 모드 버튼 이벤트 리스너 설정
+        this.setupModeButtons();
 
         console.log(`[ModeManager] Initialized in ${savedMode} mode`);
     }

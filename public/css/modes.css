@@ -7,8 +7,8 @@
 
 /* 클릭 모드 */
 body.mode-click {
-    --primary-color: #4CAF50;
-    --mode-indicator-bg: #E8F5E9;
+    --primary-color: #424242;
+    --mode-indicator-bg: #F5F5F5;
 }
 
 body.mode-click .search-only,
@@ -45,8 +45,8 @@ body.mode-search #map {
 
 /* 손 모드 */
 body.mode-hand {
-    --primary-color: #607D8B;
-    --mode-indicator-bg: #ECEFF1;
+    --primary-color: #2196F3;
+    --mode-indicator-bg: #E3F2FD;
 }
 
 body.mode-hand .click-only,
@@ -142,7 +142,7 @@ body.mode-hand .interactive-elements {
 
 .mode-switcher {
     position: fixed;
-    top: 20px;
+    top: 10px;
     right: 20px;
     background: white;
     border-radius: 12px;
@@ -175,12 +175,9 @@ body.mode-hand .interactive-elements {
 }
 
 .mode-button[data-mode="click"]::before {
-    content: "🖱️ ";
+    content: "🎯 ";
 }
 
-.mode-button[data-mode="search"]::before {
-    content: "🔍 ";
-}
 
 .mode-button[data-mode="hand"]::before {
     content: "✋ ";
@@ -273,8 +270,10 @@ body.mode-hand .interactive-elements {
 .search-input-container {
     position: fixed;
     top: 80px;
-    left: 20px;
-    right: 340px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 600px;
+    max-width: calc(100vw - 40px);
     background: white;
     border-radius: 12px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
@@ -371,9 +370,10 @@ body[class*="mode-"] .mode-indicator {
     }
 
     .search-input-container {
-        left: 10px;
-        right: 10px;
+        left: 50%;
+        transform: translateX(-50%);
         top: 60px;
+        width: calc(100vw - 20px);
     }
 }
 

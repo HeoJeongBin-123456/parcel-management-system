@@ -23,26 +23,80 @@ body {
     padding: 0.6rem 1rem;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     z-index: 1000;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 2rem;
 }
 
-.header h1 {
-    font-size: 1.2rem;
-    margin-bottom: 0.3rem;
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-shrink: 0;
 }
 
-.header-controls {
+.header-center {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-left: 3rem;
+}
+
+/* 연결 상태 표시 */
+.header .connection-status {
+    background: rgba(255, 255, 255, 0.15) !important;
+    color: white !important;
+    padding: 0.4rem 0.8rem !important;
+    border-radius: 20px !important;
+    font-size: 0.75rem !important;
+    font-weight: 500 !important;
+    border: 1px solid rgba(255, 255, 255, 0.25) !important;
+    white-space: nowrap !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.3rem !important;
+    min-height: 28px !important;
+}
+
+.header .connection-status.connected {
+    background: rgba(34, 197, 94, 0.2) !important;
+    border-color: rgba(34, 197, 94, 0.4) !important;
+    color: #22c55e !important;
+}
+
+.header .connection-status.disconnected {
+    background: rgba(239, 68, 68, 0.2) !important;
+    border-color: rgba(239, 68, 68, 0.4) !important;
+    color: #ef4444 !important;
+}
+
+.header-right {
     display: flex;
     gap: 0.5rem;
     align-items: center;
-    flex-wrap: wrap;
+    justify-content: flex-end;
+    flex-shrink: 0;
+    margin-right: 20rem;
 }
 
-.map-type-selector {
+.header h1 {
+    font-size: 1.1rem;
+    margin: 0;
+    white-space: nowrap;
+}
+
+/* 모드 선택 버튼 (제목 옆에 배치) */
+.mode-selector {
     display: flex;
     gap: 0.3rem;
 }
 
-.map-type-btn {
+.mode-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
     padding: 0.3rem 0.6rem;
     background: #34495e;
     color: white;
@@ -53,50 +107,179 @@ body {
     font-size: 0.8rem;
 }
 
-.map-type-btn:hover {
+.mode-btn:hover {
     background: #4a5f7a;
 }
 
-.map-type-btn.active {
+.mode-btn.active {
     background: #3498db;
 }
 
-.search-container {
+.mode-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* 헤더 버튼 공통 스타일 - 최우선순위로 설정 */
+.header .header-calendar-btn,
+.header .header-backup-btn {
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.5rem !important;
+    padding: 0.5rem 0.8rem !important;
+    background: rgba(255, 255, 255, 0.15) !important;
+    color: white !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    border-radius: 6px !important;
+    cursor: pointer !important;
+    transition: all 0.3s ease !important;
+    font-size: 0.85rem !important;
+    font-weight: 500 !important;
+    position: relative !important;
+    overflow: visible !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+    white-space: nowrap !important;
+    height: auto !important;
+    min-height: 36px !important;
+    margin-left: 0.3rem !important;
+}
+
+.header .header-calendar-btn:hover,
+.header .header-backup-btn:hover {
+    background: rgba(255, 255, 255, 0.25) !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15) !important;
+}
+
+.header .header-calendar-btn svg,
+.header .header-backup-btn svg {
+    width: 18px !important;
+    height: 18px !important;
+    flex-shrink: 0 !important;
+}
+
+.header .header-calendar-btn span,
+.header .header-backup-btn span {
+    font-size: 0.85rem !important;
+    font-weight: 500 !important;
+}
+
+/* 지도 타입 선택 버튼 그룹 */
+.header .map-type-selector {
+    display: flex !important;
+    gap: 0.2rem !important;
+    background: rgba(255, 255, 255, 0.1) !important;
+    border-radius: 8px !important;
+    padding: 0.2rem !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+
+.header .map-type-btn {
+    padding: 0.4rem 0.8rem !important;
+    background: transparent !important;
+    color: rgba(255, 255, 255, 0.8) !important;
+    border: none !important;
+    border-radius: 6px !important;
+    cursor: pointer !important;
+    transition: all 0.3s ease !important;
+    font-size: 0.8rem !important;
+    font-weight: 500 !important;
+    white-space: nowrap !important;
+    min-height: 32px !important;
+}
+
+.header .map-type-btn:hover {
+    background: rgba(255, 255, 255, 0.15) !important;
+    color: white !important;
+}
+
+.header .map-type-btn.active {
+    background: rgba(255, 255, 255, 0.25) !important;
+    color: white !important;
+    font-weight: 600 !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+}
+
+/* 지도 위 검색 입력창 (검색 모드 전용) */
+.search-input-container {
+    position: absolute;
+    top: 20px;
+    left: 370px; /* 사이드바 너비(350px) + 마진(20px) */
+    right: 20px;
+    max-width: 600px;
+    background: white;
+    border-radius: 8px;
+    padding: 15px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    z-index: 100;
     display: flex;
-    gap: 0.3rem;
-    flex: 1;
-    max-width: 400px;
+    gap: 10px;
+    align-items: center;
 }
 
-#searchInput {
+.search-input-container #searchInput {
     flex: 1;
-    padding: 0.3rem 0.5rem;
-    border: none;
-    border-radius: 4px;
-    font-size: 0.8rem;
+    padding: 10px 15px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 14px;
+    outline: none;
 }
 
-#searchBtn, .clear-btn {
-    padding: 0.3rem 0.6rem;
+.search-input-container #searchInput:focus {
+    border-color: #3498db;
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}
+
+.search-input-container #searchBtn {
+    padding: 10px 20px;
     background: #27ae60;
     color: white;
     border: none;
-    border-radius: 4px;
+    border-radius: 6px;
     cursor: pointer;
     transition: background 0.3s;
-    font-size: 0.8rem;
+    font-size: 14px;
+    font-weight: 500;
 }
 
-#searchBtn:hover {
+.search-input-container #searchBtn:hover {
     background: #229954;
 }
 
-.clear-btn {
-    background: #e74c3c;
+.search-mode-indicator {
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
-.clear-btn:hover {
+.search-mode-badge {
+    background: #9B59B6;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.clear-search-btn {
+    background: #e74c3c;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 6px;
+    cursor: pointer;
+    transition: background 0.3s;
+}
+
+.clear-search-btn:hover {
     background: #c0392b;
+}
+
+/* 검색 모드일 때 모드 인디케이터 위치 조정 */
+.search-only.show ~ .mode-indicator,
+.search-input-container:not([style*="display: none"]) ~ .mode-indicator {
+    top: 100px; /* 검색창 아래로 이동 */
 }
 
 /* 메인 레이아웃 */
@@ -131,6 +314,34 @@ body {
 
 #map * {
     cursor: default !important; /* 지도 내부 모든 요소도 일반 커서로 변경 */
+}
+
+/* 손 모드일 때 커서 변경 */
+body.mode-hand #map {
+    cursor: grab !important;
+}
+
+body.mode-hand #map:active {
+    cursor: grabbing !important;
+}
+
+body.mode-hand #map * {
+    cursor: grab !important;
+}
+
+/* 손 모드에서 사이드바 숨기기 */
+body.mode-hand .sidebar {
+    display: none;
+}
+
+/* 손 모드에서 지도가 전체 영역 사용 */
+body.mode-hand .map-container {
+    width: 100%;
+}
+
+/* 손 모드에서 검색 입력창 위치 조정 */
+body.mode-hand .search-input-container {
+    left: 20px; /* 사이드바가 없으므로 왼쪽부터 시작 */
 }
 
 /* 거리뷰(파노라마) */
@@ -589,21 +800,92 @@ body {
     }
 }
 
-/* 반응형 */
+/* 헤더 반응형 디자인 개선 */
+@media (max-width: 1200px) {
+    .header {
+        padding: 0.5rem 1rem !important;
+        gap: 1rem !important;
+    }
+
+    .header h1 {
+        font-size: 1rem !important;
+    }
+
+    .header .map-type-btn {
+        padding: 0.3rem 0.6rem !important;
+        font-size: 0.75rem !important;
+    }
+
+    .header .header-calendar-btn,
+    .header .header-backup-btn {
+        padding: 0.4rem 0.6rem !important;
+        font-size: 0.8rem !important;
+    }
+
+    .header .connection-status {
+        font-size: 0.7rem !important;
+        padding: 0.3rem 0.6rem !important;
+    }
+}
+
+@media (max-width: 992px) {
+    .header {
+        flex-direction: column !important;
+        gap: 0.5rem !important;
+        padding: 0.5rem 1rem !important;
+    }
+
+    .header-left,
+    .header-center,
+    .header-right {
+        width: 100% !important;
+        justify-content: center !important;
+    }
+
+    .header-left {
+        order: 1;
+    }
+
+    .header-center {
+        order: 2;
+    }
+
+    .header-right {
+        order: 3;
+        gap: 0.5rem !important;
+    }
+}
+
 @media (max-width: 768px) {
     .header h1 {
-        font-size: 1.2rem;
+        font-size: 0.9rem !important;
     }
-    
+
+    .header .map-type-btn {
+        padding: 0.25rem 0.4rem !important;
+        font-size: 0.7rem !important;
+    }
+
+    .header .header-calendar-btn span,
+    .header .header-backup-btn span {
+        display: none !important;
+    }
+
+    .header .header-calendar-btn,
+    .header .header-backup-btn {
+        padding: 0.4rem !important;
+        min-width: 36px !important;
+    }
+
     .header-controls {
         flex-direction: column;
         gap: 0.5rem;
     }
-    
+
     .main-container {
-        height: calc(100vh - 140px);
+        height: calc(100vh - 120px) !important;
     }
-    
+
     .sidebar {
         display: none;
         position: absolute;
@@ -613,13 +895,44 @@ body {
         top: 0;
         left: 0;
     }
-    
+
     .sidebar.show {
         display: flex;
     }
-    
+
     .search-container {
         max-width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    .header {
+        padding: 0.4rem 0.5rem !important;
+    }
+
+    .header h1 {
+        font-size: 0.8rem !important;
+        text-align: center !important;
+    }
+
+    .header .map-type-selector {
+        gap: 0.1rem !important;
+        padding: 0.1rem !important;
+    }
+
+    .header .map-type-btn {
+        padding: 0.2rem 0.3rem !important;
+        font-size: 0.65rem !important;
+        min-height: 28px !important;
+    }
+
+    .header .connection-status {
+        font-size: 0.65rem !important;
+        padding: 0.2rem 0.4rem !important;
+    }
+
+    .main-container {
+        height: calc(100vh - 110px) !important;
     }
 }
 

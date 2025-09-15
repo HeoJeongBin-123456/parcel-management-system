@@ -53,15 +53,10 @@ class ColorPaletteManager {
                 }
             });
 
-            // 사용 카운트 표시
-            if (this.colors[index] && this.colors[index].usageCount > 0) {
-                let badge = item.querySelector('.usage-badge');
-                if (!badge) {
-                    badge = document.createElement('span');
-                    badge.className = 'usage-badge';
-                    item.appendChild(badge);
-                }
-                badge.textContent = this.colors[index].usageCount;
+            // 사용 카운트 뱃지 제거 (숫자 표시 안함)
+            let badge = item.querySelector('.usage-badge');
+            if (badge) {
+                badge.remove();
             }
         });
 
@@ -167,25 +162,17 @@ class ColorPaletteManager {
             // 툴팁 업데이트
             item.title = `${color.name} (${color.usageCount}개 사용중)`;
 
-            // 사용 카운트 뱃지 업데이트
+            // 사용 카운트 뱃지 제거 (숫자 표시 안함)
             let badge = item.querySelector('.usage-badge');
-            if (color.usageCount > 0) {
-                if (!badge) {
-                    badge = document.createElement('span');
-                    badge.className = 'usage-badge';
-                    item.appendChild(badge);
-                }
-                badge.textContent = color.usageCount;
-            } else if (badge) {
+            if (badge) {
                 badge.remove();
             }
         });
 
-        // 색상 통계 업데이트
+        // 색상 통계 표시 제거
         const statsElement = document.getElementById('colorStats');
         if (statsElement) {
-            const totalColored = this.colors.reduce((sum, color) => sum + color.usageCount, 0);
-            statsElement.textContent = `총 ${totalColored}개 필지`;
+            statsElement.textContent = '';
         }
     }
 

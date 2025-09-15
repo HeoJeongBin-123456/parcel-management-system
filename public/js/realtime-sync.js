@@ -422,8 +422,8 @@ class RealtimeSync {
         // 상태 표시 영역이 있다면 업데이트
         const statusElement = document.getElementById('connectionStatus');
         if (statusElement) {
-            const statusText = status === 'connected' 
-                ? `🟢 실시간 동기화 (${userCount}/${this.maxUsers}명)` 
+            const statusText = status === 'connected'
+                ? `🟢 실시간 동기화`
                 : '🔴 오프라인';
             statusElement.textContent = statusText;
             statusElement.className = `connection-status ${status}`;
