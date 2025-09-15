@@ -65,30 +65,109 @@ class SearchModeManager {
     }
 
     /**
-     * 실제 검색 수행 (현재는 더미 구현)
+     * 실제 검색 수행
      */
     async performSearch(query, searchType) {
-        // TODO: 실제 API 호출로 대체
-        // 현재는 LocalStorage에서 검색
-        const allParcels = JSON.parse(localStorage.getItem('parcelData') || '[]');
+        const results = [];
 
-        const results = allParcels.filter(parcel => {
+        try {
             switch(searchType) {
                 case 'address':
-                    return parcel.parcelName?.includes(query) ||
-                           parcel.ownerAddress?.includes(query);
+                    // 주소 검색 - Naver Geocoding API
+                    if (window.searchAddressByKeyword) {
+                        const searchResults = await window.searchAddressByKeyword(query);
+                        // searchAddressByKeyword가 이미 UI를 업데이트했으므로 결과만 반환
+                        return searchResults || [];
+                    }
+                    break;
+
                 case 'pnu':
-                    return parcel.pnu?.includes(query);
+                case 'jibun':
+                    // 지번 검색 - VWorld API 사용
+                    if (window.searchParcelByJibun) {
+                        const searchResults = await window.searchParcelByJibun(query);
+                        // searchParcelByJibun이 이미 UI를 업데이트했으므로 결과만 반환
+                        return searchResults || [];
+                    }
+                    break;
+
                 case 'owner':
-                    return parcel.ownerName?.includes(query);
+                    // 소유자 검색 - Supabase 검색
+                    if (window.SupabaseManager) {
+                        const supabaseResults = await window.SupabaseManager.searchByOwner(query);
+                        if (supabaseResults && supabaseResults.length > 0) {
+                            return supabaseResults;
+                        }
+                    }
+                    // Supabase 실패시 LocalStorage 검색
+                    const localParcels = JSON.parse(localStorage.getItem('parcelData') || '[]');
+                    return localParcels.filter(p => p.ownerName?.includes(query));
+
                 case 'all':
                 default:
-                    return parcel.parcelName?.includes(query) ||
-                           parcel.ownerAddress?.includes(query) ||
-                           parcel.pnu?.includes(query) ||
-                           parcel.ownerName?.includes(query);
+                    // 모든 타입 검색 - 더 정교한 분류
+
+                    // 순수 지번 패턴 (예: 1-1, 123-45, 123 등)
+                    const pureJibunPattern = /^\d+(-\d+)?$/;
+                    // 지역명 + 지번 패턴 (예: 종로구 1-1, 삼성동 123-45)
+                    const areaJibunPattern = /^[가-힣]+\s+\d+(-\d+)?$/;
+
+                    if (pureJibunPattern.test(query.trim()) || areaJibunPattern.test(query.trim())) {
+                        // 순수 지번이거나 지역명+지번 형식이면 지번 검색
+                        console.log(`[SearchMode] 지번 형식으로 검색: "${query}"`);
+                        if (window.searchParcelByJibun) {
+                            const searchResults = await window.searchParcelByJibun(query);
+                            if (searchResults && searchResults.length > 0) {
+                                return searchResults;
+                            }
+                        }
+                        // 지번 검색 실패시 주소 검색으로 폴백
+                        console.log(`[SearchMode] 지번 검색 실패, 주소 검색으로 재시도`);
+                        if (window.searchAddressByKeyword) {
+                            const searchResults = await window.searchAddressByKeyword(query);
+                            return searchResults || [];
+                        }
+                    } else {
+                        // 그 외는 모두 주소 검색 (도로명, 지역명, 전체 주소 등)
+                        console.log(`[SearchMode] 주소 형식으로 검색: "${query}"`);
+                        if (window.searchAddressByKeyword) {
+                            const searchResults = await window.searchAddressByKeyword(query);
+                            return searchResults || [];
+                        }
+                    }
+
+                    // API 실패시 LocalStorage 검색
+                    const allParcels = JSON.parse(localStorage.getItem('parcelData') || '[]');
+                    return allParcels.filter(parcel =>
+                        parcel.parcelName?.includes(query) ||
+                        parcel.ownerAddress?.includes(query) ||
+                        parcel.pnu?.includes(query) ||
+                        parcel.ownerName?.includes(query)
+                    );
             }
-        });
+        } catch (error) {
+            console.error('[SearchMode] Search API error:', error);
+
+            // API 실패시 LocalStorage 폴백
+            const allParcels = JSON.parse(localStorage.getItem('parcelData') || '[]');
+            return allParcels.filter(parcel => {
+                switch(searchType) {
+                    case 'address':
+                        return parcel.parcelName?.includes(query) ||
+                               parcel.ownerAddress?.includes(query);
+                    case 'pnu':
+                        return parcel.pnu?.includes(query);
+                    case 'owner':
+                        return parcel.ownerName?.includes(query);
+                    case 'all':
+                    default:
+                        return parcel.parcelName?.includes(query) ||
+                               parcel.ownerAddress?.includes(query) ||
+                               parcel.pnu?.includes(query) ||
+                               parcel.ownerName?.includes(query);
+                }
+            });
+        }
 
         return results;
     }

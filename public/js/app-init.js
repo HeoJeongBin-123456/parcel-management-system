@@ -61,15 +61,25 @@ class AppInitializer {
     async waitForDependencies() {
         console.log('⏳ 의존성 로딩 대기 중...');
 
-        // 지도 로딩 대기 (제한적 체크)
-        while (!window.map && this.dependencyChecks < this.maxDependencyChecks) {
-            console.log('🗺️ 지도 로딩 대기...');
+        // 🗺️ 3-지도 시스템 로딩 대기 (제한적 체크)
+        while ((!window.mapClick || !window.mapSearch || !window.mapHand) && this.dependencyChecks < this.maxDependencyChecks) {
+            console.log('🗺️ 3-지도 시스템 로딩 대기... (mapClick:', !!window.mapClick, ', mapSearch:', !!window.mapSearch, ', mapHand:', !!window.mapHand, ')');
             await this.sleep(500);
             this.dependencyChecks++;
         }
 
-        if (!window.map) {
-            throw new Error('지도 로딩 타임아웃');
+        // 🆘 임시 해결책: 3-지도 시스템 미완성 시 기존 map 사용
+        if (!window.mapClick || !window.mapSearch || !window.mapHand) {
+            console.warn('⚠️ 3-지도 시스템 로딩 실패. 기존 map 확인...');
+
+            // 기존 window.map이 있으면 계속 진행
+            if (window.map) {
+                console.log('✅ 기존 window.map 사용하여 계속 진행');
+            } else {
+                console.warn('⚠️ 지도 인스턴스 없음. 계속 진행하되 일부 기능 제한될 수 있음');
+            }
+        } else {
+            console.log('✅ 3-지도 시스템 로딩 완료');
         }
 
         // SupabaseManager 로딩 대기 (제한적 체크)

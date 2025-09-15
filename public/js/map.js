@@ -87,8 +87,8 @@ window.rightClickSummary = () => window.RightClickDebugger.summary();
 console.log('🔍 우클릭 디버깅 시스템이 초기화되었습니다.');
 console.log('사용법: showRightClickLogs(), clearRightClickLogs(), toggleRightClickDebug(), rightClickSummary()');
 
-// 지도 초기화 (Supabase 기반)
-async function initMap() {
+// ❌ 기존 지도 초기화 함수 비활성화 (3-지도 시스템으로 대체됨)
+async function initMap_DISABLED() {
     // 🗺️ 저장된 위치 정보 불러오기 (Supabase 우선, localStorage 백업)
     let center, zoom;
 
@@ -135,69 +135,46 @@ async function initMap() {
         maxZoom: 19
     };
     
-    map = new naver.maps.Map('map', mapOptions);
-    window.map = map;  // 전역 변수로 노출 (검색 기능 사용)
+    // ❌ 기존 단일 지도 방식 비활성화
+    // map = new naver.maps.Map('map', mapOptions);
+    // window.map = map;  // 전역 변수로 노출 (검색 기능 사용)
+
+    // ✅ 새로운 3-지도 시스템 사용
+    // 지도 인스턴스는 map-instances.js에서 관리됨
+    console.log('⚠️ map.js: 기존 지도 초기화 건너뛰기 - 3-지도 시스템 사용');
     
     // 레이어 초기화
     cadastralLayer = new naver.maps.CadastralLayer();
     streetLayer = new naver.maps.StreetLayer();
     
-    // 지도 타입 변경 이벤트
-    document.querySelectorAll('.map-type-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-            // 활성 버튼 변경
-            document.querySelectorAll('.map-type-btn').forEach(b => b.classList.remove('active'));
-            this.classList.add('active');
-            
-            const type = this.dataset.type;
-            
-            // 모든 레이어 제거
-            cadastralLayer.setMap(null);
-            streetLayer.setMap(null);
-            
-            // 항상 지도 표시 (파노라마 컨테이너 숨김)
-            // 거리뷰 모드 해제
-            if (type !== 'street' && window.isStreetViewMode) {
-                window.isStreetViewMode = false;
-                if (window.activeStreetLayer) {
-                    window.activeStreetLayer.setMap(null);
-                    window.activeStreetLayer = null;
-                }
+    // ❌ 기존 지도 타입 변경 로직 비활성화
+    // 지도 타입 변경은 이제 map-instances.js의 setupMapTypeButtons()에서 처리됨
+    console.log('⚠️ map.js: 지도 타입 버튼 이벤트 건너뛰기 - map-instances.js에서 처리');
 
-                // 거리뷰 모드 해제시 마커 표시
-                if (window.MemoMarkerManager && window.MemoMarkerManager.onStreetViewModeChange) {
-                    window.MemoMarkerManager.onStreetViewModeChange(false);
-                }
-
-                console.log('🚶 거리뷰 모드 해제');
+    /*
+    // ❌ 비활성화된 코드 블록
+    switch(type) {
+        case 'normal':
+            map.setMapTypeId(naver.maps.MapTypeId.NORMAL);
+            break;
+        case 'satellite':
+            map.setMapTypeId(naver.maps.MapTypeId.HYBRID);
+            break;
+        case 'cadastral':
+            map.setMapTypeId(naver.maps.MapTypeId.NORMAL);
+            cadastralLayer.setMap(map);
+            // 지적편집도 모드에서 필지 데이터 자동 로드
+            if (typeof loadParcelsInBounds === 'function') {
+                loadParcelsInBounds(map.getBounds());
             }
-
-            document.getElementById('map').style.display = 'block';
-            document.getElementById('pano').style.display = 'none';
-
-            switch(type) {
-                case 'normal':
-                    map.setMapTypeId(naver.maps.MapTypeId.NORMAL);
-                    break;
-                case 'satellite':
-                    map.setMapTypeId(naver.maps.MapTypeId.HYBRID);
-                    break;
-                case 'cadastral':
-                    map.setMapTypeId(naver.maps.MapTypeId.NORMAL);
-                    cadastralLayer.setMap(map);
-                    // 지적편집도 모드에서 필지 데이터 자동 로드
-                    if (typeof loadParcelsInBounds === 'function') {
-                        loadParcelsInBounds(map.getBounds());
-                    }
-                    break;
-                case 'street':
-                    // 거리뷰 활성화
-                    showStreetView();
-    // console.log('거리뷰 모드 활성화');
-                    break;
-            }
-        });
-    });
+            break;
+        case 'street':
+            // 거리뷰 활성화
+            showStreetView();
+            // console.log('거리뷰 모드 활성화');
+            break;
+    }
+    */
     
     // VWorld API 호출 디바운싱을 위한 타이머
     let mapClickDebounceTimer = null;
@@ -688,10 +665,24 @@ window.onload = function() {
     console.log('🚀 페이지 로드 완료, 지도 초기화 시작');
 
     // 네이버 지도 API 로드 대기
-    waitForNaverMaps(() => {
+    waitForNaverMaps(async () => {
         try {
-            console.log('🗺️ 지도 초기화 시작...');
-            initMap();
+            console.log('🏗️ 지도 인스턴스 초기화 시작');
+            // ✅ 새로운 3-지도 시스템 초기화
+            if (window.initAllMapInstances) {
+                await window.initAllMapInstances();
+                console.log('✅ 지도 인스턴스 초기화 완료');
+            } else {
+                console.warn('⚠️ initAllMapInstances 함수가 로드되지 않음');
+            }
+
+            // ModeManager 초기화
+            if (window.ModeManager) {
+                await window.ModeManager.initialize();
+                console.log('✅ ModeManager 초기화 완료');
+            } else {
+                console.warn('⚠️ ModeManager가 로드되지 않음');
+            }
 
             if (typeof initializeEventListeners === 'function') {
                 initializeEventListeners();

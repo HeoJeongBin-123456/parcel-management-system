@@ -1,11 +1,12 @@
 /**
  * ModeManager - 클릭, 검색, 손 모드 관리
- * 모드 간 전환 및 상태 관리를 담당
+ * 3개의 독립된 지도 인스턴스 간 전환 및 상태 관리를 담당
  */
 class ModeManager {
     constructor() {
         this.currentMode = 'click'; // 'click' | 'search' | 'hand'
         this.previousMode = null;
+        this.mapsInitialized = false;
         this.modeData = {
             click: {
                 parcels: new Map(),
@@ -49,37 +50,47 @@ class ModeManager {
      */
     async switchMode(newMode, saveCurrentState = true) {
         if (!['click', 'search', 'hand'].includes(newMode)) {
-            console.error(`Invalid mode: ${newMode}`);
+            console.error(`[ModeManager] Invalid mode: ${newMode}`);
             return false;
         }
 
         if (newMode === this.currentMode) {
-            console.log(`Already in ${newMode} mode`);
+            console.log(`[ModeManager] Already in ${newMode} mode`);
             return true;
         }
 
-        console.log(`[ModeManager] Switching from ${this.currentMode} to ${newMode}`);
+        console.log(`🔄 모드 전환: ${this.currentMode} → ${newMode}`);
+
+        // 지도 인스턴스 초기화 확인
+        if (!this.mapsInitialized) {
+            console.log('🏗️ 지도 인스턴스 초기화 중...');
+            await this.initializeMaps();
+        }
 
         // 현재 모드 데이터 저장
         if (saveCurrentState) {
             await this.saveCurrentModeData();
         }
 
+        // 지도 위치 동기화
+        await this.syncMapPositions(this.currentMode, newMode);
+
         // 이전 모드 기록
         this.previousMode = this.currentMode;
 
-        // 이벤트 핸들러 전환
-        this.removeEventListeners(this.currentMode);
-
         // 모드 전환
         this.currentMode = newMode;
+        window.currentMode = newMode; // 전역 변수 업데이트
         document.body.className = `mode-${newMode}`;
+
+        // 지도 표시/숨김
+        this.switchMapDisplay(newMode);
 
         // 새 모드 데이터 로드
         await this.loadModeData(newMode);
 
-        // 새 모드 이벤트 핸들러 등록
-        this.addEventListeners(newMode);
+        // 모드별 이벤트 핸들러 설정
+        this.setupModeEventHandlers(newMode);
 
         // UI 업데이트
         this.updateUI(newMode);
@@ -198,6 +209,91 @@ class ModeManager {
     }
 
     /**
+     * 🗺️ 지도 인스턴스 초기화
+     */
+    async initializeMaps() {
+        if (this.mapsInitialized) return;
+
+        try {
+            console.log('🏗️ 지도 인스턴스 초기화 시작');
+            await window.initAllMapInstances();
+            this.mapsInitialized = true;
+            console.log('✅ 지도 인스턴스 초기화 완료');
+        } catch (error) {
+            console.error('❌ 지도 인스턴스 초기화 실패:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 📍 지도 위치 동기화
+     */
+    async syncMapPositions(fromMode, toMode) {
+        const fromMap = window.getMapByMode(fromMode);
+        const toMap = window.getMapByMode(toMode);
+
+        if (fromMap && toMap && window.syncMapPosition) {
+            window.syncMapPosition(fromMap, toMap);
+        }
+    }
+
+    /**
+     * 🎯 지도 표시/숨김 전환
+     */
+    switchMapDisplay(activeMode) {
+        const mapContainers = {
+            'click': document.getElementById('map-click'),
+            'search': document.getElementById('map-search'),
+            'hand': document.getElementById('map-hand')
+        };
+
+        // 모든 지도 숨김
+        Object.values(mapContainers).forEach(container => {
+            if (container) {
+                container.style.display = 'none';
+                container.classList.remove('active');
+            }
+        });
+
+        // 활성 모드 지도만 표시
+        const activeContainer = mapContainers[activeMode];
+        if (activeContainer) {
+            activeContainer.style.display = 'block';
+            activeContainer.classList.add('active');
+        }
+
+        console.log(`🎯 지도 전환: ${activeMode} 모드 활성화`);
+    }
+
+    /**
+     * 🔧 모드별 이벤트 핸들러 설정
+     */
+    setupModeEventHandlers(mode) {
+        try {
+            switch(mode) {
+                case 'click':
+                    if (window.setupClickModeEventListeners) {
+                        window.setupClickModeEventListeners();
+                        console.log('🎯 클릭 모드 이벤트 핸들러 설정 완료');
+                    }
+                    break;
+                case 'search':
+                    if (window.setupSearchModeEventListeners) {
+                        window.setupSearchModeEventListeners();
+                        console.log('🔍 검색 모드 이벤트 핸들러 설정 완료');
+                    }
+                    break;
+                case 'hand':
+                    // 손 모드는 별도 이벤트 핸들러가 필요 없음 (순수 탐색용)
+                    console.log('✋ 손 모드: 이벤트 핸들러 없음 (탐색 전용)');
+                    break;
+            }
+        } catch (error) {
+            console.error(`❌ ${mode} 모드 이벤트 핸들러 설정 실패:`, error);
+        }
+    }
+
+    /**
      * UI 업데이트
      */
     updateUI(mode) {
@@ -214,13 +310,26 @@ class ModeManager {
         // 현재 모드 요소만 표시
         switch(mode) {
             case 'click':
-                clickElements.forEach(el => el.style.display = '');
+                clickElements.forEach(el => {
+                    el.style.display = '';
+                    el.style.removeProperty('display');
+                });
                 break;
             case 'search':
-                searchElements.forEach(el => el.style.display = '');
+                searchElements.forEach(el => {
+                    // 인라인 스타일 완전히 제거하여 CSS가 적용되도록 함
+                    el.style.removeProperty('display');
+                    // 검색 결과 컨테이너는 명시적으로 block 설정
+                    if (el.classList.contains('search-results-container')) {
+                        el.style.display = 'block';
+                    }
+                });
                 break;
             case 'hand':
-                handElements.forEach(el => el.style.display = '');
+                handElements.forEach(el => {
+                    el.style.display = '';
+                    el.style.removeProperty('display');
+                });
                 break;
         }
 
@@ -232,23 +341,41 @@ class ModeManager {
             }
         });
 
-        // 지도 커서는 CSS에서 처리 (손 모드의 경우 CSS !important로 설정됨)
-        const mapElement = document.getElementById('map');
-        if (mapElement && mode !== 'hand') {
-            switch(mode) {
-                case 'click':
-                    mapElement.style.cursor = 'crosshair';
-                    break;
-                case 'search':
-                    mapElement.style.cursor = 'pointer';
-                    break;
-                default:
-                    mapElement.style.cursor = 'default';
+        // 모드별 지도 커서 설정
+        this.updateMapCursors(mode);
+    }
+
+    /**
+     * 🖱️ 모드별 지도 커서 업데이트
+     */
+    updateMapCursors(mode) {
+        const mapContainers = {
+            'click': document.getElementById('map-click'),
+            'search': document.getElementById('map-search'),
+            'hand': document.getElementById('map-hand')
+        };
+
+        Object.entries(mapContainers).forEach(([mapMode, container]) => {
+            if (container) {
+                // 모든 지도에서 커서 스타일 초기화
+                container.style.cursor = '';
+
+                // 활성 모드에만 커서 적용
+                if (mapMode === mode) {
+                    switch(mode) {
+                        case 'click':
+                            container.style.cursor = 'crosshair';
+                            break;
+                        case 'search':
+                            container.style.cursor = 'pointer';
+                            break;
+                        case 'hand':
+                            container.style.cursor = 'grab';
+                            break;
+                    }
+                }
             }
-        } else if (mapElement && mode === 'hand') {
-            // 손 모드는 CSS에서 처리하므로 인라인 스타일 제거
-            mapElement.style.cursor = '';
-        }
+        });
     }
 
     /**
@@ -318,21 +445,42 @@ class ModeManager {
      * 초기화
      */
     async initialize() {
-        // 저장된 모드 복원
-        const savedMode = localStorage.getItem('currentMode') || 'click';
+        console.log('🚀 ModeManager 초기화 시작...');
 
-        // 모드 데이터 로드
-        await this.loadModeData(savedMode);
+        try {
+            // 저장된 모드 복원
+            const savedMode = localStorage.getItem('currentMode') || 'click';
+            console.log(`📋 저장된 모드: ${savedMode}`);
 
-        // UI 초기화
-        this.currentMode = savedMode;
-        document.body.className = `mode-${savedMode}`;
-        this.updateUI(savedMode);
+            // 지도 인스턴스 초기화
+            await this.initializeMaps();
 
-        // 모드 버튼 이벤트 리스너 설정
-        this.setupModeButtons();
+            // 모드 데이터 로드
+            await this.loadModeData(savedMode);
 
-        console.log(`[ModeManager] Initialized in ${savedMode} mode`);
+            // 초기 모드 설정
+            this.currentMode = savedMode;
+            window.currentMode = savedMode;
+            document.body.className = `mode-${savedMode}`;
+
+            // 지도 표시/숨김
+            this.switchMapDisplay(savedMode);
+
+            // 모드별 이벤트 핸들러 설정
+            this.setupModeEventHandlers(savedMode);
+
+            // UI 초기화
+            this.updateUI(savedMode);
+
+            // 모드 버튼 이벤트 리스너 설정
+            this.setupModeButtons();
+
+            console.log(`✅ ModeManager 초기화 완료: ${savedMode} 모드`);
+
+        } catch (error) {
+            console.error('❌ ModeManager 초기화 실패:', error);
+            throw error;
+        }
     }
 }
 

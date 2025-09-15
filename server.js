@@ -27,19 +27,28 @@ app.get('/api/vworld', async (req, res) => {
     
     try {
         console.log('VWorld API 프록시 요청:', req.query);
-        
+
         // 쿼리 파라미터 추출
         const {
             service = 'data',
-            request: requestType = 'GetFeature', 
+            request: requestType = 'GetFeature',
             data: dataType = 'LP_PA_CBND_BUBUN',
             key,
             geometry = 'true',
             geomFilter = '',
+            lat,
+            lng,
             size = '10',
             format = 'json',
             crs = 'EPSG:4326'
         } = req.query;
+
+        // lat/lng가 있고 geomFilter가 없으면 geomFilter 생성
+        let finalGeomFilter = geomFilter;
+        if (lat && lng && !geomFilter) {
+            finalGeomFilter = `POINT(${lng} ${lat})`;
+            console.log('lat/lng -> geomFilter 변환:', finalGeomFilter);
+        }
         
         // VWorld API 키들 (고정된 범용 키)
         const apiKeys = [
@@ -56,7 +65,7 @@ app.get('/api/vworld', async (req, res) => {
             
             try {
                 console.log(`API 키 ${i + 1}/${apiKeys.length} 시도 중...`);
-                
+
                 const params = new URLSearchParams();
                 params.append('service', service);
                 params.append('request', requestType);
@@ -65,9 +74,9 @@ app.get('/api/vworld', async (req, res) => {
                 params.append('geometry', geometry);
                 params.append('format', format);
                 params.append('crs', crs);
-                
-                if (geomFilter) {
-                    params.append('geomFilter', geomFilter);
+
+                if (finalGeomFilter) {
+                    params.append('geomFilter', finalGeomFilter);
                 }
                 params.append('size', size);
                 

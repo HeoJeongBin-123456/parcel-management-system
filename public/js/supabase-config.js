@@ -1074,8 +1074,12 @@ class SupabaseManager {
                     owner_contact: parcelData.ownerContact || null,
                     memo: parcelData.memo || null,
                     // 🔺 새로운 JSONB 필드들
-                    polygon_data: parcelData.polygon_data || null,
-                    color_info: parcelData.color_info || null,
+                    polygon_data: parcelData.polygon_data || parcelData.geometry || null,
+                    color_info: {
+                        color: parcelData.color || null,
+                        mode_source: parcelData.mode_source || parcelData.source || null,
+                        current_mode: parcelData.current_mode || parcelData.mode || null
+                    },
                     marker_data: parcelData.marker_data || null,
                     user_session: this.getUserSession(),
                     updated_at: new Date().toISOString()

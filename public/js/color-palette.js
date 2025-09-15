@@ -8,11 +8,11 @@ class ColorPaletteManager {
             { index: 0, hex: '#FF0000', name: '빨강', isActive: false, usageCount: 0 },
             { index: 1, hex: '#FFA500', name: '주황', isActive: false, usageCount: 0 },
             { index: 2, hex: '#FFFF00', name: '노랑', isActive: false, usageCount: 0 },
-            { index: 3, hex: '#90EE90', name: '연두', isActive: false, usageCount: 0 },
+            { index: 3, hex: '#00FF00', name: '초록', isActive: false, usageCount: 0 },
             { index: 4, hex: '#0000FF', name: '파랑', isActive: false, usageCount: 0 },
             { index: 5, hex: '#000000', name: '검정', isActive: false, usageCount: 0 },
-            { index: 6, hex: '#FFFFFF', name: '흰색', isActive: false, usageCount: 0 },
-            { index: 7, hex: '#87CEEB', name: '하늘색', isActive: false, usageCount: 0 }
+            { index: 6, hex: '#87CEEB', name: '하늘색', isActive: false, usageCount: 0 },
+            { index: 7, hex: '#FFFFFF', name: '흰색', isActive: false, usageCount: 0 }
         ];
 
         this.currentSelection = null;
@@ -81,13 +81,16 @@ class ColorPaletteManager {
         this.currentSelection = index;
         this.colors[index].isActive = true;
 
+        // window.currentColor 업데이트 (중요!)
+        window.currentColor = this.colors[index].hex;
+
         // UI 업데이트
         this.updatePaletteUI();
 
         // 콜백 실행
         this.notifyColorSelection(index, this.colors[index]);
 
-        console.log(`[ColorPalette] Color selected: ${this.colors[index].name} (${index})`);
+        console.log(`[ColorPalette] Color selected: ${this.colors[index].name} (${index}) - ${this.colors[index].hex}`);
     }
 
     /**

@@ -73,7 +73,7 @@ function highlightParcel(parcelData) {
             strokeWeight: 3,
             strokeOpacity: 1.0,
             clickable: true, // 🖱️ 클릭 가능하도록 명시적으로 설정
-            map: window.map
+            map: window.mapSearch || window.map
         });
 
         // 검색 필지 색상 고정 - setOptions 메서드 오버라이드
@@ -96,7 +96,7 @@ function highlightParcel(parcelData) {
     // console.log('🔍 폴리곤 paths 확인:', highlightPolygon.getPaths());
         
         // 강제로 지도에 다시 설정
-        highlightPolygon.setMap(window.map);
+        highlightPolygon.setMap(window.mapSearch || window.map);
     // console.log('🔄 폴리곤을 지도에 강제 설정 완료');
         
         // 폴리곤 중심에 라벨 표시 - 검은 글씨
@@ -106,7 +106,7 @@ function highlightParcel(parcelData) {
         
         const label = new naver.maps.Marker({
             position: new naver.maps.LatLng(center[1], center[0]),
-            map: window.map, // 항상 표시
+            map: window.mapSearch || window.map, // 항상 표시
             icon: {
                 content: `<div style="
                     padding: 8px 12px; 
@@ -588,10 +588,10 @@ function showSearchResults() {
     window.searchParcels.forEach((result, key) => {
     // console.log('검색 결과 표시:', key, result);
         if (result.polygon) {
-            result.polygon.setMap(window.map);
+            result.polygon.setMap(window.mapSearch || window.map);
             showCount++;
         }
-        if (result.label) result.label.setMap(window.map);
+        if (result.label) result.label.setMap(window.mapSearch || window.map);
         // 마커와 정보창은 더 이상 사용하지 않음
     });
     
@@ -621,12 +621,19 @@ function hideSearchResults() {
     // console.log(`${hideCount}개 검색 결과 숨김 완료`);
 }
 
-// 주소/지번 검색
+// 주소/지번 검색 (레거시 함수 - SearchModeManager로 위임)
 async function searchAddress(query) {
     // console.log('=== searchAddress 함수 시작 ===');
     // console.log('📍 검색어:', query);
     // console.log('🕒 시작 시간:', new Date().toLocaleString());
-    
+
+    // SearchModeManager가 있으면 그것을 사용 (중복 검색 방지)
+    if (window.SearchModeManager && window.SearchModeManager.executeSearch) {
+        console.log('SearchModeManager로 검색 위임');
+        return window.SearchModeManager.executeSearch(query, 'all');
+    }
+
+    // SearchModeManager가 없을 때만 기존 로직 실행
     // 검색 시 자동으로 검색 모드로 전환
     if (window.currentMode !== 'search') {
         window.currentMode = 'search';
@@ -636,7 +643,7 @@ async function searchAddress(query) {
             btn.classList.add('active');
         }
     // console.log('🔄 검색 모드로 자동 전환됨');
-        
+
         // 클릭 필지 숨기고 검색 필지 표시
         window.hideClickParcels();
         window.showSearchParcels();
@@ -653,11 +660,13 @@ async function searchAddress(query) {
     // console.log('👻 기존 필지 숨기기 실행');
     hideExistingParcels();
     
-    // map 객체 확인
-    // console.log('🗺️ window.map 확인:', window.map);
-    if (!window.map) {
+    // 🗺️ 지도 객체 확인 (3-지도 시스템 호환)
+    const hasMapInstance = window.map || window.mapClick || window.mapSearch || window.mapHand;
+    // console.log('🗺️ 지도 인스턴스 확인:', hasMapInstance);
+    if (!hasMapInstance) {
         console.error('❌ 지도가 초기화되지 않았습니다.');
-        alert('지도가 아직 로딩 중입니다. 잠시 후 다시 시도해주세요.');
+        console.warn('⚠️ 지도 로딩 중... 콘솔 경고로 처리');
+        // alert('지도가 아직 로딩 중입니다. 잠시 후 다시 시도해주세요.'); // 다이얼로그 제거
         return;
     }
     
@@ -665,7 +674,8 @@ async function searchAddress(query) {
     // console.log('📡 naver.maps.Service 확인:', naver?.maps?.Service);
     if (!naver || !naver.maps || !naver.maps.Service) {
         console.error('❌ 네이버 지도 API가 로드되지 않았습니다.');
-        alert('지도 API가 로딩 중입니다. 잠시 후 다시 시도해주세요.');
+        console.warn('⚠️ 지도 API 로딩 중... 콘솔 경고로 처리');
+        // alert('지도 API가 로딩 중입니다. 잠시 후 다시 시도해주세요.'); // 다이얼로그 제거
         return;
     }
     
@@ -718,9 +728,14 @@ async function searchAddress(query) {
                 
     // console.log('주소 검색 성공:', item);
                 
-                // 지도 이동
-                window.map.setCenter(point);
-                window.map.setZoom(18);
+                // 지도 이동 - 검색 모드 지도 사용
+                const searchMap = window.mapSearch || window.map;
+                if (searchMap) {
+                    searchMap.setCenter(point);
+                    searchMap.setZoom(18);
+                } else {
+                    console.error('검색 모드 지도를 찾을 수 없습니다.');
+                }
                 
                 // 해당 위치의 필지를 검색용으로 조회 (노란색 표시)
                 searchParcelAtLocation(point.lat(), point.lng());
@@ -736,10 +751,12 @@ async function searchAddress(query) {
 async function searchParcelByJibun(jibun) {
     console.log('🔍 새로운 검색 시작:', jibun);
 
-    // map 객체 확인
-    if (!window.map) {
+    // 🗺️ 지도 객체 확인 (3-지도 시스템 호환)
+    const hasMapInstance = window.map || window.mapClick || window.mapSearch || window.mapHand;
+    if (!hasMapInstance) {
         console.error('지도가 초기화되지 않았습니다.');
-        alert('지도가 아직 로딩 중입니다. 잠시 후 다시 시도해주세요.');
+        console.warn('⚠️ 지도 로딩 중... 콘솔 경고로 처리');
+        // alert('지도가 아직 로딩 중입니다. 잠시 후 다시 시도해주세요.'); // 다이얼로그 제거
         return;
     }
 
@@ -749,7 +766,13 @@ async function searchParcelByJibun(jibun) {
     removeSearchResultsFromStorage();
     
     // 더 넓은 범위로 검색 - 서울 전체 영역
-    const center = window.map.getCenter();
+    // 현재 모드에 따른 지도 인스턴스 선택
+    const currentMap = window.mapSearch || window.map || window.mapClick;
+    if (!currentMap) {
+        console.error('검색 모드 지도를 찾을 수 없습니다.');
+        return;
+    }
+    const center = currentMap.getCenter();
     const centerLat = center.lat();
     const centerLng = center.lng();
     
@@ -762,21 +785,32 @@ async function searchParcelByJibun(jibun) {
     };
     
     // JSONP 방식으로 API 호출
-    const apiKey = '8C62256B-1D08-32FF-AB3C-1FCD67242196';
+    const apiKey = 'E5B1657B-9B6F-3A4B-91EF-98512BE931A1'; // 범용 VWorld API 키
     const callbackName = `searchCallback_${Date.now()}`;
     
     return new Promise((resolve) => {
+        // script 변수를 먼저 선언
+        let script;
+
         window[callbackName] = function(data) {
     // console.log('지번 검색 API 응답:', data);
-            
+
             // 콜백 함수 정리
             delete window[callbackName];
-            document.head.removeChild(script);
+            if (script && script.parentNode) {
+                document.head.removeChild(script);
+            }
             
             if (!data.response || data.response.status !== 'OK' || !data.response.result?.featureCollection?.features) {
-    // console.log('해당 지번의 필지를 찾을 수 없습니다.');
-                alert('해당 지번의 필지를 찾을 수 없습니다.');
-                resolve();
+                console.warn('VWorld API 응답 없음 또는 데이터 없음');
+
+                // SearchModeManager UI 업데이트
+                if (window.SearchModeManager) {
+                    window.SearchModeManager.searchResults = [];
+                    window.SearchModeManager.renderSearchResults([]);
+                }
+
+                resolve([]);
                 return;
             }
             
@@ -801,21 +835,63 @@ async function searchParcelByJibun(jibun) {
     // console.log('매칭된 필지 수:', matchingParcels.length);
             
             if (matchingParcels.length === 0) {
-                alert('해당 지번의 필지를 찾을 수 없습니다.');
-                resolve();
+                console.warn('매칭되는 지번 없음:', jibun);
+
+                // SearchModeManager가 있고 검색 결과가 아직 없을 때만 alert 표시
+                if (window.SearchModeManager) {
+                    // 이미 다른 검색 결과가 있으면 alert 표시 안함
+                    if (window.SearchModeManager.searchResults.length === 0) {
+                        alert('해당 지번의 필지를 찾을 수 없습니다.');
+                    }
+                    window.SearchModeManager.searchResults = [];
+                    window.SearchModeManager.renderSearchResults([]);
+                }
+
+                resolve([]);
                 return;
             }
-            
+
+            // 검색 결과를 SearchModeManager 형식으로 변환
+            const results = matchingParcels.map(feature => {
+                const properties = feature.properties || {};
+                const geometry = feature.geometry;
+                const coords = geometry.type === 'MultiPolygon'
+                    ? geometry.coordinates[0][0]
+                    : geometry.coordinates[0];
+                const center = calculatePolygonCenter(coords);
+
+                return {
+                    pnu: properties.PNU || `JIBUN_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                    parcelName: formatJibun(properties),
+                    ownerName: properties.OWNER_NM || '-',
+                    ownerAddress: properties.JUSO || '-',
+                    lat: center[1],
+                    lng: center[0],
+                    geometry: geometry
+                };
+            });
+
+            // SearchModeManager에 결과 전달
+            if (window.SearchModeManager) {
+                window.SearchModeManager.searchResults = results;
+                window.SearchModeManager.renderSearchResults(results);
+            }
+
             // 첫 번째 매칭 필지로 지도 이동
             const firstFeature = matchingParcels[0];
             if (firstFeature.geometry && firstFeature.geometry.coordinates) {
-                const coords = firstFeature.geometry.type === 'MultiPolygon' 
+                const coords = firstFeature.geometry.type === 'MultiPolygon'
                     ? firstFeature.geometry.coordinates[0][0]
                     : firstFeature.geometry.coordinates[0];
                 const center = calculatePolygonCenter(coords);
-                window.map.setCenter(new naver.maps.LatLng(center[1], center[0]));
-                window.map.setZoom(18);
-                
+                const searchMap = window.mapSearch || window.map;
+                if (searchMap) {
+                    searchMap.setCenter(new naver.maps.LatLng(center[1], center[0]));
+                    searchMap.setZoom(18);
+                } else {
+                    console.error('검색 모드 지도를 찾을 수 없습니다.');
+                }
+
     // console.log('지도 이동 완료:', center);
             }
             
@@ -825,7 +901,7 @@ async function searchParcelByJibun(jibun) {
             });
             
     // console.log(`${matchingParcels.length}개 필지 하이라이트 완료`);
-            resolve();
+            resolve(results);
         };
         
         // 타임아웃 처리
@@ -834,19 +910,19 @@ async function searchParcelByJibun(jibun) {
                 delete window[callbackName];
                 console.error('지번 검색 타임아웃');
                 alert('검색 시간이 초과되었습니다.');
-                resolve();
+                resolve([]);
             }
         }, 10000);
         
         // JSONP 스크립트 추가
-        const script = document.createElement('script');
+        script = document.createElement('script');
         script.src = `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=LP_PA_CBND_BUBUN&key=${apiKey}&geometry=true&geomFilter=BOX(${expandedBounds.minLng},${expandedBounds.minLat},${expandedBounds.maxLng},${expandedBounds.maxLat})&size=1000&format=json&crs=EPSG:4326&callback=${callbackName}&domain=http://localhost:3000`;
         script.onerror = () => {
             clearTimeout(timeout);
             delete window[callbackName];
             console.error('지번 검색 스크립트 로드 실패');
             alert('검색 중 오류가 발생했습니다.');
-            resolve();
+            resolve([]);
         };
         document.head.appendChild(script);
     });
@@ -1074,7 +1150,7 @@ function showExistingParcels() {
     let restoreCount = 0;
     hiddenParcels.forEach((item, index) => {
         if (item.visible && item.polygon) {
-            item.polygon.setMap(window.map);
+            item.polygon.setMap(window.mapSearch || window.map);
             restoreCount++;
     // console.log(`필지 ${index + 1} 복원 완료`);
         }
@@ -1113,16 +1189,21 @@ function initSearchEventListeners() {
     // console.log('현재 시간:', new Date().toLocaleString());
         const query = searchInput.value.trim();
     // console.log('입력된 검색어:', `"${query}"`);
-        
+
         if (query) {
-    // console.log('✅ 검색어 유효함, searchAddress 함수 호출');
-            searchAddress(query);
+    // console.log('✅ 검색어 유효함, SearchModeManager 사용');
+            // SearchModeManager가 있으면 그것을 사용, 없으면 searchAddress 사용
+            if (window.SearchModeManager && window.SearchModeManager.executeSearch) {
+                window.SearchModeManager.executeSearch(query, 'all');
+            } else {
+                searchAddress(query);
+            }
         } else {
     // console.log('❌ 검색어가 비어있음');
             alert('검색어를 입력하세요');
         }
     });
-    
+
     // 엔터키로 검색
     searchInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
@@ -1130,7 +1211,12 @@ function initSearchEventListeners() {
             const query = e.target.value.trim();
             if (query) {
     // console.log('검색 실행:', query);
-                searchAddress(query);
+                // SearchModeManager가 있으면 그것을 사용, 없으면 searchAddress 사용
+                if (window.SearchModeManager && window.SearchModeManager.executeSearch) {
+                    window.SearchModeManager.executeSearch(query, 'all');
+                } else {
+                    searchAddress(query);
+                }
             } else {
                 alert('검색어를 입력하세요');
             }
@@ -1187,7 +1273,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // console.log('  - naver.maps:', !!(naver?.maps));
     // console.log('  - naver.maps.Service:', !!(naver?.maps?.Service));
         
-        if (window.map && naver && naver.maps && naver.maps.Service) {
+        // 🗺️ 3-지도 시스템 또는 기존 지도 확인
+        const hasMapInstance = window.map || window.mapClick || window.mapSearch || window.mapHand;
+
+        if (hasMapInstance && naver && naver.maps && naver.maps.Service) {
             clearInterval(checkMapInterval);
             checkMapInterval = null;
     // console.log('✅ 지도 및 API 로드 완료, 검색 이벤트 리스너 등록');
@@ -1197,13 +1286,14 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }, 500);
     
-    // 10초 후에도 로드되지 않으면 에러
+    // 10초 후에도 로드되지 않으면 에러 (다이얼로그 제거)
     setTimeout(() => {
         if (checkMapInterval) {
             clearInterval(checkMapInterval);
             checkMapInterval = null;
             console.error('지도 초기화 시간 초과');
-            alert('지도 로딩에 실패했습니다. 페이지를 새로고침해주세요.');
+            console.warn('⚠️ 지도 로딩 실패 - 다이얼로그 대신 콘솔 경고로 처리');
+            // alert('지도 로딩에 실패했습니다. 페이지를 새로고침해주세요.'); // 다이얼로그 제거
         }
     }, 10000);
 });
@@ -1227,8 +1317,107 @@ function clearAllSearchResults() {
     // console.log('모든 검색 결과 제거 완료');
 }
 
+// 주소로 검색하는 함수 (네이버 Geocoding API 사용)
+async function searchAddressByKeyword(keyword) {
+    console.log('🔍 주소 검색 시작:', keyword);
+
+    // 검색 결과 초기화
+    clearSearchResults();
+    removeSearchResultsFromStorage();
+
+    // 현재 지도 확인
+    const searchMap = window.mapSearch || window.map;
+    if (!searchMap) {
+        console.error('검색 모드 지도를 찾을 수 없습니다.');
+        return [];
+    }
+
+    try {
+        // 네이버 Geocoding API 사용
+        if (naver && naver.maps && naver.maps.Service) {
+            return new Promise((resolve) => {
+                naver.maps.Service.geocode({
+                    query: keyword
+                }, async function(status, response) {
+                    if (status === naver.maps.Service.Status.ERROR) {
+                        console.error('주소 검색 실패');
+                        alert('주소를 찾을 수 없습니다.');
+                        resolve([]);
+                        return;
+                    }
+
+                    const items = response.v2.addresses;
+                    if (items && items.length > 0) {
+                        console.log(`🎯 ${items.length}개 검색 결과 발견`);
+
+                        // 첫 번째 결과로 지도 이동
+                        const first = items[0];
+                        const point = new naver.maps.LatLng(first.y, first.x);
+                        searchMap.setCenter(point);
+                        searchMap.setZoom(18);
+
+                        // 검색 결과를 SearchModeManager 형식으로 변환
+                        const results = items.map(item => ({
+                            pnu: `ADDR_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                            parcelName: item.roadAddress || item.jibunAddress || item.englishAddress,
+                            ownerName: '-',
+                            ownerAddress: item.roadAddress || item.jibunAddress,
+                            lat: parseFloat(item.y),
+                            lng: parseFloat(item.x),
+                            geometry: {
+                                type: "Polygon",
+                                coordinates: [[
+                                    [parseFloat(item.x) - 0.0002, parseFloat(item.y) - 0.0002],
+                                    [parseFloat(item.x) + 0.0002, parseFloat(item.y) - 0.0002],
+                                    [parseFloat(item.x) + 0.0002, parseFloat(item.y) + 0.0002],
+                                    [parseFloat(item.x) - 0.0002, parseFloat(item.y) + 0.0002],
+                                    [parseFloat(item.x) - 0.0002, parseFloat(item.y) - 0.0002]
+                                ]]
+                            }
+                        }));
+
+                        // SearchModeManager에 결과 전달
+                        if (window.SearchModeManager) {
+                            window.SearchModeManager.searchResults = results;
+                            window.SearchModeManager.renderSearchResults(results);
+                        }
+
+                        // 첫 번째 위치에서 실제 필지도 검색
+                        searchParcelAtLocation(first.y, first.x);
+
+                        resolve(results);
+                    } else {
+                        console.warn('검색 결과가 없습니다.');
+                        alert('검색 결과가 없습니다.');
+
+                        // SearchModeManager UI 업데이트
+                        if (window.SearchModeManager) {
+                            window.SearchModeManager.searchResults = [];
+                            window.SearchModeManager.renderSearchResults([]);
+                        }
+
+                        resolve([]);
+                    }
+                });
+            });
+        } else {
+            // 네이버 API를 사용할 수 없으면 지번 검색으로 폴백
+            console.warn('네이버 Geocoding API를 사용할 수 없습니다. 지번 검색으로 시도합니다.');
+            const results = await searchParcelByJibun(keyword);
+            return results || [];
+        }
+    } catch (error) {
+        console.error('주소 검색 오류:', error);
+        alert('검색 중 오류가 발생했습니다.');
+        return [];
+    }
+}
+
 // 전역 함수로 노출
 window.clearAllSearchResults = clearAllSearchResults;
 window.loadSearchResultsFromStorage = loadSearchResultsFromStorage;
 window.saveSearchResultsToStorage = saveSearchResultsToStorage;
 window.removeSearchResultsFromStorage = removeSearchResultsFromStorage;
+window.searchAddressByKeyword = searchAddressByKeyword;
+window.searchParcelByJibun = searchParcelByJibun;
+window.searchParcelAtLocation = searchParcelAtLocation;

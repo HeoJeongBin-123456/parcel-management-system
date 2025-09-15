@@ -25,143 +25,34 @@ function calculatePolygonCenter(coordinates) {
     return [totalX / count, totalY / count];
 }
 
-// 실제 VWorld API로 필지 정보 조회
+// 📍 필지 정보 조회 메인 함수 (모드별 핸들러로 라우팅)
 async function getParcelInfo(lat, lng) {
-    // console.log(`🏢 실제 필지 정보 조회 시작: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
-    
-    // 🚀 성능 최적화: 서버 프록시를 통한 빠른 API 호출
-    try {
-        const result = await getParcelInfoViaProxy(lat, lng);
-        if (result) {
-            // console.log('🎊 서버 프록시로 필지 데이터 획득 성공!');
+    const currentMode = window.currentMode || 'click';
+
+    console.log(`🏢 필지 정보 조회 (${currentMode} 모드): ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+
+    // 모드별 전용 핸들러로 라우팅
+    switch(currentMode) {
+        case 'click':
+            if (window.getParcelInfoForClickMode) {
+                return await window.getParcelInfoForClickMode(lat, lng);
+            }
+            break;
+        case 'search':
+            console.log('🔍 검색 모드에서는 직접 필지 조회 불가');
             return;
-        }
-    } catch (error) {
-        console.warn('⚠️ 서버 프록시 실패, JSONP 백업 시도:', error.message);
-    }
-    
-    // 백업: JSONP 방식 (메인 키만 사용)
-    const result = await getParcelInfoViaJSONP(lat, lng, 'E5B1657B-9B6F-3A4B-91EF-98512BE931A1');
-    if (!result) {
-        alert('해당 위치의 필지 정보를 찾을 수 없습니다.');
+        case 'hand':
+            console.log('✋ 손 모드에서는 필지 조회 불가');
+            return;
+        default:
+            console.warn('⚠️ 알 수 없는 모드:', currentMode);
     }
 }
 
-// 🚀 서버 프록시를 통한 빠른 VWorld API 호출
-async function getParcelInfoViaProxy(lat, lng) {
-    const geometry = `POINT(${lng} ${lat})`;
-    const url = `/api/vworld-proxy?geomFilter=${encodeURIComponent(geometry)}`;
-    
-    try {
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        const data = await response.json();
-        
-        if (data.response && data.response.status === 'OK' && data.response.result) {
-            const features = data.response.result.featureCollection?.features;
-            
-            if (features && features.length > 0) {
-                const feature = features[0];
-                const properties = feature.properties;
-                
-                // 필지 정보 UI 업데이트
-                const parcelForUI = { properties: properties, geometry: feature.geometry };
-                displayParcelInfo(parcelForUI);
-                
-                // 지도에 필지 표시
-                const parcelForMap = { properties: properties, geometry: feature.geometry };
-                const polygon = await drawParcelPolygon(parcelForMap, false);
-
-                // 🎨 새로 조회한 필지에 현재 색상 적용
-                if (polygon) {
-                    console.log('🎨 새로운 필지에 색상 적용:', currentColor);
-                    await toggleParcelSelection(parcelForMap, polygon);
-                }
-
-                return true;
-            }
-        }
-        
-        return false;
-    } catch (error) {
-        console.error('❌ 서버 프록시 호출 실패:', error);
-        throw error;
-    }
-}
-
-// JSONP 방식으로 VWorld API 호출
-async function getParcelInfoViaJSONP(lat, lng, apiKey) {
-    // console.log('🌐 JSONP 방식으로 VWorld API 재시도...');
-    
-    return new Promise((resolve, reject) => {
-        const callbackName = `vworld_callback_${Date.now()}_${Math.floor(Math.random()*1000)}`;
-        const script = document.createElement('script');
-        
-        // JSONP 콜백 함수 등록
-        window[callbackName] = async function(data) {
-    // console.log('📡 JSONP 응답 수신:', data);
-            
-            try {
-                if (data.response && data.response.status === 'OK' && data.response.result) {
-                    const features = data.response.result.featureCollection?.features;
-                    
-                    if (features && features.length > 0) {
-    // console.log(`🎊 JSONP로 실제 필지 데이터 획득! ${features.length}개`);
-                        
-                        const parcel = features[0];
-                        displayParcelInfo(parcel);
-                        const polygon = await drawParcelPolygon(parcel, true);
-                        await toggleParcelSelection(parcel, polygon);
-                        
-                        resolve(parcel);
-                    } else {
-    // console.log('📭 JSONP: 빈 결과');
-                        resolve(null);
-                    }
-                } else {
-                    console.warn('⚠️ JSONP: 예상하지 못한 응답');
-                    resolve(null);
-                }
-            } finally {
-                // 정리
-                document.head.removeChild(script);
-                delete window[callbackName];
-            }
-        };
-        
-        // JSONP 요청 URL 생성
-        const url = `http://api.vworld.kr/req/data?service=data&request=GetFeature&data=LP_PA_CBND_BUBUN&key=${apiKey}&geometry=true&geomFilter=POINT(${lng} ${lat})&size=10&format=json&crs=EPSG:4326&callback=${callbackName}`;
-        
-        script.src = url;
-        script.onerror = () => {
-            console.error('💥 JSONP 요청 실패');
-            document.head.removeChild(script);
-            delete window[callbackName];
-            resolve(null);
-        };
-        
-        document.head.appendChild(script);
-        
-        // 10초 타임아웃
-        setTimeout(() => {
-            if (document.head.contains(script)) {
-                console.warn('⏱️ JSONP 타임아웃');
-                document.head.removeChild(script);
-                delete window[callbackName];
-                resolve(null);
-            }
-        }, 10000);
-    });
-}
+// ❌ 중복 제거: getParcelInfoViaProxy, getParcelInfoViaJSONP
+// 📍 이제 모드별 핸들러에서 처리:
+// - mode-click-handler.js: getParcelInfoViaProxyForClickMode, getParcelInfoViaJSONPForClickMode
+// - mode-search-handler.js: 해당 기능들
 
 
 
@@ -1328,9 +1219,10 @@ async function saveParcelData() {
 // Phase 2: 모드별로 분리된 저장 함수들
 // =====================================================================
 
-// 클릭 필지 전용 저장 함수
-async function saveClickParcelData() {
-    let parcelNumber = document.getElementById('parcelNumber').value;
+// ❌ 중복 제거: saveClickParcelData
+// 📍 이제 mode-click-handler.js의 saveClickModeParcelData()에서 처리
+async function saveClickParcelData_REMOVED() {
+    // 이 함수는 mode-click-handler.js로 이동됨
 
     // PNU가 있으면 지번 체크 건너뛰기
     if (!window.currentSelectedPNU && !parcelNumber) {
@@ -2412,10 +2304,11 @@ async function removeParcelAtLocation(lat, lng) {
 // 삭제용 필지 정보 조회 (간소화된 버전)
 async function getParcelInfoForDeletion(lat, lng) {
     // console.log('🔍 삭제용 필지 정보 조회 중...');
-    
-    // 서버 프록시를 통한 VWorld API 호출
+
+    // 서버 프록시를 통한 VWorld API 호출 - 올바른 형식 사용
     try {
-        const response = await fetch(`/api/vworld?lat=${lat}&lng=${lng}`);
+        const geometry = `POINT(${lng} ${lat})`;
+        const response = await fetch(`/api/vworld-proxy?geomFilter=${encodeURIComponent(geometry)}`);
         if (!response.ok) {
             throw new Error(`HTTP 오류: ${response.status}`);
         }

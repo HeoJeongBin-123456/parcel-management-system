@@ -160,23 +160,20 @@
                 <div class="search-input-container search-only" style="display:none;">
                     <input type="text" id="searchInput" placeholder="지번 또는 주소 검색">
                     <button id="searchBtn">검색</button>
-                    <div class="search-mode-indicator">
-                        <span class="search-mode-badge">검색 모드</span>
-                        <button id="clearSearchBtn" class="clear-search-btn" title="검색 결과 초기화">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                                <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            </svg>
-                        </button>
-                    </div>
                 </div>
 
-                <!-- 검색 결과 (검색 모드 전용) -->
-                <div class="search-results-container search-only" style="display:none;">
+                <!-- 검색 결과 (제거됨 - 사용자 요청) -->
+                <!-- <div class="search-results-container search-only" style="display:none;">
                     <div class="search-results-header">검색 결과</div>
                     <div id="searchResults" class="search-results-body"></div>
-                </div>
+                </div> -->
 
-                <div id="map"></div>
+                <!-- 모드별 독립 지도 인스턴스 -->
+                <div id="map-click" class="map-instance active"></div>
+                <div id="map-search" class="map-instance" style="display:none;"></div>
+                <div id="map-hand" class="map-instance" style="display:none;"></div>
+
+                <!-- 거리뷰 (모든 모드 공용) -->
                 <div id="pano" style="display:none;"></div>
             </div>
         </div>
@@ -309,6 +306,9 @@
     <script src="/js/utils.js"></script>
     <script src="/js/calendar.js"></script>
     <script src="/js/map.js"></script>
+    <script src="/js/mode-click-handler.js"></script>
+    <script src="/js/mode-search-handler.js"></script>
+    <script src="/js/map-instances.js"></script>
     <script src="/js/parcel.js"></script>
     <script src="/js/parcel-manager.js"></script>
     <script src="/js/mode-manager.js"></script>
@@ -355,10 +355,7 @@
                 searchBtn.addEventListener('click', function() {
                     const query = searchInput.value.trim();
                     if (query && window.SearchModeManager) {
-                        window.SearchModeManager.executeSearch({
-                            query: query,
-                            searchType: 'all'
-                        });
+                        window.SearchModeManager.executeSearch(query, 'all');
                     }
                 });
             }
@@ -368,10 +365,7 @@
                     if (e.key === 'Enter') {
                         const query = this.value.trim();
                         if (query && window.SearchModeManager) {
-                            window.SearchModeManager.executeSearch({
-                                query: query,
-                                searchType: 'all'
-                            });
+                            window.SearchModeManager.executeSearch(query, 'all');
                         }
                     }
                 });

@@ -2,15 +2,15 @@
 module.exports = {
   testDir: './tests',
   use: {
-    baseURL: 'http://localhost:4000',
+    baseURL: 'http://localhost:3000',
     headless: true,
     viewport: { width: 1280, height: 720 },
     ignoreHTTPSErrors: true,
     video: 'retain-on-failure',
   },
   webServer: {
-    command: 'npm run serve',
-    port: 4000,
+    command: 'node server.js',
+    port: 3000,
     reuseExistingServer: true,
   },
   projects: [
