@@ -347,12 +347,22 @@ class RealtimeSync {
     // 메시지 브로드캐스트
     broadcastMessage(type, payload) {
         if (this.broadcastChannel) {
-            this.broadcastChannel.postMessage({
-                type,
-                payload,
-                senderId: this.userId,
-                timestamp: Date.now()
-            });
+            try {
+                this.broadcastChannel.postMessage({
+                    type,
+                    payload,
+                    senderId: this.userId,
+                    timestamp: Date.now()
+                });
+            } catch (error) {
+                // 채널이 닫혀있을 수 있음 - 조용히 처리
+                if (error.name === 'InvalidStateError') {
+                    // 채널이 닫혀있음 - 무시
+                    this.broadcastChannel = null;
+                } else {
+                    console.warn('브로드캐스트 메시지 전송 실패:', error);
+                }
+            }
         }
     }
 
@@ -395,18 +405,19 @@ class RealtimeSync {
                 this.subscription.unsubscribe();
             }
 
-            // BroadcastChannel 닫기
-            if (this.broadcastChannel) {
-                this.broadcastChannel.close();
-            }
-
             // 사용자 목록에서 제거
             const activeUsers = JSON.parse(localStorage.getItem('active_users') || '[]');
             const filteredUsers = activeUsers.filter(user => user.id !== this.userId);
             localStorage.setItem('active_users', JSON.stringify(filteredUsers));
 
-            // 다른 사용자들에게 알림
+            // 다른 사용자들에게 알림 (채널 닫기 전에)
             this.broadcastMessage('user_left', { userId: this.userId });
+
+            // BroadcastChannel 닫기 (메시지 전송 후)
+            if (this.broadcastChannel) {
+                this.broadcastChannel.close();
+                this.broadcastChannel = null;
+            }
 
             this.isConnected = false;
             this.updateConnectionUI('disconnected', 0);

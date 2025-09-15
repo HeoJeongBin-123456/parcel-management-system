@@ -1219,14 +1219,14 @@ async function saveParcelData() {
 // Phase 2: 모드별로 분리된 저장 함수들
 // =====================================================================
 
-// ❌ 중복 제거: saveClickParcelData
-// 📍 이제 mode-click-handler.js의 saveClickModeParcelData()에서 처리
-async function saveClickParcelData_REMOVED() {
-    // 이 함수는 mode-click-handler.js로 이동됨
+// 클릭 필지 저장 함수
+async function saveClickParcelData() {
+    let parcelNumber = document.getElementById('parcelNumber').value;
 
     // PNU가 있으면 지번 체크 건너뛰기
     if (!window.currentSelectedPNU && !parcelNumber) {
         console.warn('⚠️ 필지를 선택하거나 지번을 입력해주세요.');
+        alert('필지를 선택하거나 지번을 입력해주세요.');
         return false;
     }
 
@@ -1242,6 +1242,8 @@ async function saveClickParcelData_REMOVED() {
         // 현재 선택된 필지의 PNU 사용
         let currentPNU = window.currentSelectedPNU;
         let geometry = null;
+        let lat = null;
+        let lng = null;
 
         // PNU가 있으면 clickParcels에서 geometry 가져오기
         if (currentPNU) {
@@ -1928,21 +1930,67 @@ function initializeEventListeners() {
     //     });
     // });
     
-    // 저장 버튼 - Phase 4: 모드별 함수 호출
-    document.getElementById('saveBtn').addEventListener('click', async () => {
-        // 🚫 검색 모드에서는 저장 불가
-        if (window.currentMode === 'search') {
-            console.warn('🚫 검색 모드에서는 저장할 수 없습니다');
-            alert('검색 모드에서는 저장할 수 없습니다.\n\n' +
-                  '• 검색 필지를 삭제하려면 해당 필지를 클릭하세요\n' +
-                  '• 필지에 정보를 저장하려면 검색 OFF 모드로 전환하세요');
-            return;
-        }
+    // 필지 정보 저장 버튼 - Phase 4: 모드별 함수 호출
+    const saveParcelInfoBtn = document.getElementById('saveParcelInfoBtn');
+    if (saveParcelInfoBtn) {
+        saveParcelInfoBtn.addEventListener('click', async () => {
+            // 🚫 검색 모드에서는 저장 불가
+            if (window.currentMode === 'search') {
+                console.warn('🚫 검색 모드에서는 저장할 수 없습니다');
+                alert('검색 모드에서는 저장할 수 없습니다.\n\n' +
+                      '• 검색 필지를 삭제하려면 해당 필지를 클릭하세요\n' +
+                      '• 필지에 정보를 저장하려면 검색 OFF 모드로 전환하세요');
+                return;
+            }
 
-        console.log('🎯 클릭 모드에서 saveClickParcelData() 호출');
-        await saveClickParcelData();
-    });
-    
+            console.log('🎯 클릭 모드에서 saveClickParcelData() 호출');
+            await saveClickParcelData();
+        });
+    }
+
+    // 클립보드 복사 버튼 - 엑셀 호환 탭 구분 형식
+    const copyToClipboardBtn = document.getElementById('copyToClipboardBtn');
+    if (copyToClipboardBtn) {
+        copyToClipboardBtn.addEventListener('click', async () => {
+            try {
+                // 현재 필지 정보 가져오기
+                const parcelNumber = document.getElementById('parcelNumber').value || '';
+                const ownerName = document.getElementById('ownerName').value || '';
+                const ownerAddress = document.getElementById('ownerAddress').value || '';
+                const ownerContact = document.getElementById('ownerContact').value || '';
+                const memo = document.getElementById('memo').value || '';
+
+                // 탭으로 구분된 텍스트 생성 (엑셀 붙여넣기 호환)
+                const tabSeparatedText = `${parcelNumber}\t${ownerName}\t${ownerAddress}\t${ownerContact}\t${memo}`;
+
+                // 클립보드에 복사
+                await navigator.clipboard.writeText(tabSeparatedText);
+
+                // 성공 피드백
+                const originalText = copyToClipboardBtn.textContent;
+                copyToClipboardBtn.textContent = '✅ 복사 완료!';
+                copyToClipboardBtn.style.backgroundColor = '#28a745';
+
+                setTimeout(() => {
+                    copyToClipboardBtn.textContent = originalText;
+                    copyToClipboardBtn.style.backgroundColor = '#007bff';
+                }, 2000);
+
+                console.log('📋 클립보드 복사 완료:', {
+                    parcelNumber,
+                    ownerName,
+                    ownerAddress,
+                    ownerContact,
+                    memo
+                });
+
+            } catch (error) {
+                console.error('❌ 클립보드 복사 실패:', error);
+                alert('클립보드 복사에 실패했습니다.');
+            }
+        });
+    }
+
     // 초기화 버튼들 (제거된 버튼들은 안전하게 체크)
     const clearBtn = document.getElementById('clearBtn');
     if (clearBtn) {

@@ -45,15 +45,58 @@ class BackupManager {
         }
     }
 
-    // 백업 스케줄링
+    // 백업 스케줄링 - 개선된 버전
     scheduleBackups() {
         // 페이지 로드 시 즉시 체크
         setTimeout(() => this.checkBackupSchedule(), 5000);
-        
+
         // 30분마다 백업 체크
-        setInterval(() => this.checkBackupSchedule(), 30 * 60 * 1000);
-        
-        console.log('⏰ 백업 스케줄 설정 완료');
+        this.backupInterval = setInterval(() => this.checkBackupSchedule(), 30 * 60 * 1000);
+
+        // 페이지 비활성화 시 백업 수행
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                // 페이지가 숨겨질 때 백업 예약
+                this.scheduleBackupOnHidden();
+            }
+        });
+
+        // 페이지 언로드 시 긴급 백업
+        window.addEventListener('beforeunload', () => {
+            this.performEmergencyBackup();
+        });
+
+        console.log('⏰ 백업 스케줄 설정 완료 (개선판)');
+    }
+
+    // 페이지 숨겨질 때 백업 예약
+    scheduleBackupOnHidden() {
+        const now = new Date();
+        if (this.shouldRunDailyBackup(now)) {
+            console.log('💾 페이지 비활성화 - 백업 예약');
+            // 5초 후 백업 실행 (페이지가 다시 활성화되면 취소)
+            this.hiddenBackupTimeout = setTimeout(() => {
+                this.runDailyBackup();
+            }, 5000);
+        }
+    }
+
+    // 긴급 백업 (동기 방식)
+    performEmergencyBackup() {
+        try {
+            const parcelData = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEY) || '[]');
+            if (parcelData.length > 0) {
+                // localStorage에 긴급 백업 저장
+                const emergencyBackup = {
+                    timestamp: new Date().toISOString(),
+                    data: parcelData
+                };
+                localStorage.setItem('emergency_backup', JSON.stringify(emergencyBackup));
+                console.log('🆘 긴급 백업 완료');
+            }
+        } catch (error) {
+            console.error('❌ 긴급 백업 실패:', error);
+        }
     }
 
     // 백업 스케줄 체크
@@ -92,22 +135,32 @@ class BackupManager {
         return daysSinceLastBackup >= 30;
     }
 
-    // 일일 백업 실행 (Supabase daily_backups 테이블)
-    async runDailyBackup() {
+    // 일일 백업 실행 (Supabase daily_backups 테이블) - 개선판
+    async runDailyBackup(retryCount = 0) {
         this.isBackupRunning = true;
         const startTime = new Date();
-        
+        const maxRetries = 3;
+
         try {
             console.log('💾 일일 백업 시작...');
-            
+
             // 현재 필지 데이터 가져오기
             const parcelData = JSON.parse(await window.migratedGetItem(CONFIG.STORAGE_KEY) || '[]');
-            
+
             if (parcelData.length === 0) {
                 console.log('💾 백업할 데이터가 없습니다.');
                 this.addBackupHistory('daily', 'success', '백업할 데이터 없음', 0);
                 return;
             }
+
+            // 먼저 로컬 백업 수행 (폴백)
+            const localBackup = {
+                timestamp: startTime.toISOString(),
+                data: parcelData,
+                version: '2.0'
+            };
+            localStorage.setItem('daily_backup_local', JSON.stringify(localBackup));
+            console.log('💾 로컬 백업 완료');
 
             // Supabase에 백업 데이터 저장
             if (window.SupabaseManager && window.SupabaseManager.supabase) {
@@ -115,7 +168,8 @@ class BackupManager {
                     backup_date: startTime.toISOString(),
                     data_count: parcelData.length,
                     backup_data: parcelData,
-                    backup_size: JSON.stringify(parcelData).length
+                    backup_size: JSON.stringify(parcelData).length,
+                    backup_version: '2.0'
                 };
 
                 const { data, error } = await window.SupabaseManager.supabase
@@ -123,30 +177,56 @@ class BackupManager {
                     .insert([backupRecord]);
 
                 if (error) {
+                    // 재시도 로직
+                    if (retryCount < maxRetries) {
+                        console.warn(`⚠️ 백업 실패, 재시도 ${retryCount + 1}/${maxRetries}`);
+                        await new Promise(resolve => setTimeout(resolve, 2000 * Math.pow(2, retryCount)));
+                        return await this.runDailyBackup(retryCount + 1);
+                    }
                     throw new Error(`Supabase 백업 실패: ${error.message}`);
                 }
 
                 // 30일 이상 된 백업 삭제
                 await this.cleanupOldDailyBackups();
-                
+
                 this.lastDailyBackup = startTime;
                 await this.saveBackupSettings();
-                
+
                 const endTime = new Date();
                 const duration = endTime - startTime;
-                
+
                 this.addBackupHistory('daily', 'success', `${parcelData.length}개 필지 백업 완료`, duration);
                 console.log(`✅ 일일 백업 완료: ${parcelData.length}개 필지, ${duration}ms`);
+
+                // 백업 성공 알림 (비시각적)
+                this.notifyBackupSuccess('daily', parcelData.length);
             } else {
-                throw new Error('Supabase 연결이 없습니다.');
+                console.warn('⚠️ Supabase 연결 없음 - 로컬 백업만 수행');
+                this.addBackupHistory('daily', 'partial', '로컬 백업만 성공', new Date() - startTime);
             }
-            
+
         } catch (error) {
             console.error('❌ 일일 백업 실패:', error);
             this.addBackupHistory('daily', 'error', error.message, new Date() - startTime);
+
+            // 실패 시 오프라인 백업 활성화
+            this.enableOfflineBackup();
         } finally {
             this.isBackupRunning = false;
         }
+    }
+
+    // 백업 성공 알림
+    notifyBackupSuccess(type, count) {
+        // 콘솔에만 표시 (비시각적)
+        console.log(`🎆 ${type === 'daily' ? '일일' : '월간'} 백업 성공: ${count}개 필지`);
+    }
+
+    // 오프라인 백업 활성화
+    enableOfflineBackup() {
+        console.log('🔄 오프라인 백업 모드 활성화');
+        // IndexedDB를 이용한 대용량 오프라인 백업
+        this.useIndexedDBBackup = true;
     }
 
     // 월간 백업 실행 (Google Sheets 연동)
@@ -314,40 +394,135 @@ class BackupManager {
         console.groupEnd();
     }
 
-    // 백업 복원 (일일 백업에서)
+    // 백업 복원 (일일 백업에서) - 개선판
     async restoreFromBackup(backupDate) {
         try {
-            if (!window.SupabaseManager || !window.SupabaseManager.supabase) {
-                throw new Error('Supabase 연결이 없습니다.');
+            // 먼저 현재 데이터 백업
+            const currentData = JSON.parse(await window.migratedGetItem(CONFIG.STORAGE_KEY) || '[]');
+            if (currentData.length > 0) {
+                const backupBeforeRestore = {
+                    timestamp: new Date().toISOString(),
+                    data: currentData,
+                    reason: 'before_restore'
+                };
+                localStorage.setItem('backup_before_restore', JSON.stringify(backupBeforeRestore));
+                console.log('💾 복원 전 현재 데이터 백업 완료');
             }
 
-            const { data, error } = await window.SupabaseManager.supabase
-                .from('daily_backups')
-                .select('backup_data')
-                .eq('backup_date', backupDate)
-                .single();
+            let restoreData = null;
+            let restoreSource = '';
 
-            if (error) {
-                throw new Error(`백업 데이터 조회 실패: ${error.message}`);
+            // 1차: Supabase에서 복원 시도
+            if (window.SupabaseManager && window.SupabaseManager.supabase) {
+                const { data, error } = await window.SupabaseManager.supabase
+                    .from('daily_backups')
+                    .select('backup_data')
+                    .eq('backup_date', backupDate)
+                    .single();
+
+                if (!error && data && data.backup_data) {
+                    restoreData = data.backup_data;
+                    restoreSource = 'Supabase';
+                }
             }
 
-            if (!data || !data.backup_data) {
-                throw new Error('백업 데이터가 없습니다.');
+            // 2차: 로컬 백업에서 복원 시도
+            if (!restoreData) {
+                const localBackup = localStorage.getItem('daily_backup_local');
+                if (localBackup) {
+                    const parsed = JSON.parse(localBackup);
+                    if (parsed.timestamp === backupDate) {
+                        restoreData = parsed.data;
+                        restoreSource = 'Local';
+                    }
+                }
+            }
+
+            // 3차: 긴급 백업에서 복원 시도
+            if (!restoreData) {
+                const emergencyBackup = localStorage.getItem('emergency_backup');
+                if (emergencyBackup) {
+                    const parsed = JSON.parse(emergencyBackup);
+                    restoreData = parsed.data;
+                    restoreSource = 'Emergency';
+                }
+            }
+
+            if (!restoreData) {
+                throw new Error('복원할 백업 데이터를 찾을 수 없습니다.');
             }
 
             // 현재 데이터를 백업 데이터로 교체
-            await window.migratedSetItem(CONFIG.STORAGE_KEY, JSON.stringify(data.backup_data));
-            
+            await window.migratedSetItem(CONFIG.STORAGE_KEY, JSON.stringify(restoreData));
+
+            // 복원 성공 로그
+            this.addBackupHistory('restore', 'success', `${restoreSource}에서 ${restoreData.length}개 필지 복원`, 0);
+
             // 페이지 새로고침으로 데이터 반영
-            if (confirm('백업 복원이 완료되었습니다. 페이지를 새로고침하시겠습니까?')) {
+            if (confirm(`백업 복원 완료 (${restoreSource})
+${restoreData.length}개 필지가 복원되었습니다.
+페이지를 새로고침하시겠습니까?`)) {
                 window.location.reload();
             }
-            
-            console.log(`✅ 백업 복원 완료: ${data.backup_data.length}개 필지`);
-            
+
+            console.log(`✅ 백업 복원 완료 (${restoreSource}): ${restoreData.length}개 필지`);
+
         } catch (error) {
             console.error('❌ 백업 복원 실패:', error);
-            alert(`백업 복원 실패: ${error.message}`);
+
+            // 복원 실패 시 이전 데이터로 롤백
+            const rollbackData = localStorage.getItem('backup_before_restore');
+            if (rollbackData) {
+                const parsed = JSON.parse(rollbackData);
+                await window.migratedSetItem(CONFIG.STORAGE_KEY, JSON.stringify(parsed.data));
+                alert(`백업 복원 실패: ${error.message}\n이전 데이터로 롤백하였습니다.`);
+            } else {
+                alert(`백업 복원 실패: ${error.message}`);
+            }
+        }
+    }
+
+    // 백업 목록 가져오기
+    async getBackupList() {
+        const backups = [];
+
+        try {
+            // Supabase에서 백업 목록 가져오기
+            if (window.SupabaseManager && window.SupabaseManager.supabase) {
+                const { data, error } = await window.SupabaseManager.supabase
+                    .from('daily_backups')
+                    .select('backup_date, data_count, backup_size')
+                    .order('backup_date', { ascending: false })
+                    .limit(10);
+
+                if (!error && data) {
+                    data.forEach(backup => {
+                        backups.push({
+                            date: backup.backup_date,
+                            count: backup.data_count,
+                            size: backup.backup_size,
+                            source: 'Supabase'
+                        });
+                    });
+                }
+            }
+
+            // 로컬 백업 추가
+            const localBackup = localStorage.getItem('daily_backup_local');
+            if (localBackup) {
+                const parsed = JSON.parse(localBackup);
+                backups.push({
+                    date: parsed.timestamp,
+                    count: parsed.data.length,
+                    size: JSON.stringify(parsed).length,
+                    source: 'Local'
+                });
+            }
+
+            return backups;
+        } catch (error) {
+            console.error('❌ 백업 목록 조회 실패:', error);
+            return [];
         }
     }
 }

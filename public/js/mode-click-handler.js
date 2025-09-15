@@ -117,6 +117,13 @@ async function getParcelInfoViaProxyForClickMode(lat, lng) {
                 // UI 업데이트
                 displayParcelInfoForClickMode(parcelData);
 
+                // 지번 자동 입력
+                const jibun = formatJibun(feature.properties);
+                if (jibun && document.getElementById('parcelNumber')) {
+                    document.getElementById('parcelNumber').value = jibun;
+                    console.log(`📝 지번 자동 입력: ${jibun}`);
+                }
+
                 // 폴리곤 그리기
                 const polygon = await drawClickModeParcelPolygon(parcelData);
                 if (polygon) {

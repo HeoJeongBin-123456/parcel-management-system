@@ -127,8 +127,8 @@ class RealtimeAutoSave {
     // 사용자 상호작용 처리
     handleUserInteraction(event, type) {
         const interactionElements = [
-            '#saveBtn',
-            '#deleteParcelBtn', 
+            '#saveParcelInfoBtn',
+            '#deleteParcelInfoBtn',
             '.color-item',
             '.map-type-btn',
             '#searchBtn'
@@ -673,7 +673,7 @@ class RealtimeAutoSave {
                 `;
                 
                 // 저장 버튼 찾기
-                const saveBtn = document.getElementById('saveBtn');
+                const saveBtn = document.getElementById('saveParcelInfoBtn');
                 if (saveBtn) {
                     // 저장 버튼의 부모 요소에 relative position 설정
                     const parentElement = saveBtn.closest('.form-buttons') || saveBtn.parentElement;

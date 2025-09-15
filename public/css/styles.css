@@ -522,25 +522,51 @@ body.mode-hand .search-input-container {
     display: flex;
     gap: 0.3rem;
     margin-top: 0.5rem;
+    flex-wrap: wrap;
 }
 
 .form-buttons button {
     flex: 1;
-    padding: 0.4rem;
+    min-width: 100px;
+    padding: 0.5rem 0.8rem;
     border: none;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 0.8rem;
-    transition: background 0.3s;
-}
-
-#saveBtn {
-    background: #3498db;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all 0.3s ease;
     color: white;
 }
 
-#saveBtn:hover {
-    background: #2980b9;
+/* 필지 정보 버튼 스타일 */
+.btn-save, #saveParcelInfoBtn {
+    background-color: #28a745;
+    color: white;
+}
+.btn-save:hover, #saveParcelInfoBtn:hover {
+    background-color: #218838;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 5px rgba(40, 167, 69, 0.3);
+}
+
+.btn-delete, #deleteParcelInfoBtn {
+    background-color: #dc3545;
+    color: white;
+}
+.btn-delete:hover, #deleteParcelInfoBtn:hover {
+    background-color: #c82333;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 5px rgba(220, 53, 69, 0.3);
+}
+
+.btn-copy, #copyToClipboardBtn {
+    background-color: #007bff;
+    color: white;
+}
+.btn-copy:hover, #copyToClipboardBtn:hover {
+    background-color: #0056b3;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 5px rgba(0, 123, 255, 0.3);
 }
 
 #clearBtn {
@@ -1352,4 +1378,155 @@ body.mode-hand .search-input-container {
 .streetview-line:hover {
     stroke-width: 4px;
     stroke: #FF6B35;
+}
+/* 백업 관리 스타일 */
+.backup-management {
+    padding: 15px;
+    background: white;
+    border-radius: 5px;
+    margin-top: 10px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.backup-management h3 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    font-size: 16px;
+}
+
+.backup-buttons {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.btn-backup, .btn-backup-list {
+    flex: 1;
+    padding: 8px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background-color 0.3s;
+}
+
+.btn-backup {
+    background-color: #6c757d;
+    color: white;
+}
+
+.btn-backup:hover {
+    background-color: #5a6268;
+}
+
+.btn-backup-list {
+    background-color: #17a2b8;
+    color: white;
+}
+
+.btn-backup-list:hover {
+    background-color: #138496;
+}
+
+.backup-status {
+    padding: 5px;
+    background: #f8f9fa;
+    border-radius: 3px;
+    font-size: 11px;
+    color: #6c757d;
+}
+
+/* 모달 스타일 */
+.modal {
+    position: fixed;
+    z-index: 10000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.4);
+}
+
+.modal-content {
+    background-color: #fefefe;
+    margin: 5% auto;
+    padding: 0;
+    border: 1px solid #888;
+    width: 80%;
+    max-width: 700px;
+    border-radius: 8px;
+}
+
+.modal-header {
+    padding: 15px 20px;
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-radius: 8px 8px 0 0;
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: 20px;
+}
+
+.modal-body {
+    padding: 20px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.close {
+    color: #aaa;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    line-height: 20px;
+}
+
+.close:hover,
+.close:focus {
+    color: #000;
+}
+
+.backup-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.backup-table thead {
+    background-color: #f8f9fa;
+}
+
+.backup-table th {
+    padding: 10px;
+    text-align: left;
+    border-bottom: 2px solid #dee2e6;
+    font-size: 14px;
+}
+
+.backup-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid #dee2e6;
+    font-size: 13px;
+}
+
+.backup-table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+.btn-restore {
+    padding: 5px 10px;
+    background-color: #28a745;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.btn-restore:hover {
+    background-color: #218838;
 }

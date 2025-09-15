@@ -172,10 +172,10 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     }
     
-    // 필지 삭제 버튼 이벤트 리스너
-    const deleteParcelBtn = document.getElementById('deleteParcelBtn');
-    if (deleteParcelBtn) {
-        deleteParcelBtn.addEventListener('click', function() {
+    // 필지 정보 삭제 버튼 이벤트 리스너
+    const deleteParcelInfoBtn = document.getElementById('deleteParcelInfoBtn');
+    if (deleteParcelInfoBtn) {
+        deleteParcelInfoBtn.addEventListener('click', function() {
             deleteCurrentParcel();
         });
     }

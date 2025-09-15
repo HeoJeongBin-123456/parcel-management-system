@@ -493,7 +493,7 @@ async function toggleSearchMode() {
     // console.log('>> 검색 ON 모드로 전환');
 
         // 🚫 검색 모드에서 저장 버튼 비활성화
-        const saveBtn = document.getElementById('saveBtn');
+        const saveBtn = document.getElementById('saveParcelInfoBtn');
         if (saveBtn) {
             saveBtn.disabled = true;
             saveBtn.style.opacity = '0.5';
@@ -529,7 +529,7 @@ async function toggleSearchMode() {
     // console.log('>> 검색 OFF (클릭) 모드로 전환');
 
         // ✅ 클릭 모드에서 저장 버튼 다시 활성화
-        const saveBtn = document.getElementById('saveBtn');
+        const saveBtn = document.getElementById('saveParcelInfoBtn');
         if (saveBtn) {
             saveBtn.disabled = false;
             saveBtn.style.opacity = '1';
@@ -1236,7 +1236,8 @@ function initSearchEventListeners() {
         
     // console.log('검색 토글 버튼 초기 상태 설정 완료. onclick="toggleSearchMode()" 사용');
     } else {
-        console.error('searchToggleBtn을 찾을 수 없습니다. DOM 요소 확인:', document.getElementById('searchToggleBtn'));
+        // searchToggleBtn이 없어도 에러 발생하지 않도록 조용히 처리
+        // console.log('searchToggleBtn 요소가 없음 - 검색 토글 버튼이 제거되었을 수 있음');
     }
     
     // console.log('🎯 이벤트 리스너 등록 완료');

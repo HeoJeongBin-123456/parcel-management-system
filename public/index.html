@@ -127,19 +127,33 @@
                         <textarea id="memo" rows="3" placeholder="추가 메모..." style="resize: vertical; min-height: 60px;"></textarea>
                     </div>
                     <div class="form-buttons">
-                        <button type="button" id="saveBtn">저장</button>
-                        <!-- 초기화 버튼 제거됨: 개별 삭제만 가능 -->
-                        <button type="button" id="deleteParcelBtn" style="background-color: #6c757d; color: white;">필지 정보 초기화</button>
-                    </div>
-                    <div class="export-buttons">
-                        <button type="button" id="exportCurrentBtn" onclick="exportCurrentParcelToGoogleSheets()">
-                            구글 시트 전송
+                        <button type="button" id="saveParcelInfoBtn" class="btn-save">
+                            📝 필지 정보 저장
                         </button>
-                        <button type="button" id="copyDataBtn" onclick="copyDataToClipboard()">
-                            엑셀 복사
+                        <button type="button" id="deleteParcelInfoBtn" class="btn-delete">
+                            🗑️ 필지 정보 삭제
+                        </button>
+                        <button type="button" id="copyToClipboardBtn" class="btn-copy">
+                            📋 클립보드 복사
                         </button>
                     </div>
                 </form>
+            </div>
+
+            <!-- 백업 관리 -->
+            <div class="backup-management">
+                <h3>백업 관리</h3>
+                <div class="backup-buttons">
+                    <button type="button" id="manualBackupBtn" class="btn-backup">
+                        💾 수동 백업
+                    </button>
+                    <button type="button" id="showBackupListBtn" class="btn-backup-list">
+                        📋 백업 목록
+                    </button>
+                </div>
+                <div class="backup-status" id="backupStatus">
+                    <small>마지막 백업: <span id="lastBackupTime">-</span></small>
+                </div>
             </div>
 
             </aside>
@@ -206,91 +220,6 @@
                 <input type="text" id="calendarUrl" placeholder="구글 캘린더 URL 또는 이메일">
                 <button onclick="updateCalendar()" class="btn-primary">적용</button>
                 <button onclick="closeCalendarModal()" class="btn-secondary">닫기</button>
-            </div>
-        </div>
-    </div>
-    
-    <!-- 백업 관리 모달 -->
-    <div id="backupModal" class="modal" style="display: none;">
-        <div class="modal-content backup-modal">
-            <div class="modal-header">
-                <h2>📦 백업 관리 시스템</h2>
-                <span class="close" onclick="closeBackupModal()">&times;</span>
-            </div>
-            <div class="modal-body">
-                
-                <!-- 백업 상태 대시보드 -->
-                <div class="backup-status-section">
-                    <h3>🔄 백업 상태</h3>
-                    <div class="backup-status-grid">
-                        <div class="status-card daily-backup">
-                            <h4>📅 일일 백업 (Supabase)</h4>
-                            <div class="status-info">
-                                <span id="dailyBackupStatus">확인 중...</span>
-                                <span id="dailyBackupTime" class="backup-time"></span>
-                            </div>
-                            <button class="backup-btn" onclick="performManualBackup('daily')">수동 백업</button>
-                        </div>
-                        <div class="status-card monthly-backup">
-                            <h4>📆 월간 백업 (Google Drive)</h4>
-                            <div class="status-info">
-                                <span id="monthlyBackupStatus">확인 중...</span>
-                                <span id="monthlyBackupTime" class="backup-time"></span>
-                            </div>
-                            <button class="backup-btn" onclick="performManualBackup('monthly')">수동 백업</button>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- 백업 히스토리 -->
-                <div class="backup-history-section">
-                    <h3>📋 백업 히스토리</h3>
-                    <div class="backup-history-controls">
-                        <button onclick="refreshBackupHistory()">새로고침</button>
-                        <button onclick="exportBackupHistory()">히스토리 내보내기</button>
-                    </div>
-                    <div id="backupHistoryList" class="backup-history-list">
-                        <p>백업 히스토리를 로드하는 중...</p>
-                    </div>
-                </div>
-                
-                <!-- 백업 설정 -->
-                <div class="backup-settings-section">
-                    <h3>⚙️ 백업 설정</h3>
-                    <div class="settings-grid">
-                        <div class="setting-item">
-                            <label>자동 백업 활성화</label>
-                            <label class="switch">
-                                <input type="checkbox" id="autoBackupEnabled" checked>
-                                <span class="slider"></span>
-                            </label>
-                        </div>
-                        <div class="setting-item">
-                            <label>일일 백업 시간</label>
-                            <input type="time" id="dailyBackupTime" value="02:00">
-                        </div>
-                        <div class="setting-item">
-                            <label>Google Drive 폴더</label>
-                            <input type="text" id="driveFolder" placeholder="폴더 ID 입력" readonly>
-                            <button onclick="selectGoogleDriveFolder()">폴더 선택</button>
-                        </div>
-                        <div class="setting-item full-width">
-                            <label>백업 알림 설정</label>
-                            <div class="notification-options">
-                                <label><input type="checkbox" id="notifySuccess" checked> 성공 시 알림</label>
-                                <label><input type="checkbox" id="notifyFailure" checked> 실패 시 알림</label>
-                                <label><input type="checkbox" id="browserNotification"> 브라우저 알림</label>
-                            </div>
-                        </div>
-                    </div>
-                    <button onclick="saveBackupSettings()" class="save-settings-btn">설정 저장</button>
-                </div>
-                
-            </div>
-            <div class="modal-footer">
-                <button onclick="performEmergencyBackup()" class="btn-warning">⚡ 긴급 백업</button>
-                <button onclick="restoreFromBackup()" class="btn-info">📥 복원</button>
-                <button onclick="closeBackupModal()" class="btn-secondary">닫기</button>
             </div>
         </div>
     </div>
@@ -404,5 +333,124 @@
             });
         });
     </script>
+
+    <!-- 백업 목록 모달 -->
+    <div id="backupModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>백업 목록</h2>
+                <span class="close" onclick="closeBackupModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="backupList">
+                    <!-- 백업 목록이 여기 표시됩니다 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 백업 관련 함수들
+        function showBackupModal() {
+            document.getElementById('backupModal').style.display = 'block';
+            loadBackupList();
+        }
+
+        function closeBackupModal() {
+            document.getElementById('backupModal').style.display = 'none';
+        }
+
+        async function loadBackupList() {
+            const listContainer = document.getElementById('backupList');
+            listContainer.innerHTML = '<p>백업 목록을 불러오는 중...</p>';
+
+            try {
+                const backups = await window.BackupManager.getBackupList();
+
+                if (backups.length === 0) {
+                    listContainer.innerHTML = '<p>백업이 없습니다.</p>';
+                    return;
+                }
+
+                let html = '<table class="backup-table">';
+                html += '<thead><tr><th>날짜</th><th>필지 수</th><th>크기</th><th>소스</th><th>작업</th></tr></thead>';
+                html += '<tbody>';
+
+                backups.forEach(backup => {
+                    const date = new Date(backup.date).toLocaleString('ko-KR');
+                    const size = (backup.size / 1024).toFixed(2) + ' KB';
+                    html += `
+                        <tr>
+                            <td>${date}</td>
+                            <td>${backup.count}개</td>
+                            <td>${size}</td>
+                            <td>${backup.source}</td>
+                            <td>
+                                <button class="btn-restore" onclick="restoreBackup('${backup.date}')">복원</button>
+                            </td>
+                        </tr>
+                    `;
+                });
+
+                html += '</tbody></table>';
+                listContainer.innerHTML = html;
+            } catch (error) {
+                listContainer.innerHTML = '<p>백업 목록을 불러오는데 실패했습니다.</p>';
+                console.error('백업 목록 로드 실패:', error);
+            }
+        }
+
+        async function restoreBackup(backupDate) {
+            if (confirm('정말로 이 백업을 복원하시겠습니까?\n현재 데이터는 백업됩니다.')) {
+                await window.BackupManager.restoreFromBackup(backupDate);
+                closeBackupModal();
+            }
+        }
+
+        // 백업 버튼 이벤트 리스너
+        document.addEventListener('DOMContentLoaded', function() {
+            const manualBackupBtn = document.getElementById('manualBackupBtn');
+            const showBackupListBtn = document.getElementById('showBackupListBtn');
+
+            if (manualBackupBtn) {
+                manualBackupBtn.addEventListener('click', async () => {
+                    if (confirm('수동 백업을 실행하시겠습니까?')) {
+                        await window.BackupManager.runManualBackup('daily');
+                        updateBackupStatus();
+                    }
+                });
+            }
+
+            if (showBackupListBtn) {
+                showBackupListBtn.addEventListener('click', () => {
+                    showBackupModal();
+                });
+            }
+
+            // 백업 상태 업데이트
+            updateBackupStatus();
+            setInterval(updateBackupStatus, 60000); // 1분마다 업데이트
+        });
+
+        function updateBackupStatus() {
+            const status = window.BackupManager?.getBackupStatus();
+            if (status && status.lastDaily) {
+                const lastBackupTime = document.getElementById('lastBackupTime');
+                if (lastBackupTime) {
+                    const date = new Date(status.lastDaily);
+                    lastBackupTime.textContent = date.toLocaleString('ko-KR');
+                }
+            }
+        }
+
+        // 모달 외부 클릭시 닫기
+        window.onclick = function(event) {
+            const modal = document.getElementById('backupModal');
+            if (event.target === modal) {
+                closeBackupModal();
+            }
+        }
+    </script>
+
 </body>
 </html>
