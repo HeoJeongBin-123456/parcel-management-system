@@ -914,9 +914,13 @@ class AppInitializer {
             // window.parcelsData에서 마커가 필요한 필지들 찾기
             if (window.parcelsData && Array.isArray(window.parcelsData)) {
                 const parcelsNeedingMarkers = window.parcelsData.filter(parcel => {
-                    // PNU 또는 지번이 있는 필지는 마커가 필요함
-                    return (parcel.pnu && parcel.pnu.trim()) ||
-                           (parcel.parcelNumber && parcel.parcelNumber.trim());
+                    // 실제 정보가 있을 때만 마커 필요
+                    try {
+                        return window.MemoMarkerManager && window.MemoMarkerManager.shouldShowMarker(parcel);
+                    } catch (e) {
+                        // 방어적 처리: 오류 시 마커 생성하지 않음
+                        return false;
+                    }
                 });
 
                 console.log(`📌 마커가 필요한 필지 ${parcelsNeedingMarkers.length}개 발견`);
@@ -927,8 +931,8 @@ class AppInitializer {
                         // 이미 마커가 있는지 확인
                         const markerKey = parcel.pnu || parcel.parcelNumber || parcel.id;
                         if (markerKey && !window.MemoMarkerManager.markers.has(markerKey)) {
-                            // 마커 생성
-                            if (parcel.lat && parcel.lng) {
+                            // 마커 생성 (표시 조건 재검사)
+                            if (parcel.lat && parcel.lng && window.MemoMarkerManager.shouldShowMarker(parcel)) {
                                 window.MemoMarkerManager.createOrUpdateMarker(parcel);
                                 console.log(`✅ 마커 생성: ${markerKey}`);
                             }
@@ -994,16 +998,54 @@ if (!window.appInitializer) {
     console.log('✅ AppInitializer 이미 존재');
 }
 
-// DOM 로드 후 안전한 초기화 시작
-document.addEventListener('DOMContentLoaded', function() {
+// DOM 로드 후 안전한 초기화 시작 - 2초 내 로딩 최적화
+document.addEventListener('DOMContentLoaded', async function() {
     console.log('📄 DOM 준비 완료, 앱 초기화 시작');
-    
-    // 약간의 지연 후 초기화 (다른 스크립트들이 로드될 시간을 줌)
-    setTimeout(() => {
+
+    // 🚀 2초 내 상호작용을 위한 즉시 초기화
+    // 1. 필수 요소만 먼저 초기화
+    if (window.ModeManager) {
+        await window.ModeManager.initialize();
+        console.log('✅ ModeManager 초기화 완료');
+    }
+
+    if (window.ColorPaletteManager) {
+        window.ColorPaletteManager.initialize();
+        console.log('✅ ColorPaletteManager 초기화 완료');
+    }
+
+    if (window.SearchModeManager) {
+        window.SearchModeManager.initialize();
+        console.log('✅ SearchModeManager 초기화 완료');
+    }
+
+    // 모드 전환 버튼 이벤트 리스너
+    document.querySelectorAll('.mode-button').forEach(button => {
+        button.addEventListener('click', async (e) => {
+            const mode = e.currentTarget.dataset.mode;
+            if (window.ModeManager) {
+                await window.ModeManager.switchMode(mode);
+
+                // 모드 인디케이터 업데이트
+                const indicator = document.querySelector('.mode-indicator');
+                if (indicator) {
+                    const modeTexts = {
+                        'click': '클릭 모드',
+                        'search': '검색 모드',
+                        'hand': '손 모드'
+                    };
+                    indicator.textContent = modeTexts[mode] || mode;
+                }
+            }
+        });
+    });
+
+    // 2. 나머지는 비동기로 로드
+    requestIdleCallback(() => {
         if (window.appInitializer && !window.appInitializer.isInitialized) {
             window.appInitializer.initialize();
         }
-    }, 1000);
+    });
 });
 
 // 윈도우 로드 후 추가 체크 (fallback)

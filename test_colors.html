@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>색상 테스트</title>
+    <style>
+        .test-container {
+            padding: 20px;
+            font-family: monospace;
+        }
+        .color-test {
+            margin: 10px;
+            padding: 10px;
+            border: 1px solid #ccc;
+        }
+        .color-box {
+            width: 50px;
+            height: 50px;
+            display: inline-block;
+            margin-right: 10px;
+            border: 2px solid #000;
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h2>색상 팔레트 테스트</h2>
+
+        <div id="results"></div>
+
+        <button onclick="testColors()">색상 테스트 실행</button>
+        <button onclick="testCurrentColor()">currentColor 테스트</button>
+    </div>
+
+    <script>
+        const colors = [
+            { index: 0, hex: '#FF0000', name: '빨강' },
+            { index: 1, hex: '#FFA500', name: '주황' },
+            { index: 2, hex: '#FFFF00', name: '노랑' },
+            { index: 3, hex: '#90EE90', name: '연두' },
+            { index: 4, hex: '#0000FF', name: '파랑' },
+            { index: 5, hex: '#000000', name: '검정' },
+            { index: 6, hex: '#FFFFFF', name: '흰색' },
+            { index: 7, hex: '#87CEEB', name: '하늘색' }
+        ];
+
+        function testColors() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '';
+
+            colors.forEach(color => {
+                const div = document.createElement('div');
+                div.className = 'color-test';
+
+                const colorBox = document.createElement('div');
+                colorBox.className = 'color-box';
+                colorBox.style.background = color.hex;
+
+                const label = document.createElement('span');
+                label.textContent = `${color.index}: ${color.name} (${color.hex})`;
+
+                div.appendChild(colorBox);
+                div.appendChild(label);
+                resultsDiv.appendChild(div);
+            });
+        }
+
+        function testCurrentColor() {
+            // iframe으로 메인 페이지 로드
+            const iframe = document.createElement('iframe');
+            iframe.src = 'http://localhost:4000';
+            iframe.style.width = '100%';
+            iframe.style.height = '600px';
+            iframe.onload = function() {
+                setTimeout(() => {
+                    const iframeWindow = iframe.contentWindow;
+
+                    // currentColor 값 확인
+                    console.log('currentColor:', iframeWindow.currentColor);
+
+                    // 색상 선택 테스트
+                    const colorItems = iframeWindow.document.querySelectorAll('.color-item');
+                    if (colorItems.length > 0) {
+                        colorItems[0].click();
+                        setTimeout(() => {
+                            console.log('After click - currentColor:', iframeWindow.currentColor);
+                            alert('currentColor: ' + iframeWindow.currentColor);
+                        }, 500);
+                    }
+                }, 2000);
+            };
+            document.body.appendChild(iframe);
+        }
+    </script>
+</body>
+</html>

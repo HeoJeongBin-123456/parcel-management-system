@@ -144,8 +144,8 @@ class RealtimeSync {
 
     // 자신이 보낸 업데이트인지 확인
     isOwnUpdate(payload) {
-        // 간단한 시간 기반 체크 (100ms 이내)
-        return Date.now() - this.lastUpdateTime < 100;
+        // 시간 기반 체크를 500ms로 늘림 (무한루프 방지)
+        return Date.now() - this.lastUpdateTime < 500;
     }
 
     // 🗺️ 폴리곤 실시간 업데이트 처리
@@ -282,17 +282,16 @@ class RealtimeSync {
 
     // 지도에 필지 추가
     addParcelToMap(parcel) {
-        if (window.loadSavedParcels) {
-            // 전체 새로고침보다는 개별 추가가 좋지만 기존 함수 활용
-            window.loadSavedParcels();
-        }
+        // 무한루프 방지: loadSavedParcels 호출 제거
+        console.log('📡 실시간 동기화: 새 필지 추가', parcel.parcel_name);
+        // 개별 필지만 업데이트하는 로직 필요 (향후 개선)
     }
 
     // 지도의 필지 업데이트
     updateParcelOnMap(parcel) {
-        if (window.loadSavedParcels) {
-            window.loadSavedParcels();
-        }
+        // 무한루프 방지: loadSavedParcels 호출 제거
+        console.log('📡 실시간 동기화: 필지 업데이트', parcel.parcel_name);
+        // 개별 필지만 업데이트하는 로직 필요 (향후 개선)
     }
 
     // 지도에서 필지 제거

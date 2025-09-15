@@ -16,13 +16,17 @@
     
     <!-- Supabase -->
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-    
+
+    <!-- html2canvas for screenshot capture -->
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+
     <!-- CSS -->
     <link rel="stylesheet" href="/css/styles.css">
     <link rel="stylesheet" href="/css/advanced-ui.css">
     <link rel="stylesheet" href="/css/business-style.css">
     <link rel="stylesheet" href="/css/responsive.css">
     <link rel="stylesheet" href="/css/backup-ui.css">
+    <link rel="stylesheet" href="/css/modes.css">
 </head>
 <body>
     <div id="app">
@@ -31,6 +35,34 @@
             <h1 style="color: white;">네이버 지도 필지 관리 프로그램</h1>
             <div id="connectionStatus" class="connection-status disconnected">🔴 연결 중...</div>
             <div class="header-controls">
+                <!-- 모드 선택 버튼 추가 -->
+                <div class="mode-selector">
+                    <button class="mode-btn active" data-mode="click" title="클릭 모드">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                            <path d="M12 2L2 7V12C2 16.5 4.23 20.68 7.62 23.15L12 24L16.38 23.15C19.77 20.68 22 16.5 22 12V7L12 2Z" stroke="currentColor" stroke-width="2"/>
+                            <circle cx="12" cy="12" r="3" fill="currentColor"/>
+                        </svg>
+                        <span>클릭</span>
+                    </button>
+                    <button class="mode-btn" data-mode="search" title="검색 모드">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                            <circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/>
+                            <path d="M21 21L16.65 16.65" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                        <span>검색</span>
+                    </button>
+                    <button class="mode-btn" data-mode="hand" title="손 모드">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                            <path d="M18 11L18 6C18 5.45 17.55 5 17 5C16.45 5 16 5.45 16 6V11" stroke="currentColor" stroke-width="2"/>
+                            <path d="M16 11V4C16 3.45 15.55 3 15 3C14.45 3 14 3.45 14 4V11" stroke="currentColor" stroke-width="2"/>
+                            <path d="M14 11V5C14 4.45 13.55 4 13 4C12.45 4 12 4.45 12 5V11" stroke="currentColor" stroke-width="2"/>
+                            <path d="M12 11V7C12 6.45 11.55 6 11 6C10.45 6 10 6.45 10 7V15" stroke="currentColor" stroke-width="2"/>
+                            <path d="M10 15L10 12C10 11.45 9.55 11 9 11C8.45 11 8 11.45 8 12V16C8 20 11 21 11 21H17C17 21 20 20 20 16V11C20 10.45 19.55 10 19 10C18.45 10 18 10.45 18 11" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                        <span>손</span>
+                    </button>
+                </div>
+
                 <!-- 지도 타입 선택 -->
                 <div class="map-type-selector">
                     <button class="map-type-btn active" data-type="normal">일반지도</button>
@@ -43,9 +75,14 @@
                 <div class="search-container">
                     <input type="text" id="searchInput" placeholder="지번 또는 주소 검색">
                     <button id="searchBtn">검색</button>
-                    <button id="searchToggleBtn" class="search-toggle-btn" title="검색 모드 on/off" onclick="toggleSearchMode()">
-                        검색 OFF
-                    </button>
+                    <div class="search-mode-indicator" style="display: none;">
+                        <span class="search-mode-badge">검색 모드</span>
+                        <button id="clearSearchBtn" class="clear-search-btn" title="검색 결과 초기화">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                                <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
                 
                 <!-- 캘린더 버튼 -->
@@ -83,22 +120,24 @@
             <aside class="sidebar">
             <!-- 색상 선택 패널 -->
             <div class="color-panel">
-                <h3>필지 색상</h3>
-                <div class="color-palette">
-                    <div class="color-item" data-color="#FF0000" style="background: #FF0000"></div>
-                    <div class="color-item" data-color="#FFA500" style="background: #FFA500"></div>
-                    <div class="color-item" data-color="#FFFF00" style="background: #FFFF00"></div>
-                    <div class="color-item" data-color="#90EE90" style="background: #90EE90"></div>
-                    <div class="color-item" data-color="#0000FF" style="background: #0000FF"></div>
-                    <div class="color-item" data-color="#000000" style="background: #000000"></div>
-                    <div class="color-item" data-color="#FFFFFF" style="background: #FFFFFF; border: 1px solid #ccc"></div>
-                    <div class="color-item" data-color="#87CEEB" style="background: #87CEEB"></div>
+                <h3>필지 색상 <span class="mode-badge">클릭 모드</span></h3>
+                <div class="color-palette" id="colorPalette">
+                    <div class="color-item active" data-color="0" data-hex="#FF0000" style="background: #FF0000" title="빨강"></div>
+                    <div class="color-item" data-color="1" data-hex="#FFA500" style="background: #FFA500" title="주황"></div>
+                    <div class="color-item" data-color="2" data-hex="#FFFF00" style="background: #FFFF00" title="노랑"></div>
+                    <div class="color-item" data-color="3" data-hex="#90EE90" style="background: #90EE90" title="연두"></div>
+                    <div class="color-item" data-color="4" data-hex="#0000FF" style="background: #0000FF" title="파랑"></div>
+                    <div class="color-item" data-color="5" data-hex="#000000" style="background: #000000" title="검정"></div>
+                    <div class="color-item" data-color="6" data-hex="#FFFFFF" style="background: #FFFFFF; border: 1px solid #ccc" title="흰색"></div>
+                    <div class="color-item" data-color="7" data-hex="#87CEEB" style="background: #87CEEB" title="하늘색"></div>
                 </div>
                 <div class="current-color">
                     <span>선택된 색상:</span>
                     <div id="currentColor" style="background: #FF0000"></div>
                 </div>
-                <!-- 초기화 버튼 제거됨: 개별 삭제 버튼만 사용 -->
+                <div class="color-stats">
+                    <span id="colorStats">총 0개 필지</span>
+                </div>
             </div>
 
             <!-- 필지 정보 입력 -->
@@ -145,6 +184,29 @@
 
             <!-- 지도 영역 -->
             <div class="map-container">
+                <!-- 모드 전환 버튼 -->
+                <div class="mode-switcher">
+                    <button class="mode-button active" data-mode="click">클릭</button>
+                    <button class="mode-button" data-mode="search">검색</button>
+                    <button class="mode-button" data-mode="hand">손</button>
+                </div>
+
+                <!-- 모드 인디케이터 -->
+                <div class="mode-indicator">클릭 모드</div>
+
+                <!-- 검색 입력 (검색 모드 전용) -->
+                <div class="search-input-container search-only" style="display:none;">
+                    <input type="text" id="searchInput" placeholder="주소, 지번, 소유자명으로 검색">
+                    <button id="searchButton">검색</button>
+                    <button id="clearSearchButton">지우기</button>
+                </div>
+
+                <!-- 검색 결과 (검색 모드 전용) -->
+                <div class="search-results-container search-only" style="display:none;">
+                    <div class="search-results-header">검색 결과</div>
+                    <div id="searchResults" class="search-results-body"></div>
+                </div>
+
                 <div id="map"></div>
                 <div id="pano" style="display:none;"></div>
             </div>
@@ -280,6 +342,9 @@
     <script src="/js/map.js"></script>
     <script src="/js/parcel.js"></script>
     <script src="/js/parcel-manager.js"></script>
+    <script src="/js/mode-manager.js"></script>
+    <script src="/js/color-palette.js"></script>
+    <script src="/js/search-mode.js"></script>
     <script src="/js/search.js"></script>
     <script src="/js/memo-markers.js"></script>
     <script src="/js/backup-manager.js"></script>
@@ -293,5 +358,88 @@
     <script src="/js/realtime-autosave.js"></script>
     <script src="/js/debug-save-system.js"></script>
     <script src="/js/app-init.js"></script>
+    <script>
+        // 모드 전환 버튼 이벤트 리스너
+        document.addEventListener('DOMContentLoaded', function() {
+            // 모드 전환 버튼
+            const modeBtns = document.querySelectorAll('.mode-btn');
+            modeBtns.forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const mode = this.dataset.mode;
+
+                    // 버튼 활성화 상태 변경
+                    modeBtns.forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+
+                    // 모드 전환
+                    if (window.ModeManager) {
+                        window.ModeManager.switchMode(mode);
+                    }
+                });
+            });
+
+            // 검색 버튼 클릭 시 자동 모드 전환
+            const searchBtn = document.getElementById('searchBtn');
+            const searchInput = document.getElementById('searchInput');
+
+            if (searchBtn) {
+                searchBtn.addEventListener('click', function() {
+                    const query = searchInput.value.trim();
+                    if (query && window.SearchModeManager) {
+                        window.SearchModeManager.executeSearch({
+                            query: query,
+                            searchType: 'all'
+                        });
+                    }
+                });
+            }
+
+            if (searchInput) {
+                searchInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        const query = this.value.trim();
+                        if (query && window.SearchModeManager) {
+                            window.SearchModeManager.executeSearch({
+                                query: query,
+                                searchType: 'all'
+                            });
+                        }
+                    }
+                });
+            }
+
+            // 검색 초기화 버튼
+            const clearSearchBtn = document.getElementById('clearSearchBtn');
+            if (clearSearchBtn) {
+                clearSearchBtn.addEventListener('click', function() {
+                    if (window.SearchModeManager) {
+                        window.SearchModeManager.clearSearch();
+                    }
+                });
+            }
+
+            // 모드 변경 이벤트 리스너
+            window.addEventListener('modeChanged', function(e) {
+                const { currentMode } = e.detail;
+
+                // 검색 모드 인디케이터 표시/숨김
+                const searchIndicator = document.querySelector('.search-mode-indicator');
+                if (searchIndicator) {
+                    searchIndicator.style.display = currentMode === 'search' ? 'flex' : 'none';
+                }
+
+                // 색상 패널 모드 표시
+                const modeBadge = document.querySelector('.mode-badge');
+                if (modeBadge) {
+                    if (currentMode === 'click') {
+                        modeBadge.textContent = '클릭 모드';
+                        modeBadge.style.display = 'inline-block';
+                    } else {
+                        modeBadge.style.display = 'none';
+                    }
+                }
+            });
+        });
+    </script>
 </body>
 </html>

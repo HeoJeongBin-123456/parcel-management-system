@@ -1,0 +1,150 @@
+openapi: 3.0.0
+info:
+  title: Color Management API
+  version: 1.0.0
+  description: API for managing parcel colors and palette
+
+paths:
+  /api/colors/palette:
+    get:
+      summary: Get available color palette
+      operationId: getColorPalette
+      responses:
+        '200':
+          description: Color palette retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  colors:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        index:
+                          type: number
+                        hex:
+                          type: string
+                        name:
+                          type: string
+                        usageCount:
+                          type: number
+                  currentSelection:
+                    type: number
+                    nullable: true
+
+  /api/parcel/color:
+    post:
+      summary: Apply color to parcel
+      operationId: applyColor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - pnu
+                - colorIndex
+              properties:
+                pnu:
+                  type: string
+                colorIndex:
+                  type: number
+                  minimum: 0
+                  maximum: 7
+                parcelData:
+                  type: object
+                  properties:
+                    lat:
+                      type: number
+                    lng:
+                      type: number
+                    parcelName:
+                      type: string
+      responses:
+        '200':
+          description: Color applied successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pnu:
+                    type: string
+                  colorIndex:
+                    type: number
+                  wasToggled:
+                    type: boolean
+                    description: True if color was removed (toggle action)
+        '400':
+          description: Invalid color index or parcel data
+
+  /api/parcel/color/{pnu}:
+    delete:
+      summary: Remove color from parcel
+      operationId: removeColor
+      parameters:
+        - name: pnu
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Color removed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pnu:
+                    type: string
+                  previousColorIndex:
+                    type: number
+                  markerRemoved:
+                    type: boolean
+        '404':
+          description: Parcel not found
+
+  /api/parcels/colored:
+    get:
+      summary: Get all colored parcels
+      operationId: getColoredParcels
+      parameters:
+        - name: mode
+          in: query
+          schema:
+            type: string
+            enum: [click, search, all]
+            default: all
+        - name: colorIndex
+          in: query
+          schema:
+            type: number
+            minimum: 0
+            maximum: 7
+      responses:
+        '200':
+          description: Colored parcels retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  parcels:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        pnu:
+                          type: string
+                        colorIndex:
+                          type: number
+                        mode:
+                          type: string
+                        hasMarker:
+                          type: boolean
+                  total:
+                    type: number

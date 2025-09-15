@@ -108,13 +108,19 @@ class AdvancedBackupManager {
         const now = new Date();
         
         try {
+            // 🚫 백업 비활성화 설정 확인
+            if (localStorage.getItem('disable_auto_backup') === 'true') {
+                console.log('⚠️ 자동 백업이 비활성화되어 있습니다');
+                return;
+            }
+
             // 일일 백업 확인
             if (this.shouldPerformDailyBackup(now)) {
                 console.log('📅 일일 백업 시간입니다');
                 await this.performDailyBackup();
             }
-            
-            // 월간 백업 확인  
+
+            // 월간 백업 확인
             if (this.shouldPerformMonthlyBackup(now)) {
                 console.log('📆 월간 백업 시간입니다');
                 await this.performMonthlyBackup();
@@ -290,8 +296,14 @@ class AdvancedBackupManager {
                 console.warn('스크린샷 캡처 실패:', error);
             }
 
-            // 4. Google Drive 업로드
-            const driveResult = await this.uploadToGoogleDrive(exportData, screenshot, backupId);
+            // 4. Google Drive 업로드 (선택적)
+            let driveResult = null;
+            try {
+                driveResult = await this.uploadToGoogleDrive(exportData, screenshot, backupId);
+            } catch (error) {
+                console.warn('⚠️ Google Drive 업로드 실패:', error);
+                driveResult = { success: false, reason: error.message };
+            }
 
             // 5. 백업 메타데이터 생성
             const metadata = {
@@ -300,7 +312,8 @@ class AdvancedBackupManager {
                 timestamp: startTime.toISOString(),
                 dataCount: data.length,
                 exportSize: exportData.length,
-                driveFileId: driveResult.fileId,
+                driveFileId: driveResult?.success ? driveResult.fileId : null,
+                driveBackupStatus: driveResult?.success ? 'success' : 'failed',
                 driveUrl: driveResult.url,
                 status: 'completed',
                 duration: Date.now() - startTime.getTime()
@@ -388,14 +401,22 @@ class AdvancedBackupManager {
     // Supabase 백업 테이블에 저장
     async saveToSupabaseBackup(data, backupId) {
         if (!window.SupabaseManager || !window.SupabaseManager.isConnected) {
-            throw new Error('Supabase 연결되지 않음');
+            console.warn('⚠️ Supabase 연결되지 않음 - 로컬 백업으로 대체');
+            return await this.saveToLocalBackup(data, backupId);
         }
 
-        console.log('💾 Supabase 백업 테이블에 저장 중...');
+        console.log('💾 Supabase 백업 테이블 확인 및 저장 중...');
 
         try {
             const supabase = window.SupabaseManager.supabase;
-            
+
+            // 🔍 백업 테이블 존재 여부 확인
+            const tablesExist = await this.checkBackupTablesExist(supabase);
+            if (!tablesExist) {
+                console.warn('⚠️ Supabase 백업 테이블이 없음 - 로컬 백업으로 대체');
+                return await this.saveToLocalBackup(data, backupId);
+            }
+
             // 백업 메인 레코드 생성
             const { data: backupRecord, error: backupError } = await supabase
                 .from('backups')
@@ -410,12 +431,13 @@ class AdvancedBackupManager {
                 .single();
 
             if (backupError) {
-                throw backupError;
+                console.warn('⚠️ Supabase 백업 테이블 접근 실패 - 로컬 백업으로 대체:', backupError);
+                return await this.saveToLocalBackup(data, backupId);
             }
 
             // 데이터를 압축하여 저장
             const compressedData = this.compressData(data);
-            
+
             // 백업 데이터 저장
             const { error: dataError } = await supabase
                 .from('backup_data')
@@ -426,13 +448,14 @@ class AdvancedBackupManager {
                 });
 
             if (dataError) {
-                throw dataError;
+                console.warn('⚠️ Supabase 백업 데이터 저장 실패 - 로컬 백업으로 대체:', dataError);
+                return await this.saveToLocalBackup(data, backupId);
             }
 
             // 백업 완료 상태 업데이트
             const { error: updateError } = await supabase
                 .from('backups')
-                .update({ 
+                .update({
                     status: 'completed',
                     completed_at: new Date().toISOString()
                 })
@@ -443,10 +466,83 @@ class AdvancedBackupManager {
             }
 
             console.log('✅ Supabase 백업 저장 완료');
-            return { success: true, backupId };
+            return { success: true, backupId, method: 'supabase' };
 
         } catch (error) {
-            console.error('❌ Supabase 백업 저장 실패:', error);
+            console.warn('⚠️ Supabase 백업 저장 중 오류 발생 - 로컬 백업으로 대체:', error);
+            return await this.saveToLocalBackup(data, backupId);
+        }
+    }
+
+    // 백업 테이블 존재 여부 확인
+    async checkBackupTablesExist(supabase) {
+        try {
+            // backups 테이블 확인 (빈 쿼리로 테이블 존재 여부만 확인)
+            const { error: backupsError } = await supabase
+                .from('backups')
+                .select('id')
+                .limit(1);
+
+            if (backupsError) {
+                console.log('❌ backups 테이블 없음:', backupsError.message);
+                return false;
+            }
+
+            // backup_data 테이블 확인
+            const { error: backupDataError } = await supabase
+                .from('backup_data')
+                .select('backup_id')
+                .limit(1);
+
+            if (backupDataError) {
+                console.log('❌ backup_data 테이블 없음:', backupDataError.message);
+                return false;
+            }
+
+            console.log('✅ 백업 테이블들이 존재함');
+            return true;
+
+        } catch (error) {
+            console.log('❌ 백업 테이블 확인 중 오류:', error);
+            return false;
+        }
+    }
+
+    // 로컬 스토리지 백업
+    async saveToLocalBackup(data, backupId) {
+        console.log('💾 로컬 스토리지 백업 저장 중...');
+
+        try {
+            // 기존 로컬 백업들 가져오기
+            const existingBackups = JSON.parse(localStorage.getItem('local_backups') || '[]');
+
+            // 새 백업 데이터 생성
+            const newBackup = {
+                id: backupId,
+                type: 'daily',
+                created_at: new Date().toISOString(),
+                data_count: data.length,
+                data: this.compressData(data),
+                checksum: this.generateChecksum(data),
+                method: 'localStorage'
+            };
+
+            // 백업 목록에 추가
+            existingBackups.push(newBackup);
+
+            // 오래된 백업 정리 (최근 10개만 유지)
+            if (existingBackups.length > 10) {
+                existingBackups.splice(0, existingBackups.length - 10);
+            }
+
+            // 로컬 스토리지에 저장
+            localStorage.setItem('local_backups', JSON.stringify(existingBackups));
+
+            console.log('✅ 로컬 스토리지 백업 완료');
+            return { success: true, backupId, method: 'localStorage' };
+
+        } catch (error) {
+            console.error('❌ 로컬 스토리지 백업 실패:', error);
             throw error;
         }
     }
@@ -517,11 +613,13 @@ class AdvancedBackupManager {
 
         // Google API 인증 확인
         if (!window.gapi || !window.GoogleAuth) {
-            throw new Error('Google API가 로드되지 않음');
+            console.warn('⚠️ Google API가 로드되지 않음 - Google Drive 백업 건너뜀');
+            return { success: false, reason: 'Google API 미로드' };
         }
 
         if (!window.GoogleAuth.isAuthenticated()) {
-            throw new Error('Google 인증이 필요합니다');
+            console.warn('⚠️ Google 인증이 필요합니다 - Google Drive 백업 건너뜀');
+            return { success: false, reason: 'Google 인증 필요' };
         }
 
         try {

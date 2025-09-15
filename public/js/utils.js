@@ -25,14 +25,31 @@ document.addEventListener('DOMContentLoaded', async function() {
                 console.log('🎨 저장된 색상 복원:', savedColor);
 
                 if (savedColor) {
-                    currentColor = savedColor;
+                    // savedColor가 색상 인덱스(숫자)인 경우 hex 값으로 변환
+                    if (!isNaN(parseInt(savedColor)) && savedColor.length === 1) {
+                        const colors = [
+                            '#FF0000', '#FFA500', '#FFFF00', '#90EE90',
+                            '#0000FF', '#000000', '#FFFFFF', '#87CEEB'
+                        ];
+                        const hexColor = colors[parseInt(savedColor)] || savedColor;
+                        currentColor = hexColor;
+                        window.currentColor = hexColor;
+                    } else {
+                        currentColor = savedColor;
+                        window.currentColor = savedColor;
+                    }
                     document.getElementById('currentColor').style.background = currentColor;
 
                     // 해당 색상 팔레트 아이템 활성화
                     document.querySelectorAll('.color-item').forEach(c => c.classList.remove('active'));
-                    const targetItem = document.querySelector(`.color-item[data-color="${savedColor}"]`);
+                    const targetItem = document.querySelector(`.color-item[data-hex="${savedColor}"]`);
                     if (targetItem) {
                         targetItem.classList.add('active');
+                        // ColorPaletteManager 동기화
+                        const colorIndex = targetItem.dataset.color;
+                        if (window.ColorPaletteManager && !isNaN(parseInt(colorIndex))) {
+                            window.ColorPaletteManager.selectColor(parseInt(colorIndex));
+                        }
                     }
                 }
 
@@ -95,15 +112,27 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
 
         // 기본 색상 설정 (빨간색)
-        document.querySelector('.color-item[data-color="#FF0000"]')?.click();
+        document.querySelector('.color-item[data-color="0"]')?.click();
     }
 
     // 색상 팔레트 이벤트 설정
     document.querySelectorAll('.color-item').forEach(item => {
         item.addEventListener('click', async function() {
-            currentColor = this.dataset.color;
-            document.getElementById('currentColor').style.background = currentColor;
-            console.log('🎨 색상 선택:', currentColor);
+            // data-hex에서 실제 색상 값 가져오기
+            const hexColor = this.dataset.hex || this.style.background;
+            const colorIndex = this.dataset.color;
+
+            // 전역 currentColor 변수 업데이트 (순서 중요: 전역 변수 먼저)
+            currentColor = hexColor;  // 전역 변수 먼저 업데이트
+            window.currentColor = hexColor;  // window 객체도 업데이트
+
+            // ColorPaletteManager 사용
+            if (window.ColorPaletteManager && !isNaN(parseInt(colorIndex))) {
+                window.ColorPaletteManager.selectColor(parseInt(colorIndex));
+            }
+
+            document.getElementById('currentColor').style.background = hexColor;
+            console.log('🎨 색상 선택:', hexColor, '(인덱스:', colorIndex, ')');
 
             // 🎨 Supabase에 색상 저장
             if (window.SupabaseManager) {
@@ -401,7 +430,7 @@ function updateCalendar() {
     }
 }
 
-// 현재 선택된 필지 정보 초기화 함수 (색상과 마커는 유지)
+// 현재 선택된 필지 정보 초기화 함수 (색상은 유지, 마커는 제거)
 function deleteCurrentParcel() {
     const currentPNU = window.currentSelectedPNU;
     const parcelNumber = document.getElementById('parcelNumber').value;
@@ -411,7 +440,7 @@ function deleteCurrentParcel() {
         return;
     }
 
-    const confirmReset = confirm(`필지 "${parcelNumber}"의 정보를 초기화하시겠습니까?\n\n색상과 마커는 유지되며, 입력된 정보(소유자명, 주소, 연락처, 메모)만 삭제됩니다.`);
+    const confirmReset = confirm(`필지 "${parcelNumber}"의 정보를 초기화하시겠습니까?\n\n색상은 유지되고, 입력된 정보(소유자명, 주소, 연락처, 메모)는 삭제됩니다.\n메모 마커는 함께 제거됩니다.`);
     if (!confirmReset) {
         return;
     }
@@ -448,6 +477,16 @@ function deleteCurrentParcel() {
         if (window.MemoMarkerManager && currentPNU) {
             try {
                 window.MemoMarkerManager.removeMemoMarker(currentPNU);
+                // 보조: markerStates 로컬 캐시에서도 제거 (존재 시)
+                try {
+                    const markerStates = JSON.parse(localStorage.getItem('markerStates') || '{}');
+                    if (markerStates && markerStates[currentPNU]) {
+                        delete markerStates[currentPNU];
+                        localStorage.setItem('markerStates', JSON.stringify(markerStates));
+                    }
+                } catch (e) {
+                    // ignore
+                }
             } catch (err) {
                 console.warn('마커 제거 중 오류:', err);
             }

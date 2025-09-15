@@ -1,0 +1,153 @@
+openapi: 3.0.0
+info:
+  title: Search Mode API
+  version: 1.0.0
+  description: API for search mode operations
+
+paths:
+  /api/search/execute:
+    post:
+      summary: Execute parcel search
+      operationId: executeSearch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - query
+              properties:
+                query:
+                  type: string
+                  description: Search query (address, PNU, owner name, etc.)
+                searchType:
+                  type: string
+                  enum: [address, pnu, owner, all]
+                  default: all
+                limit:
+                  type: number
+                  default: 100
+                  maximum: 1000
+      responses:
+        '200':
+          description: Search executed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  query:
+                    type: string
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        pnu:
+                          type: string
+                        address:
+                          type: string
+                        ownerName:
+                          type: string
+                        lat:
+                          type: number
+                        lng:
+                          type: number
+                        matchScore:
+                          type: number
+                  totalResults:
+                    type: number
+                  searchTime:
+                    type: number
+                  modeAutoSwitched:
+                    type: boolean
+        '400':
+          description: Invalid search parameters
+        '429':
+          description: Too many search requests
+
+  /api/search/results:
+    get:
+      summary: Get current search results
+      operationId: getSearchResults
+      responses:
+        '200':
+          description: Current search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  query:
+                    type: string
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        pnu:
+                          type: string
+                        isColored:
+                          type: boolean
+                        lat:
+                          type: number
+                        lng:
+                          type: number
+                  searchTime:
+                    type: number
+                  isActive:
+                    type: boolean
+        '404':
+          description: No search results available
+
+  /api/search/clear:
+    delete:
+      summary: Clear search results and colored parcels
+      operationId: clearSearch
+      parameters:
+        - name: keepMode
+          in: query
+          schema:
+            type: boolean
+            default: false
+            description: Keep in search mode after clearing
+      responses:
+        '200':
+          description: Search cleared successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  clearedParcels:
+                    type: number
+                  modeSwitched:
+                    type: boolean
+                  newMode:
+                    type: string
+
+  /api/search/parcel/{pnu}:
+    delete:
+      summary: Remove specific search parcel color
+      operationId: removeSearchParcel
+      parameters:
+        - name: pnu
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Search parcel color removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pnu:
+                    type: string
+                  removed:
+                    type: boolean
+        '404':
+          description: Search parcel not found

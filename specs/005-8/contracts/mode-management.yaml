@@ -1,0 +1,116 @@
+openapi: 3.0.0
+info:
+  title: Mode Management API
+  version: 1.0.0
+  description: API for managing click, search, and hand modes
+
+paths:
+  /api/mode/current:
+    get:
+      summary: Get current active mode
+      operationId: getCurrentMode
+      responses:
+        '200':
+          description: Current mode information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mode:
+                    type: string
+                    enum: [click, search, hand]
+                  lastSwitchTime:
+                    type: number
+                  stats:
+                    type: object
+                    properties:
+                      parcelsCount:
+                        type: number
+                      markersCount:
+                        type: number
+
+  /api/mode/switch:
+    post:
+      summary: Switch to a different mode
+      operationId: switchMode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - mode
+              properties:
+                mode:
+                  type: string
+                  enum: [click, search, hand]
+                saveCurrentState:
+                  type: boolean
+                  default: true
+      responses:
+        '200':
+          description: Mode switched successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  previousMode:
+                    type: string
+                  currentMode:
+                    type: string
+                  switchTime:
+                    type: number
+        '400':
+          description: Invalid mode specified
+
+  /api/mode/data/{mode}:
+    get:
+      summary: Get data for specific mode
+      operationId: getModeData
+      parameters:
+        - name: mode
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [click, search]
+      responses:
+        '200':
+          description: Mode data retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mode:
+                    type: string
+                  parcels:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Parcel'
+                  stats:
+                    type: object
+        '404':
+          description: Mode not found
+
+components:
+  schemas:
+    Parcel:
+      type: object
+      properties:
+        pnu:
+          type: string
+        lat:
+          type: number
+        lng:
+          type: number
+        colorIndex:
+          type: number
+          minimum: 0
+          maximum: 7
+        mode:
+          type: string
+          enum: [click, search]

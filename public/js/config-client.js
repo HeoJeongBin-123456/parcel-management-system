@@ -38,6 +38,7 @@ window.CONFIG = {
 let map = null;
 // 색상은 항상 빨간색으로 시작 (보라색은 검색 모드 전용이므로 사용자가 직접 선택할 수 없음)
 let currentColor = window.CONFIG.COLORS.red;
+window.currentColor = currentColor; // window.currentColor도 동일하게 초기화
 
 // 필지 모드 관리 - window에 직접 정의 (localStorage에서 복원)
 window.currentMode = localStorage.getItem('current_mode') || 'click'; // 'search' 또는 'click' - 기본값은 클릭 모드 (검색 OFF)

@@ -2,16 +2,16 @@
 module.exports = {
   testDir: './tests',
   use: {
-    baseURL: 'http://localhost:3000',
-    headless: false,
+    baseURL: 'http://localhost:4000',
+    headless: true,
     viewport: { width: 1280, height: 720 },
     ignoreHTTPSErrors: true,
     video: 'retain-on-failure',
   },
   webServer: {
     command: 'npm run serve',
-    port: 3000,
-    reuseExistingServer: !process.env.CI,
+    port: 4000,
+    reuseExistingServer: true,
   },
   projects: [
     {

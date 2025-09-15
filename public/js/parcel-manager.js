@@ -5,11 +5,12 @@ class ParcelManager {
         this.filteredParcels = [];
         this.selectedParcels = new Set();
         this.viewMode = 'grid'; // 'grid' or 'list'
-        this.filterBy = 'all'; // 'all', 'red', 'blue', 'green', etc
+        this.filterBy = 'all'; // 'all', 0-7 (색상 인덱스), 8 (검색 모드)
         this.searchQuery = '';
         this.isPanelOpen = false;
         this.isRendering = false; // 렌더링 중 플래그
         this.isComposing = false; // 한글 조합 중 플래그
+        this.currentMode = 'click'; // 현재 모드
         this.init();
     }
     
@@ -281,16 +282,16 @@ class ParcelManager {
     setFilter(filterType) {
     // console.log('setFilter 호출됨:', filterType); // 디버깅용
         this.filterBy = filterType;
-        
-        // 보라색(검색 필지) 필터 처리
-        if (filterType === '#9370DB') {
+
+        // 검색 모드 필터 처리
+        if (filterType === 8) {
             // 검색 필지 표시 (폴리곤 + 라벨)
             this.showSearchParcelsWithLabels();
         } else {
             // 검색 필지 라벨만 숨기기 (폴리곤은 유지)
             this.hideSearchLabels();
         }
-        
+
         this.applyFilters();
     // console.log('필터링 후 필지 개수:', this.filteredParcels.length); // 디버깅용
         this.renderList(); // 리스트만 업데이트
@@ -359,6 +360,24 @@ class ParcelManager {
     }
     
     
+    // Hex 색상을 색상 인덱스로 변환
+    getColorIndexFromHex(hexColor) {
+        const colorMap = {
+            '#FF6B6B': 0, '#FF0000': 0, // 빨강
+            '#4ECDC4': 1, // 청록
+            '#45B7D1': 2, '#0000FF': 2, // 파랑
+            '#96CEB4': 3, '#90EE90': 3, // 녹색
+            '#FECA57': 4, '#FFFF00': 4, '#FFA500': 4, // 노랑/주황
+            '#DDA0DD': 5, // 보라
+            '#FFB6C1': 6, // 분홍
+            '#98D8C8': 7, '#87CEEB': 7, // 민트
+            '#9B59B6': 8, '#9370DB': 8, // 검색 모드 보라
+            '#000000': 5, // 검정을 보라로 매핑
+            '#FFFFFF': 7  // 흰색을 민트로 매핑
+        };
+        return colorMap[hexColor] !== undefined ? colorMap[hexColor] : 0;
+    }
+
     applyFilters() {
     // console.log('applyFilters 시작 - filterBy:', this.filterBy); // 디버깅용
     // console.log('전체 필지 수:', this.parcels.length); // 디버깅용
@@ -383,11 +402,11 @@ class ParcelManager {
             
             // 색상 필터
             if (this.filterBy !== 'all') {
-                // 디버깅: 각 필지의 색상 확인
-                if (this.parcels.length < 10) { // 필지가 적을 때만 로그
-    // console.log(`필지 색상 비교: ${parcel.parcelNumber} - color: ${parcel.color}, filterBy: ${this.filterBy}`);
-                }
-                if (parcel.color !== this.filterBy) {
+                // 색상 인덱스로 필터링
+                const parcelColorIndex = parcel.colorIndex !== undefined ? parcel.colorIndex :
+                                       (parcel.isSearchParcel ? 8 : this.getColorIndexFromHex(parcel.color));
+
+                if (parcelColorIndex !== this.filterBy) {
                     return false;
                 }
             }
@@ -586,37 +605,37 @@ class ParcelManager {
             <!-- 필터 -->
             <div class="pm-controls">
                 <div class="pm-filters">
-                    <button class="filter-btn ${this.filterBy === 'all' ? 'active' : ''}" 
+                    <button class="filter-btn ${this.filterBy === 'all' ? 'active' : ''}"
                             data-filter="all">전체</button>
-                    <button class="filter-btn ${this.filterBy === '#FF0000' ? 'active' : ''}" 
-                            data-filter="#FF0000" 
-                            style="background: #FF0000;"></button>
-                    <button class="filter-btn ${this.filterBy === '#FFA500' ? 'active' : ''}" 
-                            data-filter="#FFA500" 
-                            style="background: #FFA500;"></button>
-                    <button class="filter-btn ${this.filterBy === '#FFFF00' ? 'active' : ''}" 
-                            data-filter="#FFFF00" 
-                            style="background: #FFFF00;"></button>
-                    <button class="filter-btn ${this.filterBy === '#90EE90' ? 'active' : ''}" 
-                            data-filter="#90EE90" 
-                            style="background: #90EE90;"></button>
-                    <button class="filter-btn ${this.filterBy === '#0000FF' ? 'active' : ''}" 
-                            data-filter="#0000FF" 
-                            style="background: #0000FF;"></button>
-                    <button class="filter-btn ${this.filterBy === '#000000' ? 'active' : ''}" 
-                            data-filter="#000000" 
-                            style="background: #000000;"></button>
-                    <button class="filter-btn ${this.filterBy === '#FFFFFF' ? 'active' : ''}" 
-                            data-filter="#FFFFFF" 
-                            style="background: #FFFFFF; border: 1px solid #ccc;"></button>
-                    <button class="filter-btn ${this.filterBy === '#87CEEB' ? 'active' : ''}" 
-                            data-filter="#87CEEB" 
-                            style="background: #87CEEB;"></button>
+                    <button class="filter-btn ${this.filterBy === 0 ? 'active' : ''}"
+                            data-filter="0"
+                            style="background: #FF6B6B;" title="빨강"></button>
+                    <button class="filter-btn ${this.filterBy === 1 ? 'active' : ''}"
+                            data-filter="1"
+                            style="background: #4ECDC4;" title="청록"></button>
+                    <button class="filter-btn ${this.filterBy === 2 ? 'active' : ''}"
+                            data-filter="2"
+                            style="background: #45B7D1;" title="파랑"></button>
+                    <button class="filter-btn ${this.filterBy === 3 ? 'active' : ''}"
+                            data-filter="3"
+                            style="background: #96CEB4;" title="녹색"></button>
+                    <button class="filter-btn ${this.filterBy === 4 ? 'active' : ''}"
+                            data-filter="4"
+                            style="background: #FECA57;" title="노랑"></button>
+                    <button class="filter-btn ${this.filterBy === 5 ? 'active' : ''}"
+                            data-filter="5"
+                            style="background: #DDA0DD;" title="보라"></button>
+                    <button class="filter-btn ${this.filterBy === 6 ? 'active' : ''}"
+                            data-filter="6"
+                            style="background: #FFB6C1;" title="분홍"></button>
+                    <button class="filter-btn ${this.filterBy === 7 ? 'active' : ''}"
+                            data-filter="7"
+                            style="background: #98D8C8;" title="민트"></button>
                     <!-- 검색 필지용 보라색 필터 - 구분을 위해 떨어뜨려 배치 -->
                     <div style="width: 15px;"></div>
-                    <button class="filter-btn search-filter ${this.filterBy === '#9370DB' ? 'active' : ''}" 
-                            data-filter="#9370DB" 
-                            style="background: #9370DB; border: 2px solid #6A0DAD;" 
+                    <button class="filter-btn search-filter ${this.filterBy === 8 ? 'active' : ''}"
+                            data-filter="8"
+                            style="background: #9B59B6; border: 2px solid #6A0DAD;"
                             title="검색 필지"></button>
                 </div>
             </div>

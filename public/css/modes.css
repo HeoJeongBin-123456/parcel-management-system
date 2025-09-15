@@ -1,0 +1,445 @@
+/**
+ * 모드별 스타일 정의
+ * 클릭 모드, 검색 모드, 손 모드별 UI 스타일
+ */
+
+/* ============= 모드별 기본 스타일 ============= */
+
+/* 클릭 모드 */
+body.mode-click {
+    --primary-color: #4CAF50;
+    --mode-indicator-bg: #E8F5E9;
+}
+
+body.mode-click .search-only,
+body.mode-click .hand-only {
+    display: none !important;
+}
+
+body.mode-click .click-only {
+    display: block;
+}
+
+body.mode-click #map {
+    cursor: crosshair;
+}
+
+/* 검색 모드 */
+body.mode-search {
+    --primary-color: #9B59B6;
+    --mode-indicator-bg: #F3E5F5;
+}
+
+body.mode-search .click-only,
+body.mode-search .hand-only {
+    display: none !important;
+}
+
+body.mode-search .search-only {
+    display: block;
+}
+
+body.mode-search #map {
+    cursor: pointer;
+}
+
+/* 손 모드 */
+body.mode-hand {
+    --primary-color: #607D8B;
+    --mode-indicator-bg: #ECEFF1;
+}
+
+body.mode-hand .click-only,
+body.mode-hand .search-only {
+    display: none !important;
+}
+
+body.mode-hand .hand-only {
+    display: block;
+}
+
+body.mode-hand #map {
+    cursor: grab;
+}
+
+body.mode-hand #map:active {
+    cursor: grabbing;
+}
+
+body.mode-hand .interactive-elements {
+    pointer-events: none;
+    opacity: 0.5;
+}
+
+/* ============= 색상 팔레트 스타일 ============= */
+
+.color-palette-container {
+    /* 사이드바 내부에 위치하도록 변경 */
+    background: white;
+    border-radius: 8px;
+    padding: 10px;
+    margin: 10px 0;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+}
+
+.color-button {
+    width: 40px;
+    height: 40px;
+    border: 3px solid transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.3s ease;
+    outline: none;
+}
+
+.color-button:hover {
+    transform: scale(1.1);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.2);
+}
+
+.color-button.selected {
+    border-color: #333;
+    box-shadow: 0 0 0 2px white, 0 0 0 4px #333;
+}
+
+.color-button .usage-badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: #333;
+    color: white;
+    font-size: 10px;
+    font-weight: bold;
+    padding: 2px 5px;
+    border-radius: 10px;
+    min-width: 16px;
+    text-align: center;
+}
+
+.color-reset-button {
+    width: 40px;
+    height: 40px;
+    border: 2px dashed #999;
+    border-radius: 8px;
+    background: white;
+    cursor: pointer;
+    font-size: 18px;
+    transition: all 0.3s ease;
+    outline: none;
+}
+
+.color-reset-button:hover {
+    background: #f5f5f5;
+    transform: rotate(180deg);
+}
+
+/* ============= 모드 전환 버튼 스타일 ============= */
+
+.mode-switcher {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: white;
+    border-radius: 12px;
+    padding: 5px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    display: flex;
+    gap: 5px;
+    z-index: 1001;
+}
+
+.mode-button {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    background: #f0f0f0;
+    color: #333;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    outline: none;
+}
+
+.mode-button:hover {
+    background: #e0e0e0;
+}
+
+.mode-button.active {
+    background: var(--primary-color);
+    color: white;
+}
+
+.mode-button[data-mode="click"]::before {
+    content: "🖱️ ";
+}
+
+.mode-button[data-mode="search"]::before {
+    content: "🔍 ";
+}
+
+.mode-button[data-mode="hand"]::before {
+    content: "✋ ";
+}
+
+/* ============= 모드 인디케이터 ============= */
+
+.mode-indicator {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--mode-indicator-bg);
+    color: var(--primary-color);
+    padding: 8px 24px;
+    border-radius: 20px;
+    font-weight: bold;
+    font-size: 14px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    transition: all 0.3s ease;
+}
+
+/* ============= 검색 결과 스타일 ============= */
+
+.search-results-container {
+    position: fixed;
+    left: 20px;
+    top: 100px;
+    bottom: 20px;
+    width: 300px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    z-index: 999;
+}
+
+.search-results-header {
+    padding: 15px;
+    background: #9B59B6;
+    color: white;
+    font-weight: bold;
+}
+
+.search-results-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+}
+
+.search-result-item {
+    padding: 12px;
+    border-bottom: 1px solid #eee;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.search-result-item:hover {
+    background: #f5f5f5;
+}
+
+.search-result-item .result-name {
+    font-weight: bold;
+    color: #333;
+    margin-bottom: 4px;
+}
+
+.search-result-item .result-owner {
+    font-size: 12px;
+    color: #666;
+}
+
+.search-result-item .result-address {
+    font-size: 11px;
+    color: #999;
+    margin-top: 2px;
+}
+
+.no-results {
+    text-align: center;
+    padding: 40px 20px;
+    color: #999;
+}
+
+/* ============= 검색 입력 스타일 ============= */
+
+.search-input-container {
+    position: fixed;
+    top: 80px;
+    left: 20px;
+    right: 340px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    z-index: 1000;
+}
+
+body.mode-search .search-input-container {
+    display: flex;
+}
+
+body:not(.mode-search) .search-input-container {
+    display: none;
+}
+
+.search-input-container input {
+    flex: 1;
+    border: none;
+    outline: none;
+    padding: 8px;
+    font-size: 14px;
+}
+
+.search-input-container button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    background: #9B59B6;
+    color: white;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.search-input-container button:hover {
+    background: #8E44AD;
+}
+
+#clearSearchButton {
+    background: #e74c3c;
+    margin-left: 8px;
+}
+
+#clearSearchButton:hover {
+    background: #c0392b;
+}
+
+/* ============= 모드 전환 애니메이션 ============= */
+
+@keyframes modeSwitch {
+    0% {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+    50% {
+        opacity: 0.5;
+        transform: scale(1.05);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+body[class*="mode-"] .mode-indicator {
+    animation: modeSwitch 0.3s ease-out;
+}
+
+/* ============= 반응형 디자인 ============= */
+
+@media (max-width: 768px) {
+    .color-palette-container {
+        top: auto;
+        bottom: 20px;
+        right: 10px;
+        flex-direction: row;
+    }
+
+    .mode-switcher {
+        top: auto;
+        bottom: 80px;
+        right: 10px;
+    }
+
+    .search-results-container {
+        left: 10px;
+        right: 10px;
+        width: auto;
+        height: 200px;
+        top: auto;
+        bottom: 140px;
+    }
+
+    .search-input-container {
+        left: 10px;
+        right: 10px;
+        top: 60px;
+    }
+}
+
+/* ============= 다크 모드 지원 ============= */
+
+@media (prefers-color-scheme: dark) {
+    .color-palette-container,
+    .mode-switcher,
+    .search-results-container,
+    .search-input-container {
+        background: #2c3e50;
+        color: #ecf0f1;
+    }
+
+    .color-button {
+        border-color: #34495e;
+    }
+
+    .color-button.selected {
+        border-color: #ecf0f1;
+        box-shadow: 0 0 0 2px #2c3e50, 0 0 0 4px #ecf0f1;
+    }
+
+    .mode-button {
+        background: #34495e;
+        color: #ecf0f1;
+    }
+
+    .mode-button:hover {
+        background: #4a5f7e;
+    }
+
+    .search-result-item:hover {
+        background: #34495e;
+    }
+
+    .search-result-item .result-name {
+        color: #ecf0f1;
+    }
+}
+
+/* ============= 로딩 상태 ============= */
+
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+
+.loading-spinner {
+    width: 50px;
+    height: 50px;
+    border: 5px solid #f3f3f3;
+    border-top: 5px solid var(--primary-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}

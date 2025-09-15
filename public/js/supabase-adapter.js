@@ -117,6 +117,16 @@ class SupabaseAdapter {
             supabaseData.geometry = localData.geometry;
         }
 
+        // ✅ 색상 인덱스 보존 - 8색 팔레트 시스템
+        if (localData.colorIndex !== undefined) {
+            supabaseData.colorIndex = localData.colorIndex;
+        } else if (localData.isSearchParcel) {
+            supabaseData.colorIndex = 8; // 검색 모드는 보라색 (인덱스 8)
+        }
+
+        // 모드 정보 추가
+        supabaseData.mode = localData.mode || (localData.isSearchParcel ? 'search' : 'click');
+
         return supabaseData;
     }
 
@@ -147,6 +157,8 @@ class SupabaseAdapter {
             ownerContact: '',
             memo: '',
             visitCount: 0,
+            colorIndex: supabaseData.colorIndex || 0,
+            mode: supabaseData.mode || 'click',
             visitDate: '',
             isSearchParcel: supabaseData.color_type === 'search',
             pnu: supabaseData.id, // ID를 PNU로 사용

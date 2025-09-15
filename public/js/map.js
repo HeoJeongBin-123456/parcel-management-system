@@ -163,6 +163,12 @@ async function initMap() {
                     window.activeStreetLayer.setMap(null);
                     window.activeStreetLayer = null;
                 }
+
+                // 거리뷰 모드 해제시 마커 표시
+                if (window.MemoMarkerManager && window.MemoMarkerManager.onStreetViewModeChange) {
+                    window.MemoMarkerManager.onStreetViewModeChange(false);
+                }
+
                 console.log('🚶 거리뷰 모드 해제');
             }
 
@@ -193,7 +199,10 @@ async function initMap() {
         });
     });
     
-    // 지도 클릭 이벤트 (안전한 함수 호출)
+    // VWorld API 호출 디바운싱을 위한 타이머
+    let mapClickDebounceTimer = null;
+
+    // 지도 클릭 이벤트 (안전한 함수 호출 + 디바운싱)
     naver.maps.Event.addListener(map, 'click', function(e) {
         const coord = e.coord;
         console.log('🖱️ 지도 클릭:', coord.lat(), coord.lng());
@@ -249,21 +258,29 @@ async function initMap() {
             return;
         }
 
-        // getParcelInfo 함수가 로드되었는지 확인 후 호출
-        if (typeof getParcelInfo === 'function') {
-            getParcelInfo(coord.lat(), coord.lng());
-        } else {
-            // 함수가 아직 로드되지 않은 경우 잠시 후 재시도
-            console.warn('⏳ getParcelInfo 함수 대기 중...');
-            setTimeout(() => {
-                if (typeof getParcelInfo === 'function') {
-                    getParcelInfo(coord.lat(), coord.lng());
-                } else {
-                    console.error('❌ getParcelInfo 함수를 찾을 수 없습니다.');
-                    alert('필지 정보 조회 기능이 아직 로드되지 않았습니다. 잠시 후 다시 시도해주세요.');
-                }
-            }, 500);
+        // 🚨 무한루프 방지: VWorld API 호출 디바운싱 (500ms)
+        if (mapClickDebounceTimer) {
+            clearTimeout(mapClickDebounceTimer);
         }
+
+        mapClickDebounceTimer = setTimeout(() => {
+            // getParcelInfo 함수가 로드되었는지 확인 후 호출
+            if (typeof getParcelInfo === 'function') {
+                console.log('🎯 디바운싱 후 API 호출:', coord.lat(), coord.lng());
+                getParcelInfo(coord.lat(), coord.lng());
+            } else {
+                // 함수가 아직 로드되지 않은 경우 잠시 후 재시도
+                console.warn('⏳ getParcelInfo 함수 대기 중...');
+                setTimeout(() => {
+                    if (typeof getParcelInfo === 'function') {
+                        getParcelInfo(coord.lat(), coord.lng());
+                    } else {
+                        console.error('❌ getParcelInfo 함수를 찾을 수 없습니다.');
+                        alert('필지 정보 조회 기능이 아직 로드되지 않았습니다. 잠시 후 다시 시도해주세요.');
+                    }
+                }, 500);
+            }
+        }, 500); // 500ms 디바운싱
     });
     
     // 🎯 우클릭 이벤트 - 필지 삭제 (브라우저 컨텍스트 메뉴 방지)
@@ -490,6 +507,11 @@ function showStreetView() {
 
         // 거리뷰 모드 플래그 설정
         window.isStreetViewMode = true;
+
+        // 거리뷰 모드 진입시 마커 숨김
+        if (window.MemoMarkerManager && window.MemoMarkerManager.onStreetViewModeChange) {
+            window.MemoMarkerManager.onStreetViewModeChange(true);
+        }
 
         // 지도 표시 유지 (파노라마는 숨김)
         document.getElementById('map').style.display = 'block';

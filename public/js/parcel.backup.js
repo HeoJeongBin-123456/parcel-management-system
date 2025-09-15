@@ -478,11 +478,9 @@ async function toggleParcelSelection(parcel, polygon) {
     
     // 🎯 ULTRATHINK: 왼쪽 클릭은 항상 색칠만 (토글 기능 제거)
     // 저장된 정보가 없거나 빈 정보만 있는 경우 - 항상 색칠
-    // 안전한 색상 폴백 체인: window.currentColor → currentColor → 기본값(빨강)
-    const colorToApply = window.currentColor || currentColor || '#FF0000';
-    // console.log('왼쪽 클릭 - 필지 색칠:', colorToApply);
+    // console.log('왼쪽 클릭 - 필지 색칠:', currentColor);
     selectParcel(parcel, polygon);
-    applyColorToParcel(parcel, colorToApply);
+    applyColorToParcel(parcel, currentColor);
 }
 
 // 필지 색상 및 정보 제거
@@ -632,77 +630,13 @@ async function applyColorToParcel(parcel, color) {
         return;
     }
 
-    // 모드 확인
-    const currentMode = window.ModeManager ? window.ModeManager.getCurrentMode() : 'click';
-
-    // 손 모드에서는 색상 적용 비활성화
-    if (currentMode === 'hand') {
-        console.log('✋ 손 모드에서는 색상 적용이 비활성화됩니다.');
-        return;
-    }
-
     const pnu = parcel.properties.PNU || parcel.properties.pnu;
-
-    // 모드별 색상 확인 - 8가지 색상 팔레트 지원
-    let expectedColor;
-    let colorIndex = null;
-
-    if (currentMode === 'search') {
-        expectedColor = '#9B59B6'; // 검색 모드는 보라색
-        if (typeof color === 'number' && color !== 8) {
-            console.log('🔍 검색 모드에서는 보라색(인덱스 8)만 사용 가능합니다.');
-            return;
-        }
-    } else if (currentMode === 'click') {
-        // 클릭 모드 - 8가지 색상 팔레트 지원
-        if (typeof color === 'number' && window.ColorPaletteManager) {
-            // 색상 인덱스로 전달된 경우
-            colorIndex = color;
-            const colorData = window.ColorPaletteManager.getColorByIndex(color);
-            if (colorData) {
-                expectedColor = colorData.hex;
-            } else {
-                console.error('잘못된 색상 인덱스:', color);
-                return;
-            }
-        } else if (typeof color === 'string' && color.startsWith('#')) {
-            // 색상 값이 직접 전달된 경우 (#FF0000 같은)
-            expectedColor = color;
-            // ColorPaletteManager에서 해당 색상의 인덱스 찾기
-            if (window.ColorPaletteManager) {
-                for (let i = 0; i < window.ColorPaletteManager.colors.length; i++) {
-                    if (window.ColorPaletteManager.colors[i].hex === color) {
-                        colorIndex = i;
-                        break;
-                    }
-                }
-            }
-        } else if (window.ColorPaletteManager) {
-            // 현재 선택된 색상 사용
-            const currentColorData = window.ColorPaletteManager.getCurrentColor();
-            if (currentColorData) {
-                colorIndex = currentColorData.index;
-                expectedColor = currentColorData.hex;
-            } else {
-                // 색상이 선택되지 않은 경우 기본 색상 (빨강)
-                expectedColor = color || '#FF0000';
-            }
-        } else {
-            // ColorPaletteManager 없이 기존 호환성 유지 (빨강)
-            expectedColor = color || '#FF0000';
-        }
-    }
 
     // 검색 필지인지 확인
     const searchParcelData = window.searchParcels && window.searchParcels.get(pnu);
     if (searchParcelData) {
-        // 검색 필지는 검색 모드에서만 삭제 가능
-        if (currentMode !== 'search') {
-            console.log('🔍 검색 필지는 검색 모드에서만 수정 가능합니다.');
-            return;
-        }
-
-        if (expectedColor === '#9B59B6') {
+        // 검색 필지는 보라색(#9370DB)으로만 삭제 가능
+        if (color === '#9370DB') {
             console.log('🔍 검색 필지 삭제 요청:', pnu);
 
             // 삭제 확인 다이얼로그
@@ -756,9 +690,9 @@ async function applyColorToParcel(parcel, color) {
 
     if (parcelData) {
         // 현재 색상과 같은 색상으로 클릭하면 색상 제거
-        const existingColor = parcelData.color;
-        const newColor = (existingColor === color) ? 'transparent' : color;
-        const isRemoving = (existingColor === color);
+        const currentColor = parcelData.color;
+        const newColor = (currentColor === color) ? 'transparent' : color;
+        const isRemoving = (currentColor === color);
 
         // 1. UI 즉시 업데이트
         parcelData.polygon.setOptions({
@@ -885,34 +819,12 @@ async function applyColorToParcel(parcel, color) {
         if (isRemoving) {
             delete parcelColors[pnu];
         } else {
-            // ColorPaletteManager를 사용하여 색상 인덱스 가져오기
-            let colorIndex = null;
-            if (window.ColorPaletteManager) {
-                const colors = [
-                    { index: 0, hex: '#FF0000' },
-                    { index: 1, hex: '#FFA500' },
-                    { index: 2, hex: '#FFFF00' },
-                    { index: 3, hex: '#90EE90' },
-                    { index: 4, hex: '#0000FF' },
-                    { index: 5, hex: '#000000' },
-                    { index: 6, hex: '#FFFFFF' },
-                    { index: 7, hex: '#87CEEB' }
-                ];
-                const found = colors.find(c => c.hex === newColor);
-                colorIndex = found ? found.index : null;
-            }
-
-            // 색상 인덱스가 있으면 인덱스 저장, 없으면 객체로 저장
-            if (colorIndex !== null) {
-                parcelColors[pnu] = colorIndex;
-            } else {
-                parcelColors[pnu] = {
-                    parcel_id: pnu,
-                    color: newColor,
-                    is_colored: true,
-                    updated_at: new Date().toISOString()
-                };
-            }
+            parcelColors[pnu] = {
+                parcel_id: pnu,
+                color: newColor,
+                is_colored: true,
+                updated_at: new Date().toISOString()
+            };
         }
         localStorage.setItem('parcelColors', JSON.stringify(parcelColors));
 
@@ -985,8 +897,9 @@ async function applyColorToParcel(parcel, color) {
 // 색상 인덱스 찾기 헬퍼 함수
 function getColorIndex(color) {
     const colors = [
-        '#FF0000', '#FFA500', '#FFFF00', '#90EE90',
-        '#0000FF', '#000000', '#FFFFFF', '#87CEEB'
+        '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4',
+        '#FFEAA7', '#DDA0DD', '#98D8C8', '#FD79A8',
+        '#A29BFE', '#FDCB6E'
     ];
     const index = colors.indexOf(color);
     return index >= 0 ? index : 0;
@@ -1024,19 +937,8 @@ function displayParcelInfo(parcel) {
     }
 }
 
-// 저장 중 플래그 추가 - 무한루프 방지
-let isSaving = false;
-
 // 필지 데이터 저장 (개선된 버전 - 데이터 손실 방지)
 async function saveParcelData() {
-    // 이미 저장 중이면 무시
-    if (isSaving) {
-        console.log('⚠️ 이미 저장 중입니다. 중복 저장 방지');
-        return false;
-    }
-
-    isSaving = true; // 저장 시작
-
     let parcelNumber = document.getElementById('parcelNumber').value;
 
     // PNU가 있으면 지번 체크 건너뛰기
@@ -1306,20 +1208,18 @@ async function saveParcelData() {
         if (window.realtimeAutoSave) {
             window.realtimeAutoSave.triggerAutoSave('manual_save');
         }
-
+        
         console.log('✅ 저장 완료:', {
             parcelNumber: formData.parcelNumber,
             localStorage: localStorageSuccess,
             supabase: supabaseSuccess
         });
-
-        isSaving = false; // 저장 완료
+        
         return true;
-
+        
     } catch (error) {
         console.error('🚨 저장 중 전체 오류:', error);
         console.error('❌ 저장 오류 - 실시간 자동저장 시스템이 처리합니다');
-        isSaving = false; // 에러 발생 시에도 플래그 해제
         return false;
     }
 }
@@ -2023,18 +1923,14 @@ async function clearAllParcelsColors() {
 // 이벤트 리스너 초기화
 function initializeEventListeners() {
     // 색상 선택
-    // 색상 이벤트 핸들러는 utils.js에서 처리함 (중복 제거)
-    // document.querySelectorAll('.color-item').forEach(item => {
-    //     item.addEventListener('click', function() {
-    //         document.querySelectorAll('.color-item').forEach(i => i.classList.remove('active'));
-    //         this.classList.add('active');
-    //         // dataset.hex에서 실제 색상 값 가져오기 (dataset.color는 인덱스임)
-    //         const hexColor = this.dataset.hex || this.style.background;
-    //         currentColor = hexColor;
-    //         window.currentColor = hexColor;
-    //         document.getElementById('currentColor').style.background = hexColor;
-    //     });
-    // });
+    document.querySelectorAll('.color-item').forEach(item => {
+        item.addEventListener('click', function() {
+            document.querySelectorAll('.color-item').forEach(i => i.classList.remove('active'));
+            this.classList.add('active');
+            currentColor = this.dataset.color;
+            document.getElementById('currentColor').style.background = currentColor;
+        });
+    });
     
     // 저장 버튼 - Phase 4: 모드별 함수 호출
     document.getElementById('saveBtn').addEventListener('click', async () => {
@@ -2564,5 +2460,3 @@ async function loadExistingParcelData(jibun, type = 'click') {
 // 전역 함수로 등록
 window.removeParcelAtLocation = removeParcelAtLocation;
 window.loadExistingParcelData = loadExistingParcelData;
-window.applyColorToParcel = applyColorToParcel;
-window.selectParcel = selectParcel;

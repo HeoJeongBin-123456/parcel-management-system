@@ -283,7 +283,7 @@ class SupabaseManager {
         try {
             const { data, error } = await this.supabase
                 .from('parcels')
-                .upsert(parcels, { onConflict: 'id' });
+                .upsert(parcels, { onConflict: 'pnu' });
 
             if (error) throw error;
 
@@ -385,7 +385,7 @@ class SupabaseManager {
             const parcelsArray = Array.isArray(parcelData) ? parcelData : [parcelData];
             const { data, error } = await this.supabase
                 .from('parcels')
-                .upsert(parcelsArray, { onConflict: 'id' });
+                .upsert(parcelsArray, { onConflict: 'pnu' });
 
             if (error) throw error;
 
@@ -446,7 +446,7 @@ class SupabaseManager {
             const parcelsArray = Array.isArray(parcelData) ? parcelData : [parcelData];
             const { data, error } = await this.supabase
                 .from('parcels')
-                .upsert(parcelsArray, { onConflict: 'id' });
+                .upsert(parcelsArray, { onConflict: 'pnu' });
 
             if (error) throw error;
 
@@ -495,7 +495,7 @@ class SupabaseManager {
                 query = query.eq('parcel_type', parcelType);
             }
 
-            const { error } = await query.or(`pnu.eq.${pnu},id.eq.${pnu}`);
+            const { error } = await query.eq('pnu', pnu);
 
             if (error) throw error;
 
@@ -1125,7 +1125,7 @@ class SupabaseManager {
             const { error: parcelError } = await this.supabase
                 .from('parcels')
                 .delete()
-                .or(`pnu.eq.${pnu},id.eq.${pnu}`);
+                .eq('pnu', pnu);
 
             if (parcelError) {
                 console.error('❌ parcels 테이블 삭제 실패:', parcelError);
@@ -1135,7 +1135,7 @@ class SupabaseManager {
             const { error: polygonError } = await this.supabase
                 .from('parcel_polygons')
                 .delete()
-                .eq('parcel_id', pnu);
+                .eq('pnu', pnu);
 
             if (polygonError) {
                 console.error('❌ parcel_polygons 테이블 삭제 실패:', polygonError);

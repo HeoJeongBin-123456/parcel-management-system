@@ -132,9 +132,9 @@ window.autoDebugOnLoad = function() {
     // console.log('🔧 함수 존재 여부:', {
     //     saveParcelData: typeof window.saveParcelData,
     //     migratedSetItem: typeof window.migratedSetItem,
-        migratedGetItem: typeof window.migratedGetItem,
-        supabaseAdapter: typeof window.supabaseAdapter
-    });
+    //     migratedGetItem: typeof window.migratedGetItem,
+    //     supabaseAdapter: typeof window.supabaseAdapter
+    // });
     
     console.groupEnd();
     
