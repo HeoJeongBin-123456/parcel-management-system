@@ -42,6 +42,37 @@
     overflow-y: auto;
 }
 
+/* 백업 모달 액션 버튼들 */
+.backup-modal-actions {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.backup-action-btn {
+    flex: 1;
+    padding: 12px 20px;
+    background: linear-gradient(135deg, #4CAF50, #45a049);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.backup-action-btn:hover {
+    background: linear-gradient(135deg, #45a049, #3d8b40);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+.backup-action-btn:active {
+    transform: translateY(0);
+}
+
 /* 백업 상태 섹션 */
 .backup-status-section {
     margin-bottom: 2rem;

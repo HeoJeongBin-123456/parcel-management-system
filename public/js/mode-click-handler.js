@@ -138,6 +138,19 @@ async function getParcelInfoViaProxyForClickMode(lat, lng) {
                         // 데이터에 색상 정보 추가
                         parcelData.color = currentColor;
                     }
+
+                    // 🔥 중요: window.clickParcels Map에 데이터 저장 (saveClickParcelInfo에서 필요)
+                    if (!window.clickParcels) {
+                        window.clickParcels = new Map();
+                    }
+                    window.clickParcels.set(pnu, {
+                        polygon: polygon,
+                        data: parcelData,    // 'data' 키로 저장 (parcel.js와 호환)
+                        parcel: parcelData,  // 'parcel' 키로도 저장 (mode-click-handler와 호환)
+                        color: currentColor || '#FF0000'
+                    });
+                    console.log('✅ window.clickParcels에 저장:', pnu);
+
                     // 데이터 저장
                     await saveClickModeParcelData(parcelData);
                     console.log(`💾 클릭 모드 필지 저장 완료: ${pnu}, 색상: ${currentColor}`);
@@ -201,15 +214,24 @@ async function drawClickModeParcelPolygon(parcelData, isRestored = false) {
             new naver.maps.LatLng(coord[1], coord[0])
         );
 
-        // 현재 선택된 색상 가져오기
-        const currentColor = getCurrentSelectedColor() || '#FF0000';
+        // 색상 결정: 복원 시에는 저장된 색상, 그렇지 않으면 현재 선택된 색상
+        let polygonColor;
+        if (isRestored && parcelData.color) {
+            // 복원 시: 저장된 색상 사용
+            polygonColor = parcelData.color;
+            console.log(`🎨 복원 시 저장된 색상 사용: ${polygonColor}`);
+        } else {
+            // 새로 그릴 때: 현재 선택된 색상 사용
+            polygonColor = getCurrentSelectedColor() || '#FF0000';
+            console.log(`🎨 새로 그릴 때 현재 색상 사용: ${polygonColor}`);
+        }
 
         // 폴리곤 생성
         const polygon = new naver.maps.Polygon({
             map: window.mapClick,
             paths: coordinates,
-            fillColor: currentColor,  // 현재 선택된 색상 사용
-            strokeColor: currentColor,
+            fillColor: polygonColor,
+            strokeColor: polygonColor,
             strokeWeight: 2,
             strokeOpacity: 0.8,
             fillOpacity: 0.5  // 더 잘 보이도록 불투명도 증가
@@ -542,41 +564,108 @@ async function getParcelColorFromStorage(pnu) {
  */
 async function loadSavedClickModeParcels() {
     console.log('📥 클릭 모드 저장된 필지 복원 시작...');
+    console.error('🚨 [DEBUG] loadSavedClickModeParcels 함수 진입');
 
     try {
-        // LocalStorage에서 데이터 로드
-        const savedParcels = JSON.parse(localStorage.getItem('parcelData') || '[]');
+        console.error('🚨 [DEBUG] try 블록 진입');
+        console.log('🔍 LocalStorage 접근 시도...');
+        // LocalStorage에서 데이터 로드 (clickParcelData 우선, parcelData 대체)
+        const clickParcels = JSON.parse(localStorage.getItem('clickParcelData') || '[]');
+        const normalParcels = JSON.parse(localStorage.getItem('parcelData') || '[]');
+
+        // 두 데이터 병합 (중복 제거)
+        const pnuSet = new Set();
+        const savedParcels = [];
+
+        // clickParcelData 먼저 처리
+        for (const parcel of clickParcels) {
+            const pnu = parcel.pnu || parcel.id;
+            if (pnu && !pnuSet.has(pnu)) {
+                pnuSet.add(pnu);
+
+                // geometry에서 좌표 추출
+                if (!parcel.lat || !parcel.lng) {
+                    if (parcel.geometry && parcel.geometry.coordinates) {
+                        // GeoJSON Polygon 구조: coordinates[0]은 외곽 링
+                        const outerRing = parcel.geometry.coordinates[0];
+                        if (outerRing && outerRing.length > 0) {
+                            let totalLat = 0, totalLng = 0;
+                            let validCoordCount = 0;
+
+                            // 각 좌표 쌍 [lng, lat] 처리
+                            for (const coordPair of outerRing) {
+                                if (Array.isArray(coordPair) && coordPair.length >= 2) {
+                                    totalLng += coordPair[0];
+                                    totalLat += coordPair[1];
+                                    validCoordCount++;
+                                }
+                            }
+
+                            if (validCoordCount > 0) {
+                                parcel.lng = totalLng / validCoordCount;
+                                parcel.lat = totalLat / validCoordCount;
+                                console.log(`📍 좌표 추출 성공: ${parcel.pnu} - lat:${parcel.lat}, lng:${parcel.lng}`);
+                            }
+                        }
+                    }
+                }
+                savedParcels.push(parcel);
+            }
+        }
+
+        // parcelData 추가 (중복 제외)
+        for (const parcel of normalParcels) {
+            const pnu = parcel.pnu || parcel.id;
+            if (pnu && !pnuSet.has(pnu)) {
+                pnuSet.add(pnu);
+                savedParcels.push(parcel);
+            }
+        }
+
         const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
 
+        console.log(`📦 LocalStorage에서 ${savedParcels.length}개 필지 로드 (clickParcelData: ${clickParcels.length}, parcelData: ${normalParcels.length})`);
+
         let restoredCount = 0;
+        let skippedCount = 0;
 
         for (const parcelData of savedParcels) {
+            console.log(`🔍 필지 확인 중:`, {
+                pnu: parcelData.pnu,
+                mode: parcelData.mode,
+                source: parcelData.source,
+                hasGeometry: !!parcelData.geometry,
+                color: parcelData.color
+            });
+
             // 클릭 모드에서 생성된 필지만 복원
             if (parcelData.mode === 'click' || parcelData.source === 'click') {
                 const pnu = parcelData.properties?.PNU || parcelData.properties?.pnu || parcelData.pnu;
 
+                console.log(`✅ 클릭 모드 필지 발견: ${pnu}`);
+
                 if (pnu && parcelData.geometry) {
-                    // 폴리곤 그리기
+                    // 저장된 색상 정보를 parcelData에 추가
+                    const savedColor = parcelColors[pnu] || parcelData.color;
+                    if (savedColor) {
+                        parcelData.color = savedColor;
+                        console.log(`🎨 필지 ${pnu}의 저장된 색상 복원: ${savedColor}`);
+                    }
+
+                    // 폴리곤 그리기 (색상 정보가 포함된 parcelData 전달)
+                    console.log(`🎯 drawClickModeParcelPolygon 호출: ${pnu}, isRestored=true`);
                     const polygon = await drawClickModeParcelPolygon(parcelData, true);
 
                     if (polygon) {
-                        // 저장된 색상 적용
-                        const savedColor = parcelColors[pnu] || parcelData.color;
-                        if (savedColor) {
-                            polygon.setOptions({
-                                fillColor: savedColor,
-                                strokeColor: savedColor,
-                                fillOpacity: 0.5,
-                                strokeOpacity: 0.8
-                            });
-                        }
+                        console.log(`✅ 폴리곤 생성 성공: ${pnu}`);
+                        // 색상은 이미 drawClickModeParcelPolygon에서 적용됨
 
                         // clickParcels Map에 추가 (중요!)
                         if (window.clickParcels) {
                             window.clickParcels.set(pnu, {
                                 parcel: parcelData,
                                 polygon: polygon,
-                                color: savedColor
+                                color: parcelData.color  // parcelData.color 사용
                             });
                         }
 
@@ -586,12 +675,59 @@ async function loadSavedClickModeParcels() {
 
                         restoredCount++;
                         console.log(`✅ 클릭 모드 필지 복원: ${pnu} (색상: ${savedColor})`);
+
+                        // 👍 마커 생성 조건 확인
+                        if (window.MemoMarkerManager) {
+                            const hasRealInfo = !!(
+                                (parcelData.memo && parcelData.memo.trim()) ||
+                                (parcelData.ownerName && parcelData.ownerName.trim())
+                            );
+
+                            // 좌표가 없으면 geometry에서 다시 추출 시도
+                            if (!parcelData.lat || !parcelData.lng) {
+                                if (parcelData.geometry && parcelData.geometry.coordinates) {
+                                    const outerRing = parcelData.geometry.coordinates[0];
+                                    if (outerRing && outerRing.length > 0) {
+                                        let totalLat = 0, totalLng = 0;
+                                        let validCoordCount = 0;
+
+                                        for (const coordPair of outerRing) {
+                                            if (Array.isArray(coordPair) && coordPair.length >= 2) {
+                                                totalLng += coordPair[0];
+                                                totalLat += coordPair[1];
+                                                validCoordCount++;
+                                            }
+                                        }
+
+                                        if (validCoordCount > 0) {
+                                            parcelData.lng = totalLng / validCoordCount;
+                                            parcelData.lat = totalLat / validCoordCount;
+                                            console.log(`📍 마커용 좌표 추출: ${pnu} - lat:${parcelData.lat}, lng:${parcelData.lng}`);
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (hasRealInfo && parcelData.lat && parcelData.lng) {
+                                window.MemoMarkerManager.createOrUpdateMarker(parcelData);
+                                console.log('🎯 MemoMarkerManager로 마커 복원:', pnu);
+                            } else if (!parcelData.lat || !parcelData.lng) {
+                                console.warn(`⚠️ 좌표가 없어 마커 생성 불가: ${pnu}`);
+                            } else {
+                                console.log(`✅ 조건 충족으로 마커 복원: ${pnu}`);
+                            }
+                        }
                     }
+                } else {
+                    console.log(`⚠️ 필지 복원 조건 불충족: pnu=${pnu}, hasGeometry=${!!parcelData.geometry}`);
                 }
+            } else {
+                skippedCount++;
+                console.log(`⏩ 클릭 모드가 아닌 필지 건너뜀: mode=${parcelData.mode}, source=${parcelData.source}`);
             }
         }
 
-        console.log(`📥 클릭 모드 필지 복원 완료: ${restoredCount}개`);
+        console.log(`📥 클릭 모드 필지 복원 완료: ${restoredCount}개 복원, ${skippedCount}개 건너뜀`);
         return restoredCount;
 
     } catch (error) {

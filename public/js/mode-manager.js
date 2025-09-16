@@ -86,6 +86,12 @@ class ModeManager {
         // 지도 표시/숨김
         this.switchMapDisplay(newMode);
 
+        // window.map 업데이트 (MemoMarkerManager 지원)
+        if (window.updateWindowMapForMode) {
+            window.updateWindowMapForMode(newMode);
+            console.log(`🔄 window.map을 ${newMode} 모드 지도로 업데이트`);
+        }
+
         // 새 모드 데이터 로드
         await this.loadModeData(newMode);
 
@@ -465,6 +471,12 @@ class ModeManager {
 
             // 지도 표시/숨김
             this.switchMapDisplay(savedMode);
+
+            // window.map 초기 설정 (MemoMarkerManager 지원)
+            if (window.updateWindowMapForMode) {
+                window.updateWindowMapForMode(savedMode);
+                console.log(`🔄 초기화: window.map을 ${savedMode} 모드 지도로 설정`);
+            }
 
             // 모드별 이벤트 핸들러 설정
             this.setupModeEventHandlers(savedMode);

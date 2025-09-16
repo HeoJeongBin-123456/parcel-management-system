@@ -86,6 +86,10 @@ async function initClickModeMap() {
         const mapOptions = await createMapOptions();
         window.mapClick = new naver.maps.Map('map-click', mapOptions);
 
+        // 🔥 중요: MemoMarkerManager를 위해 window.map 설정
+        window.map = window.mapClick;
+        console.log('✅ window.map을 window.mapClick으로 설정');
+
         // 레이어 초기화
         mapLayers.click.cadastral = new naver.maps.CadastralLayer();
         mapLayers.click.street = new naver.maps.StreetLayer();
@@ -193,6 +197,47 @@ function syncMapPosition(fromMap, toMap) {
         });
     } catch (error) {
         console.error('❌ 지도 위치 동기화 실패:', error);
+    }
+}
+
+/**
+ * 🔄 모드 전환 시 window.map 업데이트
+ */
+function updateWindowMapForMode(mode) {
+    const oldMap = window.map;
+
+    switch(mode) {
+        case 'click':
+            window.map = window.mapClick;
+            console.log('✅ window.map을 window.mapClick으로 변경');
+            break;
+        case 'search':
+            window.map = window.mapSearch;
+            console.log('✅ window.map을 window.mapSearch로 변경');
+            break;
+        case 'hand':
+            window.map = window.mapHand;
+            console.log('✅ window.map을 window.mapHand로 변경');
+            break;
+        default:
+            console.warn(`⚠️ 알 수 없는 모드: ${mode}`);
+            return;
+    }
+
+    // MemoMarkerManager가 새 지도를 사용하도록 알림
+    if (window.MemoMarkerManager && window.MemoMarkerManager.isInitialized) {
+        console.log('🔄 MemoMarkerManager에 지도 변경 알림');
+        // 마커들을 새 지도로 이동
+        if (window.MemoMarkerManager.markers) {
+            window.MemoMarkerManager.markers.forEach(markerInfo => {
+                if (markerInfo.marker && oldMap) {
+                    // 기존 지도에서 제거
+                    markerInfo.marker.setMap(null);
+                    // 새 지도에 추가
+                    markerInfo.marker.setMap(window.map);
+                }
+            });
+        }
     }
 }
 
@@ -537,6 +582,7 @@ window.syncMapPosition = syncMapPosition;
 window.getCurrentActiveMap = getCurrentActiveMap;
 window.getMapByMode = getMapByMode;
 window.setMapTypeForMode = setMapTypeForMode;
+window.updateWindowMapForMode = updateWindowMapForMode;
 window.openPanorama = openPanorama;
 window.closePanorama = closePanorama;
 

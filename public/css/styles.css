@@ -1379,7 +1379,7 @@ body.mode-hand .search-input-container {
     stroke-width: 4px;
     stroke: #FF6B35;
 }
-/* 백업 관리 스타일 */
+/* 백업 관리 스타일 - 왼쪽 사이드바용 (제거됨)
 .backup-management {
     padding: 15px;
     background: white;
@@ -1435,6 +1435,7 @@ body.mode-hand .search-input-container {
     font-size: 11px;
     color: #6c757d;
 }
+*/
 
 /* 모달 스타일 */
 .modal {

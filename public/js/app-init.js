@@ -145,12 +145,23 @@ class AppInitializer {
         const startTime = performance.now();
 
         try {
-            // 병렬로 여러 소스에서 데이터 로드
-            const [supabaseData, localData, polygonData] = await Promise.all([
-                this.loadFromSupabase(),
-                this.loadFromLocalStorage(),
-                this.loadPolygonData()
-            ]);
+            // 병렬로 여러 소스에서 데이터 로드 (Supabase 오류 무시)
+            let supabaseData = [];
+            let localData = [];
+            let polygonData = [];
+
+            console.log('📋 데이터 로드 시작...');
+            try {
+                supabaseData = await this.loadFromSupabase();
+            } catch (e) {
+                console.log('📋 Supabase 로드 건너뜀:', e.message);
+            }
+
+            console.log('📋 LocalStorage 로드 시도...');
+            localData = await this.loadFromLocalStorage();
+
+            console.log('📋 Polygon 로드 시도...');
+            polygonData = await this.loadPolygonData();
 
             // 데이터 병합
             const restoredData = supabaseData.length > 0 ? supabaseData : localData;
@@ -203,7 +214,7 @@ class AppInitializer {
 
     // Supabase에서 데이터 로드
     async loadFromSupabase() {
-        if (!window.SupabaseManager || !window.SupabaseManager.isConnected) {
+        if (!window.SupabaseManager || !window.SupabaseManager.isConnected || !window.supabase) {
             return [];
         }
 
@@ -226,7 +237,10 @@ class AppInitializer {
 
     // LocalStorage에서 데이터 로드
     async loadFromLocalStorage() {
-        const sources = ['parcels', 'parcels_current_session'];
+        console.log('🔍 loadFromLocalStorage 시작');
+        const sources = ['clickParcelData', 'parcelData', 'parcels', 'parcels_current_session'];
+        const allParcels = [];
+
         for (const source of sources) {
             try {
                 const stored = localStorage.getItem(source);
@@ -234,14 +248,48 @@ class AppInitializer {
                     const parsed = JSON.parse(stored);
                     if (parsed && parsed.length > 0) {
                         console.log(`✅ LocalStorage(${source}): ${parsed.length}개`);
-                        return parsed;
+                        // 모든 소스에서 데이터 병합
+                        allParcels.push(...parsed);
                     }
                 }
             } catch (error) {
                 console.warn(`⚠️ ${source} 파싱 실패`);
             }
         }
-        return [];
+
+        // 중복 제거 (PNU 기준) 및 좌표 추출
+        const uniqueParcels = [];
+        const pnuSet = new Set();
+
+        for (const parcel of allParcels) {
+            const pnu = parcel.pnu || parcel.id;
+            if (pnu && !pnuSet.has(pnu)) {
+                pnuSet.add(pnu);
+
+                // geometry에서 lat/lng 추출
+                if (!parcel.lat || !parcel.lng) {
+                    if (parcel.geometry && parcel.geometry.coordinates) {
+                        const coords = parcel.geometry.coordinates[0];
+                        if (coords && coords.length > 0) {
+                            // 폴리곤 중심점 계산
+                            let totalLat = 0, totalLng = 0;
+                            for (const coord of coords) {
+                                totalLng += coord[0];
+                                totalLat += coord[1];
+                            }
+                            parcel.lng = totalLng / coords.length;
+                            parcel.lat = totalLat / coords.length;
+                            console.log(`📏 좌표 추출: ${pnu} - lat:${parcel.lat}, lng:${parcel.lng}`);
+                        }
+                    }
+                }
+
+                uniqueParcels.push(parcel);
+            }
+        }
+
+        console.log(`📦 총 ${uniqueParcels.length}개 고유 필지 로드`);
+        return uniqueParcels;
     }
 
     // 폴리곤 데이터 로드
@@ -369,6 +417,19 @@ class AppInitializer {
                         }
                     }
                 }
+
+                // 👍 geometry가 있어도 메모 정보가 있으면 마커 생성
+                const hasRealInfo = !!(
+                    (parcel.memo && parcel.memo.trim() && parcel.memo.trim() !== '(메모 없음)') ||
+                    (parcel.ownerName && parcel.ownerName.trim() && parcel.ownerName.trim() !== '홍길동') ||
+                    (parcel.ownerAddress && parcel.ownerAddress.trim() && parcel.ownerAddress.trim() !== '서울시 강남구...') ||
+                    (parcel.ownerContact && parcel.ownerContact.trim() && parcel.ownerContact.trim() !== '010-1234-5678')
+                );
+
+                if (hasRealInfo) {
+                    await this.restoreParcelAsMarker(parcel);
+                    console.log('✅ 조건 충족으로 마커 복원 (geometry 있음):', parcel.pnu || parcel.parcelNumber);
+                }
             } else {
                 // 🛡️ 마커 생성 조건 확인 - 실제 정보가 있을 때만 마커 생성
                 const hasRealInfo = !!(
@@ -379,7 +440,7 @@ class AppInitializer {
                 );
 
                 if (hasRealInfo) {
-                    this.restoreParcelAsMarker(parcel);
+                    await this.restoreParcelAsMarker(parcel);
                     console.log('✅ 조건 충족으로 마커 복원:', parcel.pnu || parcel.parcelNumber);
                 } else {
                     console.log('🚫 마커 생성 조건 미충족으로 건너뜀:', parcel.pnu || parcel.parcelNumber);
@@ -685,27 +746,54 @@ class AppInitializer {
         return restoredCount;
     }
 
-    // 점 마커로 필지 복원 (일반 마커와 동일한 스타일)
-    restoreParcelAsMarker(parcel) {
+    // 점 마커로 필지 복원 (MemoMarkerManager 사용)
+    async restoreParcelAsMarker(parcel) {
         if (!window.map || !window.naver) return;
 
-        const color = parcel.color || '#FF0000';
-
-        // 일반 마커와 동일한 스타일 적용
-        const marker = new window.naver.maps.Marker({
-            position: new window.naver.maps.LatLng(parcel.lat, parcel.lng),
-            map: window.map,
-            title: parcel.parcel_name || parcel.parcelNumber || 'Unknown',
-            icon: {
-                content: '<div style="width: 24px; height: 24px; background-color: ' + color + '; border: 2px solid white; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">M</div>',
-                anchor: new window.naver.maps.Point(12, 12)
+        // MemoMarkerManager가 있으면 사용
+        if (window.MemoMarkerManager) {
+            // 좌표가 없으면 geometry에서 추출
+            if (!parcel.lat || !parcel.lng) {
+                if (parcel.geometry && parcel.geometry.coordinates) {
+                    const coords = parcel.geometry.coordinates[0];
+                    if (coords && coords.length > 0) {
+                        // 폴리곤 중심점 계산
+                        let totalLat = 0, totalLng = 0;
+                        for (const coord of coords) {
+                            totalLng += coord[0];
+                            totalLat += coord[1];
+                        }
+                        parcel.lng = totalLng / coords.length;
+                        parcel.lat = totalLat / coords.length;
+                    }
+                }
             }
-        });
-        
-        if (!window.restoredMarkers) {
-            window.restoredMarkers = [];
+
+            // 좌표가 있으면 MemoMarkerManager로 마커 생성
+            if (parcel.lat && parcel.lng) {
+                await window.MemoMarkerManager.createOrUpdateMarker(parcel);
+                console.log('🎯 MemoMarkerManager로 마커 복원:', parcel.pnu || parcel.parcelNumber);
+            } else {
+                console.warn('⚠️ 좌표가 없어 마커 생성 불가:', parcel.pnu);
+            }
+        } else {
+            // 폴백: 직접 마커 생성
+            const color = parcel.color || '#FF0000';
+            const marker = new window.naver.maps.Marker({
+                position: new window.naver.maps.LatLng(parcel.lat, parcel.lng),
+                map: window.map,
+                title: parcel.parcel_name || parcel.parcelNumber || 'Unknown',
+                icon: {
+                    content: '<div style="width: 24px; height: 24px; background-color: ' + color + '; border: 2px solid white; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">M</div>',
+                    anchor: new window.naver.maps.Point(12, 12)
+                }
+            });
+
+            if (!window.restoredMarkers) {
+                window.restoredMarkers = [];
+            }
+            window.restoredMarkers.push(marker);
         }
-        window.restoredMarkers.push(marker);
     }
 
     // 복원 완료 알림
@@ -888,28 +976,65 @@ class AppInitializer {
         try {
             // MemoMarkerManager가 로드되었는지 확인
             if (window.MemoMarkerManager) {
-                // 지도가 준비되었는지 확인
-                if (window.map) {
-                    await window.MemoMarkerManager.initialize();
-                    console.log('✅ 메모 마커 매니저 초기화 완료');
+                // 초기화 시도 (지도 여부와 관계없이)
+                await window.MemoMarkerManager.initialize();
+                console.log('✅ 메모 마커 매니저 초기화 완료');
 
-                    // 🎯 추가: 저장된 모든 필지에서 마커가 필요한 것들 확인
+                // 🔥 window.map 설정 보장
+                if (!window.map) {
+                    // 현재 모드에 맞는 맵 설정
+                    const currentMode = window.currentMode || 'click';
+                    if (currentMode === 'click' && window.mapClick) {
+                        window.map = window.mapClick;
+                        console.log('✅ window.map을 mapClick으로 설정');
+                    } else if (currentMode === 'search' && window.mapSearch) {
+                        window.map = window.mapSearch;
+                        console.log('✅ window.map을 mapSearch로 설정');
+                    } else if (currentMode === 'hand' && window.mapHand) {
+                        window.map = window.mapHand;
+                        console.log('✅ window.map을 mapHand로 설정');
+                    }
+                }
+
+                // 지도가 있으면 바로 마커 생성
+                if (window.map) {
                     await this.ensureAllMarkersCreated();
                 } else {
-                    console.warn('⚠️ 지도가 준비되지 않아 메모 마커 초기화 지연');
-                    // 지도 로딩 대기 후 재시도
-                    setTimeout(async () => {
-                        if (window.map && window.MemoMarkerManager) {
-                            await window.MemoMarkerManager.initialize();
-                            console.log('✅ 메모 마커 매니저 초기화 완료 (재시도)');
+                    console.log('📍 지도 로딩 대기 중... 마커는 나중에 생성됩니다');
+                    // 지도 로딩 감지를 위한 인터벌
+                    let checkCount = 0;
+                    const mapCheckInterval = setInterval(async () => {
+                        checkCount++;
 
-                            // 🎯 추가: 저장된 모든 필지에서 마커가 필요한 것들 확인
-                            await this.ensureAllMarkersCreated();
+                        // 맵 인스턴스 재확인
+                        if (!window.map) {
+                            const currentMode = window.currentMode || 'click';
+                            const mapInstance = window[`map${currentMode.charAt(0).toUpperCase() + currentMode.slice(1)}`];
+                            if (mapInstance) {
+                                window.map = mapInstance;
+                                console.log(`✅ window.map을 ${currentMode} 모드 맵으로 설정`);
+                            }
                         }
-                    }, 1000);
+
+                        if (window.map) {
+                            clearInterval(mapCheckInterval);
+                            console.log('🗺️ 지도 로드 감지! 마커 생성 시작...');
+                            await this.ensureAllMarkersCreated();
+                        } else if (checkCount > 20) {
+                            // 10초 후에도 지도가 없으면 중단
+                            clearInterval(mapCheckInterval);
+                            console.warn('⚠️ 지도 로딩 타임아웃');
+                        }
+                    }, 500);
                 }
             } else {
                 console.warn('⚠️ MemoMarkerManager가 로드되지 않음');
+                // MemoMarkerManager 로딩 대기
+                setTimeout(async () => {
+                    if (window.MemoMarkerManager) {
+                        await this.initializeMemoMarkers();
+                    }
+                }, 1000);
             }
         } catch (error) {
             console.error('❌ 메모 마커 초기화 실패:', error);
@@ -954,7 +1079,7 @@ class AppInitializer {
             }
 
             // localStorage에서도 확인
-            const storageKeys = ['parcelData', 'parcels_current_session', 'parcels'];
+            const storageKeys = ['clickParcelData', 'parcelData', 'parcels_current_session', 'parcels'];
             for (const key of storageKeys) {
                 try {
                     const data = localStorage.getItem(key);
@@ -968,7 +1093,29 @@ class AppInitializer {
                             for (const parcel of parcelsWithInfo) {
                                 const markerKey = parcel.pnu || parcel.parcelNumber || parcel.id;
                                 if (markerKey && !window.MemoMarkerManager.markers.has(markerKey)) {
-                                    if (parcel.lat && parcel.lng) {
+                                    // clickParcelData의 경우 geometry에서 좌표 추출
+                                    if (!parcel.lat || !parcel.lng) {
+                                        if (parcel.geometry && parcel.geometry.coordinates) {
+                                            const coords = parcel.geometry.coordinates[0];
+                                            if (coords && coords.length > 0) {
+                                                // 폴리곤 중심점 계산
+                                                let totalLat = 0, totalLng = 0;
+                                                for (const coord of coords) {
+                                                    totalLng += coord[0];
+                                                    totalLat += coord[1];
+                                                }
+                                                parcel.lng = totalLng / coords.length;
+                                                parcel.lat = totalLat / coords.length;
+                                            }
+                                        }
+                                    }
+
+                                    // 좌표가 있고 마커 표시 조건을 충족하면 생성
+                                    if (parcel.lat && parcel.lng && window.MemoMarkerManager.shouldShowMarker(parcel)) {
+                                        console.log(`👍 마커 복원: ${markerKey}`, {
+                                            memo: parcel.memo,
+                                            ownerName: parcel.ownerName
+                                        });
                                         window.MemoMarkerManager.createOrUpdateMarker(parcel);
                                     }
                                 }

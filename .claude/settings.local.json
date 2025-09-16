@@ -104,5 +104,6 @@
     ],
     "deny": [],
     "ask": []
-  }
+  },
+  "outputStyle": "Learning"
 }
