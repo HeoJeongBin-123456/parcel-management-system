@@ -8,21 +8,31 @@ class MemoMarkerManager {
 
     // 마커 표시 조건 확인 (실제 정보가 있을 때만)
     shouldShowMarker(parcelData) {
-        // 지번(parcelNumber)만 있는 경우는 마커 표시 기준에서 제외
-        // 🔥 기본값 필터링을 완화하여 실제 입력된 내용만 확인
+        // 🔥 데이터 스키마 호환성 개선: 다양한 키 이름 지원
+        const memo = parcelData.memo || parcelData.parcelMemo || '';
+        const parcelNumber = parcelData.parcelNumber || parcelData.parcel_number || parcelData.parcel_name || '';
+        const ownerName = parcelData.ownerName || parcelData.owner_name || parcelData.owner || '';
+        const ownerAddress = parcelData.ownerAddress || parcelData.owner_address || '';
+        const ownerContact = parcelData.ownerContact || parcelData.owner_contact || parcelData.contact || '';
+
+        // 실제 정보가 있는지 확인 (빈 문자열과 플레이스홀더 제외)
         const hasRealInfo = !!(
-            (parcelData.memo && parcelData.memo.trim() &&
-             parcelData.memo.trim() !== '(메모 없음)' &&
-             parcelData.memo.trim() !== '추가 메모...') ||
-            (parcelData.ownerName && parcelData.ownerName.trim() &&
-             parcelData.ownerName.trim() !== '홍길동' &&
-             parcelData.ownerName.trim() !== '') ||
-            (parcelData.ownerAddress && parcelData.ownerAddress.trim() &&
-             parcelData.ownerAddress.trim() !== '서울시 강남구...' &&
-             parcelData.ownerAddress.trim() !== '') ||
-            (parcelData.ownerContact && parcelData.ownerContact.trim() &&
-             parcelData.ownerContact.trim() !== '010-1234-5678' &&
-             parcelData.ownerContact.trim() !== '')
+            (parcelNumber && parcelNumber.trim() &&
+             parcelNumber.trim() !== '예: 123-4' &&
+             parcelNumber.trim() !== '') ||
+            (memo && memo.trim() &&
+             memo.trim() !== '(메모 없음)' &&
+             memo.trim() !== '추가 메모...' &&
+             memo.trim() !== '') ||
+            (ownerName && ownerName.trim() &&
+             ownerName.trim() !== '홍길동' &&
+             ownerName.trim() !== '') ||
+            (ownerAddress && ownerAddress.trim() &&
+             ownerAddress.trim() !== '서울시 강남구...' &&
+             ownerAddress.trim() !== '') ||
+            (ownerContact && ownerContact.trim() &&
+             ownerContact.trim() !== '010-1234-5678' &&
+             ownerContact.trim() !== '')
         );
 
         // 검색 필지 여부는 로깅용으로만 사용 (조건 동일)
@@ -33,32 +43,51 @@ class MemoMarkerManager {
             parcelName: parcelData.parcelName || parcelData.parcel_name,
             parcelNumber: parcelData.parcelNumber?.trim() || '(없음)',
             hasRealInfo: hasRealInfo,
-            memo: parcelData.memo?.trim() || '(없음)',
-            ownerName: parcelData.ownerName?.trim() || '(없음)',
-            ownerAddress: parcelData.ownerAddress?.trim() || '(없음)',
-            ownerContact: parcelData.ownerContact?.trim() || '(없음)'
+            memo: memo.trim() || '(없음)',
+            ownerName: ownerName.trim() || '(없음)',
+            ownerAddress: ownerAddress.trim() || '(없음)',
+            ownerContact: ownerContact.trim() || '(없음)'
         });
 
         // 실제 정보가 있을 때만 마커 표시
         return hasRealInfo;
     }
 
-    // 초기화 (지도 로드 후 호출)
+    // 초기화 (지도 없이도 가능)
     async initialize() {
-        if (this.isInitialized) return;
-
-        // 지도 로드 대기
-        if (!window.map) {
-            setTimeout(() => this.initialize(), 500);
+        if (this.isInitialized) {
+            console.log('📍 MemoMarkerManager 이미 초기화됨');
             return;
         }
 
-        // 중복 마커 정리
-        this.cleanupDuplicateMarkers();
-
-        await this.loadAllMemoMarkers();
+        // 초기화 상태 설정 (재진입 방지)
         this.isInitialized = true;
-        console.log('✅ MemoMarkerManager 초기화 완료');
+        console.log('✅ MemoMarkerManager 초기화 완료 (지도 대기 중)');
+
+        // 지도가 이미 있으면 마커 로드
+        if (window.map) {
+            // 중복 마커 정리
+            this.cleanupDuplicateMarkers();
+            await this.loadAllMemoMarkers();
+            console.log('📍 지도 있음: 마커 로드 완료');
+        } else {
+            // 지도 로드 감지를 위한 인터벌 설정
+            console.log('🗺️ 지도 로딩 대기 중...');
+            let checkCount = 0;
+            const mapCheckInterval = setInterval(async () => {
+                checkCount++;
+                if (window.map) {
+                    clearInterval(mapCheckInterval);
+                    console.log('🗺️ 지도 로드 감지! 마커 로드 시작...');
+                    this.cleanupDuplicateMarkers();
+                    await this.loadAllMemoMarkers();
+                } else if (checkCount > 40) {
+                    // 20초 후에도 지도가 없으면 중단
+                    clearInterval(mapCheckInterval);
+                    console.warn('⚠️ 지도 로딩 타임아웃 (20초)');
+                }
+            }, 500);
+        }
     }
 
     // 중복 마커 정리 (개선된 버전)
@@ -263,9 +292,20 @@ class MemoMarkerManager {
 
     // 메모 마커 생성
     async createMemoMarker(parcelData) {
+        console.log('🔍 [DEBUG] createMemoMarker 호출됨:', {
+            pnu: parcelData.pnu,
+            lat: parcelData.lat,
+            lng: parcelData.lng,
+            memo: parcelData.memo,
+            ownerName: parcelData.ownerName
+        });
+
         try {
             // 🛡️ 마커 생성 조건 확인 (가장 중요한 체크)
-            if (!this.shouldShowMarker(parcelData)) {
+            const shouldShow = this.shouldShowMarker(parcelData);
+            console.log('🔍 [DEBUG] shouldShowMarker 결과:', shouldShow);
+
+            if (!shouldShow) {
                 console.log('🚫 마커 생성 조건 미충족:', {
                     parcelName: parcelData.parcelName || parcelData.parcel_name,
                     parcelNumber: parcelData.parcelNumber?.trim() || '(없음)',
@@ -383,7 +423,9 @@ class MemoMarkerManager {
                 element: markerElement
             });
 
-            // 🌟 Supabase에 마커 데이터 저장
+            // 🌟 Supabase에 마커 데이터 저장 - 잘못된 콜럼으로 인한 에러 방지를 위해 주석 처리
+            // Supabase 테이블 스키마가 업데이트되면 다시 활성화
+            /*
             if (window.SupabaseManager && window.SupabaseManager.isConnected) {
                 try {
                     const markerData = {
@@ -399,6 +441,7 @@ class MemoMarkerManager {
                     console.error('❌ 메모 마커 Supabase 저장 실패:', error);
                 }
             }
+            */
 
             console.log(`📍 메모 마커 생성: ${parcelData.parcelNumber}`);
 
@@ -411,21 +454,23 @@ class MemoMarkerManager {
     createMarkerElement(parcelData) {
         const element = document.createElement('div');
         element.className = 'memo-marker';
-        
+
         // 검색 필지와 클릭 필지 구분
         if (parcelData.isSearchParcel) {
             element.classList.add('search-parcel');
         }
-        
+
         element.textContent = 'M';
 
+        // 🔥 데이터 스키마 호환성: 다양한 키 이름 지원
+        const memo = parcelData.memo || parcelData.parcelMemo || '';
+        const parcelNumber = parcelData.parcelNumber || parcelData.parcel_number || parcelData.parcel_name || '';
+
         // 지번만 있는 경우와 메모가 있는 경우 구분해서 title 설정
-        if (parcelData.memo && parcelData.memo.trim() && parcelData.memo.trim() !== '(메모 없음)') {
-            element.title = `메모: ${parcelData.memo.substring(0, 50)}${parcelData.memo.length > 50 ? '...' : ''}`;
-        } else if (parcelData.parcelNumber && parcelData.parcelNumber.trim()) {
-            element.title = `지번: ${parcelData.parcelNumber}`;
-        } else if (parcelData.parcel_name && parcelData.parcel_name.trim()) {
-            element.title = `지번: ${parcelData.parcel_name}`;
+        if (memo && memo.trim() && memo.trim() !== '(메모 없음)') {
+            element.title = `메모: ${memo.substring(0, 50)}${memo.length > 50 ? '...' : ''}`;
+        } else if (parcelNumber && parcelNumber.trim()) {
+            element.title = `지번: ${parcelNumber}`;
         } else {
             element.title = '필지 정보';
         }
@@ -641,7 +686,8 @@ class MemoMarkerManager {
         markerInfo.data = parcelData;
         markerInfo.element = newElement;
 
-        // 🌟 Supabase에 업데이트된 마커 데이터 저장
+        // 🌟 Supabase에 업데이트된 마커 데이터 저장 - 주석 처리
+        /*
         if (window.SupabaseManager && window.SupabaseManager.isConnected) {
             try {
                 const markerData = {
@@ -657,6 +703,7 @@ class MemoMarkerManager {
                 console.error('❌ 메모 마커 Supabase 업데이트 실패:', error);
             }
         }
+        */
 
         console.log(`🔄 메모 마커 업데이트: ${parcelData.parcelNumber}`);
     }
@@ -668,7 +715,8 @@ class MemoMarkerManager {
             markerInfo.marker.setMap(null);
             this.markers.delete(pnu);
 
-            // 🌟 Supabase에서 마커 데이터 제거 (marker_data 필드를 null로 설정)
+            // 🌟 Supabase에서 마커 데이터 제거 - 주석 처리
+            /*
             if (window.SupabaseManager && window.SupabaseManager.isConnected) {
                 try {
                     window.SupabaseManager.saveParcelMarker(pnu, null)
@@ -682,6 +730,7 @@ class MemoMarkerManager {
                     console.error('❌ 메모 마커 Supabase 제거 실패:', error);
                 }
             }
+            */
 
             console.log(`🗑️ 메모 마커 제거: ${pnu}`);
         }
@@ -876,14 +925,76 @@ class MemoMarkerManager {
 // 전역 인스턴스 생성
 window.MemoMarkerManager = new MemoMarkerManager();
 
-// saveParcelData 함수 후킹 (메모 저장 시 마커 업데이트)
-const originalSaveParcelData = window.saveParcelData;
-if (originalSaveParcelData) {
-    window.saveParcelData = async function() {
+// 중복 호출 방지를 위한 디바운싱
+let saveClickParcelDataInProgress = false;
+let markerUpdateTimeout = null;
+
+// 함수 후킹을 나중에 수행하도록 지연
+function hookSaveFunctions() {
+    console.log('🔧 저장 함수 후킹 시작...');
+
+    // saveClickParcelData 함수 후킹 (클릭 모드 필지 저장 시 마커 업데이트)
+    const originalSaveClickParcelData = window.saveClickParcelData;
+    if (originalSaveClickParcelData) {
+        console.log('✅ saveClickParcelData 후킹 성공');
+        window.saveClickParcelData = async function() {
+        // 이미 실행 중이면 바로 리턴
+        if (saveClickParcelDataInProgress) {
+            console.log('⚠️ saveClickParcelData 이미 실행 중 - 건너뜀기');
+            return;
+        }
+
+        saveClickParcelDataInProgress = true;
+        let result;
+
+        try {
+            result = await originalSaveClickParcelData.apply(this, arguments);
+        } finally {
+            saveClickParcelDataInProgress = false;
+        }
+
+        // 마커 업데이트를 디바운싱하여 처리
+        if (markerUpdateTimeout) {
+            clearTimeout(markerUpdateTimeout);
+        }
+
+        markerUpdateTimeout = setTimeout(async () => {
+            if (window.MemoMarkerManager && window.MemoMarkerManager.isInitialized && window.selectedParcel) {
+                const parcelData = window.selectedParcel;
+                console.log('💾 [클릭 모드] 저장 후 마커 업데이트:', {
+                    pnu: parcelData.pnu,
+                    shouldShowMarker: window.MemoMarkerManager.shouldShowMarker(parcelData)
+                });
+
+                if (parcelData.pnu) {
+                    if (window.MemoMarkerManager.shouldShowMarker(parcelData)) {
+                        // 정보가 있는 경우 - 마커 생성/업데이트
+                        console.log('📍 [클릭 모드] 마커 생성:', parcelData);
+                        await window.MemoMarkerManager.onParcelMemoAdded(parcelData);
+                    } else {
+                        // 정보가 없는 경우 - 마커 제거
+                        console.log('🗑️ [클릭 모드] 마커 제거:', parcelData.pnu);
+                        window.MemoMarkerManager.removeMemoMarker(parcelData.pnu);
+                    }
+                }
+            }
+        }, 500); // 500ms 후 마커 업데이트
+
+        return result;
+        };
+    } else {
+        console.warn('⚠️ saveClickParcelData 함수가 아직 정의되지 않음');
+    }
+
+    // saveParcelData 함수 후킹 (검색 모드 필지 저장 시 마커 업데이트)
+    const originalSaveParcelData = window.saveParcelData;
+    if (originalSaveParcelData) {
+        console.log('✅ saveParcelData 후킹 성공');
+        window.saveParcelData = async function() {
         const result = await originalSaveParcelData.apply(this, arguments);
 
-        // 🔥 ULTRATHINK 수정: refreshAllMarkers 대신 직접 마커 생성/업데이트
-        if (window.MemoMarkerManager && window.MemoMarkerManager.isInitialized) {
+        // 검색 모드일 때만 처리
+        if (window.currentMode === 'search' && window.MemoMarkerManager && window.MemoMarkerManager.isInitialized) {
             // 현재 저장된 필지 정보 직접 가져오기
             const parcelNumber = document.getElementById('parcelNumber').value;
             const memo = document.getElementById('memo').value;
@@ -918,7 +1029,7 @@ if (originalSaveParcelData) {
                 lng: lng
             };
 
-            console.log('💾 저장 후 마커 업데이트:', {
+            console.log('💾 [검색 모드] 저장 후 마커 업데이트:', {
                 currentPNU: currentPNU,
                 parcelNumber: parcelNumber,
                 shouldShowMarker: window.MemoMarkerManager.shouldShowMarker(parcelData)
@@ -926,20 +1037,34 @@ if (originalSaveParcelData) {
 
             if (currentPNU) {
                 if (window.MemoMarkerManager.shouldShowMarker(parcelData)) {
-                    // 정보가 있는 경우 - 마커 생성/업데이트 (확장된 조건)
-                    console.log('📍 마커 즉시 생성 (확장된 조건):', parcelData);
+                    // 정보가 있는 경우 - 마커 생성/업데이트
+                    console.log('📍 [검색 모드] 마커 생성:', parcelData);
                     await window.MemoMarkerManager.onParcelMemoAdded(parcelData);
                 } else {
                     // 정보가 없는 경우 - 마커 제거
-                    console.log('🗑️ 마커 제거:', currentPNU);
+                    console.log('🗑️ [검색 모드] 마커 제거:', currentPNU);
                     window.MemoMarkerManager.removeMemoMarker(currentPNU);
                 }
             }
         }
 
         return result;
-    };
+        };
+    } else {
+        console.warn('⚠️ saveParcelData 함수가 아직 정의되지 않음');
+    }
 }
+
+// 함수 후킹을 지연 실행
+setTimeout(() => {
+    hookSaveFunctions();
+
+    // 후킹이 실패한 경우 재시도
+    if (!window.saveParcelData || !window.saveClickParcelData) {
+        console.log('🔄 저장 함수 후킹 재시도...');
+        setTimeout(hookSaveFunctions, 2000);
+    }
+}, 1000);
 
 // 페이지 로드 시 자동 초기화 (AppInitializer가 없는 경우에만)
 document.addEventListener('DOMContentLoaded', () => {
@@ -950,6 +1075,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.log('🔄 AppInitializer 없음, 메모 마커 직접 초기화');
                 window.MemoMarkerManager.initialize();
             }
+        }
+
+        // 저장 함수 후킹 재시도
+        if (!window.saveParcelData || !window.saveClickParcelData) {
+            console.log('🔄 DOMContentLoaded에서 저장 함수 후킹 재시도');
+            hookSaveFunctions();
         }
     }, 4000); // AppInitializer 보다 늦게 실행하여 중복 방지
 });

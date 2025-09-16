@@ -291,7 +291,7 @@ window.getClickParcelData = function() {
     }
 };
 
-window.saveClickParcelData = function(data) {
+window.setClickParcelDataToStorage = function(data) {
     try {
         localStorage.setItem(window.STORAGE_KEYS.CLICK_PARCEL_DATA, JSON.stringify(data));
         console.log('✅ 클릭 필지 데이터 저장 완료:', data.length, '개');

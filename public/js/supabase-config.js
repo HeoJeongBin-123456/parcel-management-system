@@ -253,7 +253,6 @@ class SupabaseManager {
             is_colored: isColored,
             color_type: colorType,
             parcel_type: parcelType, // Phase 1: parcel_type 필드 추가
-            has_memo: memo.trim() !== '',
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
             user_session: this.getUserSession()
@@ -877,7 +876,8 @@ class SupabaseManager {
             const { data, error } = await this.supabase
                 .from('parcels')
                 .select('*')
-                .eq('has_memo', true)
+                .not('memo', 'is', null)
+                .neq('memo', '')
                 .order('updated_at', { ascending: false });
 
             if (error) throw error;

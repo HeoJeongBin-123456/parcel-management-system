@@ -1044,6 +1044,27 @@ async function saveParcelData() {
             }
         } else {
             console.warn('❌ geometry 또는 coordinates 없음:', { geometry, coordinates: geometry?.coordinates });
+
+            // 🔥 geometry가 없을 때 selectedParcel이나 clickParcels에서 좌표 가져오기
+            if (window.selectedParcel && window.selectedParcel.lat && window.selectedParcel.lng) {
+                formData.lat = parseFloat(window.selectedParcel.lat);
+                formData.lng = parseFloat(window.selectedParcel.lng);
+                console.log('✅ selectedParcel에서 좌표 가져옴:', { lat: formData.lat, lng: formData.lng });
+            } else if (currentPNU && window.clickParcels && window.clickParcels.has(currentPNU)) {
+                const parcelData = window.clickParcels.get(currentPNU);
+                if (parcelData && parcelData.center) {
+                    formData.lat = parseFloat(parcelData.center.lat);
+                    formData.lng = parseFloat(parcelData.center.lng);
+                    console.log('✅ clickParcels에서 좌표 가져옴:', { lat: formData.lat, lng: formData.lng });
+                }
+            } else if (currentPNU && window.searchParcels && window.searchParcels.has(currentPNU)) {
+                const parcelData = window.searchParcels.get(currentPNU);
+                if (parcelData && parcelData.center) {
+                    formData.lat = parseFloat(parcelData.center.lat);
+                    formData.lng = parseFloat(parcelData.center.lng);
+                    console.log('✅ searchParcels에서 좌표 가져옴:', { lat: formData.lat, lng: formData.lng });
+                }
+            }
         }
         
         console.log('📄 저장할 데이터:', formData);
@@ -1237,6 +1258,14 @@ async function saveClickParcelData() {
     }
 
     console.log('💾 클릭 필지 저장 시작:', parcelNumber);
+    console.log('🔍 [DEBUG] currentSelectedPNU:', window.currentSelectedPNU);
+    console.log('🔍 [DEBUG] 입력된 데이터:', {
+        parcelNumber: document.getElementById('parcelNumber').value,
+        ownerName: document.getElementById('ownerName').value,
+        ownerAddress: document.getElementById('ownerAddress').value,
+        ownerContact: document.getElementById('ownerContact').value,
+        memo: document.getElementById('memo').value
+    });
 
     try {
         // 현재 선택된 필지의 PNU 사용
@@ -1245,21 +1274,46 @@ async function saveClickParcelData() {
         let lat = null;
         let lng = null;
 
-        // PNU가 있으면 clickParcels에서 geometry 가져오기
+        // properties 정보를 저장할 변수 추가
+        let properties = null;
+
+        // PNU가 있으면 clickParcels에서 geometry와 properties 가져오기
         if (currentPNU) {
             let parcelData = window.clickParcels.get(currentPNU);
-            if (parcelData && parcelData.data) {
-                geometry = parcelData.data.geometry;
+            console.log('🔍 [DEBUG] clickParcels에서 가져온 데이터:', parcelData);
+
+            // 'data' 또는 'parcel' 키로 접근 시도 (mode-click-handler와 parcel.js 호환성)
+            if (parcelData) {
+                if (parcelData.data && parcelData.data.geometry) {
+                    geometry = parcelData.data.geometry;
+                    properties = parcelData.data.properties || {};
+                    console.log('✅ [DEBUG] data.geometry와 properties 찾음');
+                } else if (parcelData.parcel && parcelData.parcel.geometry) {
+                    geometry = parcelData.parcel.geometry;
+                    properties = parcelData.parcel.properties || {};
+                    console.log('✅ [DEBUG] parcel.geometry와 properties 찾음');
+                }
             }
         } else {
             // PNU가 없으면 지번으로 clickParcels에서 검색
             window.clickParcels.forEach((parcelData, pnu) => {
-                const jibun = formatJibun(parcelData.data?.properties || {});
+                let tempProperties = parcelData.data?.properties || parcelData.parcel?.properties || {};
+                const jibun = formatJibun(tempProperties);
                 if (jibun === parcelNumber) {
                     currentPNU = pnu;
-                    geometry = parcelData.data?.geometry;
+                    geometry = parcelData.data?.geometry || parcelData.parcel?.geometry;
+                    properties = tempProperties;
+                    console.log('✅ [DEBUG] 지번으로 geometry와 properties 찾음:', jibun);
                 }
             });
+        }
+
+        // properties가 없으면 최소한의 구조 생성
+        if (!properties) {
+            properties = {
+                PNU: currentPNU,
+                pnu: currentPNU
+            };
         }
 
         const formData = {
@@ -1271,13 +1325,19 @@ async function saveClickParcelData() {
             memo: document.getElementById('memo').value,
             color: currentColor,
             geometry: geometry,
+            properties: properties,  // 🆕 drawClickModeParcelPolygon에서 필요
             timestamp: new Date().toISOString(),
             isSearchParcel: false,
-            parcel_type: 'click'
+            parcel_type: 'click',
+            mode: 'click',  // 🆕 loadSavedClickModeParcels에서 필요
+            source: 'click'  // 🆕 loadSavedClickModeParcels에서 필요
         };
 
         // 📍 geometry에서 중심 좌표 추출 (메모 마커용)
         if (geometry && geometry.coordinates) {
+            console.log('🗺️ [DEBUG] geometry 타입:', geometry.type);
+            console.log('🗺️ [DEBUG] geometry.coordinates 구조:', geometry.coordinates);
+
             let centerLat, centerLng;
 
             if (geometry.type === 'Point') {
@@ -1285,15 +1345,22 @@ async function saveClickParcelData() {
             } else if (geometry.type === 'Polygon') {
                 const center = calculatePolygonCenter(geometry.coordinates[0]);
                 [centerLng, centerLat] = center;
+                console.log('🗺️ [DEBUG] Polygon 중심점 계산:', { centerLng, centerLat });
             } else if (geometry.type === 'MultiPolygon') {
                 const center = calculatePolygonCenter(geometry.coordinates[0][0]);
                 [centerLng, centerLat] = center;
+                console.log('🗺️ [DEBUG] MultiPolygon 중심점 계산:', { centerLng, centerLat });
             }
 
             if (centerLat && centerLng) {
                 formData.lat = parseFloat(centerLat);
                 formData.lng = parseFloat(centerLng);
+                console.log('✅ [DEBUG] 좌표 저장: lat=' + formData.lat + ', lng=' + formData.lng);
+            } else {
+                console.error('❌ [DEBUG] 좌표 계산 실패');
             }
+        } else {
+            console.error('❌ [DEBUG] geometry 또는 coordinates 없음');
         }
 
         console.log('📄 클릭 필지 저장할 데이터:', formData);
@@ -1313,7 +1380,8 @@ async function saveClickParcelData() {
                 savedData.push(formData);
             }
 
-            window.saveClickParcelData(savedData);
+            // localStorage에 직접 저장 (재귀 호출 방지)
+            localStorage.setItem(window.STORAGE_KEYS.CLICK_PARCEL_DATA, JSON.stringify(savedData));
             localStorageSuccess = true;
             console.log('✅ 클릭 필지 localStorage 저장 성공');
         } catch (localError) {
@@ -1367,31 +1435,56 @@ async function saveClickParcelData() {
         window.dispatchEvent(new Event('refreshParcelList'));
 
         // 5단계: 마커 업데이트
-        const hasRealInfo = (formData.ownerName && formData.ownerName.trim() !== '') ||
-                           (formData.ownerAddress && formData.ownerAddress.trim() !== '') ||
-                           (formData.ownerContact && formData.ownerContact.trim() !== '') ||
-                           (formData.memo && formData.memo.trim() !== '');
+        console.log('📍 마커 업데이트 시작...');
 
-        const shouldCreateMarker = hasRealInfo;
+        // 현재 선택된 필지 정보를 전역 변수에 저장
+        if (window.selectedParcel) {
+            window.selectedParcel = {
+                ...window.selectedParcel,
+                ...formData
+            };
+        } else {
+            window.selectedParcel = formData;
+        }
 
-        if (window.MemoMarkerManager) {
-            if (shouldCreateMarker) {
-                const markerData = {
-                    ...formData,
-                    lat: formData.lat,
-                    lng: formData.lng,
-                    geometry: formData.geometry
-                };
-                await window.MemoMarkerManager.createMemoMarker(markerData);
-                console.log('📍 클릭 필지 마커 생성/업데이트:', formData.parcelNumber);
-            } else {
-                const pnu = formData.pnu || currentPNU;
-                if (pnu && window.MemoMarkerManager.markers.has(pnu)) {
-                    window.MemoMarkerManager.removeMemoMarker(pnu);
-                    console.log('🗑️ 클릭 필지 마커 제거:', formData.parcelNumber);
+        // 🔥 마커 생성/업데이트 로직 추가 (재시도 메커니즘 포함)
+        const createMarkerWithRetry = async (retryCount = 0) => {
+            try {
+                if (!window.MemoMarkerManager) {
+                    console.warn('⚠️ MemoMarkerManager가 없습니다. 초기화 중...');
+                    if (window.appInitializer) {
+                        await window.appInitializer.initializeMemoMarkers();
+                    }
+                }
+
+                if (window.MemoMarkerManager) {
+                    const shouldShow = window.MemoMarkerManager.shouldShowMarker(formData);
+                    console.log('📍 마커 표시 조건:', { shouldShow, formData });
+
+                    if (shouldShow) {
+                        // 마커 생성 또는 업데이트
+                        await window.MemoMarkerManager.createOrUpdateMarker(formData);
+                        console.log('✅ 마커 생성/업데이트 완료');
+                    } else if (currentPNU && window.MemoMarkerManager.markers.has(currentPNU)) {
+                        // 정보가 없으면 마커 제거
+                        window.MemoMarkerManager.removeMemoMarker(currentPNU);
+                        console.log('🗑️ 마커 제거 (정보 없음)');
+                    }
+                }
+            } catch (error) {
+                console.error('❌ 마커 생성 실패:', error);
+                if (retryCount < 3) {
+                    console.log(`🔄 마커 생성 재시도 (${retryCount + 1}/3)...`);
+                    await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount)));
+                    await createMarkerWithRetry(retryCount + 1);
                 }
             }
-        }
+        };
+
+        // 비동기로 마커 생성 (저장 완료에 영향 없도록)
+        createMarkerWithRetry().catch(err => {
+            console.error('❌ 마커 생성 최종 실패:', err);
+        });
 
         const saveStatus = [];
         if (localStorageSuccess) saveStatus.push('로컬저장');
@@ -2510,3 +2603,5 @@ window.removeParcelAtLocation = removeParcelAtLocation;
 window.loadExistingParcelData = loadExistingParcelData;
 window.applyColorToParcel = applyColorToParcel;
 window.selectParcel = selectParcel;
+window.saveClickParcelData = saveClickParcelData;
+window.saveParcelData = saveParcelData; // 🔥 중요: saveParcelData를 전역으로 노출
