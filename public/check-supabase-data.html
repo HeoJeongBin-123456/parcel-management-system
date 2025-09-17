@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Supabase 데이터 확인</title>
+    <style>
+        body { font-family: monospace; padding: 20px; }
+        button { margin: 10px; padding: 10px; }
+        pre { background: #f5f5f5; padding: 10px; overflow-x: auto; }
+        .error { color: red; }
+        .success { color: green; }
+    </style>
+</head>
+<body>
+    <h1>Supabase 데이터 확인</h1>
+
+    <button onclick="checkSupabaseData()">Supabase 데이터 확인</button>
+    <button onclick="checkLocalData()">LocalStorage 데이터 확인</button>
+    <button onclick="deleteSpecificParcels()">정동/태평로 데이터 완전 삭제</button>
+
+    <div id="output"></div>
+
+    <script>
+    const PROBLEMATIC_PNUS = [
+        '1114010300100310000', // 태평로 31
+        '1114013000100010008'  // 정동 1-8 (추정)
+    ];
+
+    async function checkSupabaseData() {
+        const output = document.getElementById('output');
+        let html = '<h2>Supabase 데이터</h2>';
+
+        if (!window.SupabaseManager || !window.supabase) {
+            html += '<p class="error">Supabase 연결 안됨</p>';
+            output.innerHTML = html;
+            return;
+        }
+
+        try {
+            // 모든 데이터 가져오기
+            const { data, error } = await window.supabase
+                .from('parcels')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                html += `<p class="error">오류: ${error.message}</p>`;
+            } else {
+                html += `<p>전체 데이터: ${data.length}개</p>`;
+
+                // 문제 필지 찾기
+                const problematicData = data.filter(item => {
+                    const pnu = item.pnu || item.id;
+                    const addr = item.addr || item.parcel_name || '';
+                    return PROBLEMATIC_PNUS.includes(pnu) ||
+                           addr.includes('정동') ||
+                           addr.includes('태평로');
+                });
+
+                if (problematicData.length > 0) {
+                    html += '<h3 class="error">문제 필지 발견!</h3>';
+                    html += '<pre>' + JSON.stringify(problematicData, null, 2) + '</pre>';
+
+                    // 각 필지의 메모 정보 확인
+                    problematicData.forEach(item => {
+                        html += '<div>';
+                        html += `<p><strong>PNU:</strong> ${item.pnu}</p>`;
+                        html += `<p><strong>주소:</strong> ${item.parcel_name || item.addr || '없음'}</p>`;
+                        html += `<p><strong>메모:</strong> ${item.memo || '없음'}</p>`;
+                        html += `<p><strong>색상:</strong> ${item.color || '없음'}</p>`;
+                        html += '</div><hr>';
+                    });
+                } else {
+                    html += '<p class="success">문제 필지 없음</p>';
+                }
+            }
+        } catch (e) {
+            html += `<p class="error">예외: ${e.message}</p>`;
+        }
+
+        output.innerHTML = html;
+    }
+
+    function checkLocalData() {
+        const output = document.getElementById('output');
+        let html = '<h2>LocalStorage 데이터</h2>';
+
+        const keys = ['parcelData', 'clickParcelData', 'parcels', 'parcels_current_session'];
+
+        keys.forEach(key => {
+            try {
+                const data = localStorage.getItem(key);
+                if (data) {
+                    const parsed = JSON.parse(data);
+                    if (Array.isArray(parsed)) {
+                        html += `<h3>${key}: ${parsed.length}개</h3>`;
+
+                        // 문제 필지 찾기
+                        const problematic = parsed.filter(item => {
+                            const pnu = item.pnu || item.id;
+                            const addr = item.addr || item.parcel_name || item.parcelNumber || '';
+                            const jibun = item.properties?.jibun || '';
+                            const memo = item.memo || item.parcelMemo || '';
+
+                            return PROBLEMATIC_PNUS.includes(pnu) ||
+                                   addr.includes('정동') ||
+                                   addr.includes('태평로') ||
+                                   jibun.includes('정동') ||
+                                   jibun.includes('태평로') ||
+                                   (memo && memo !== 'null' && item.parcelNumber?.includes('태평로'));
+                        });
+
+                        if (problematic.length > 0) {
+                            html += `<p class="error">${key}에 문제 필지 ${problematic.length}개 발견!</p>`;
+                            html += '<pre>' + JSON.stringify(problematic, null, 2) + '</pre>';
+                        }
+                    }
+                }
+            } catch (e) {
+                html += `<p class="error">${key} 파싱 오류: ${e.message}</p>`;
+            }
+        });
+
+        output.innerHTML = html;
+    }
+
+    async function deleteSpecificParcels() {
+        const output = document.getElementById('output');
+        let html = '<h2>문제 필지 삭제 중...</h2>';
+        output.innerHTML = html;
+
+        let deletedCount = 0;
+
+        // 1. LocalStorage에서 삭제
+        const keys = ['parcelData', 'clickParcelData', 'parcels', 'parcels_current_session'];
+
+        keys.forEach(key => {
+            try {
+                const data = localStorage.getItem(key);
+                if (data) {
+                    const parsed = JSON.parse(data);
+                    if (Array.isArray(parsed)) {
+                        const filtered = parsed.filter(item => {
+                            const pnu = item.pnu || item.id;
+                            const addr = item.addr || item.parcel_name || item.parcelNumber || '';
+                            const jibun = item.properties?.jibun || '';
+
+                            const shouldDelete = PROBLEMATIC_PNUS.includes(pnu) ||
+                                                addr.includes('정동') ||
+                                                addr.includes('태평로') ||
+                                                jibun.includes('정동') ||
+                                                jibun.includes('태평로');
+
+                            if (shouldDelete) {
+                                deletedCount++;
+                                console.log(`삭제: ${pnu} - ${addr || jibun}`);
+                            }
+
+                            return !shouldDelete;
+                        });
+
+                        localStorage.setItem(key, JSON.stringify(filtered));
+                        html += `<p>${key}: ${parsed.length - filtered.length}개 삭제</p>`;
+                    }
+                }
+            } catch (e) {
+                html += `<p class="error">${key} 처리 오류: ${e.message}</p>`;
+            }
+        });
+
+        // 2. Supabase에서 삭제
+        if (window.SupabaseManager && window.supabase) {
+            try {
+                for (const pnu of PROBLEMATIC_PNUS) {
+                    const { error } = await window.supabase
+                        .from('parcels')
+                        .delete()
+                        .or(`pnu.eq.${pnu},id.eq.${pnu}`);
+
+                    if (!error) {
+                        html += `<p class="success">Supabase에서 ${pnu} 삭제 완료</p>`;
+                    }
+                }
+
+                // 추가로 주소 기반 삭제
+                const { error: addrError } = await window.supabase
+                    .from('parcels')
+                    .delete()
+                    .or('parcel_name.ilike.%정동%,parcel_name.ilike.%태평로%,addr.ilike.%정동%,addr.ilike.%태평로%');
+
+                if (!addrError) {
+                    html += '<p class="success">Supabase에서 정동/태평로 관련 데이터 모두 삭제</p>';
+                }
+            } catch (e) {
+                html += `<p class="error">Supabase 삭제 오류: ${e.message}</p>`;
+            }
+        }
+
+        html += `<h3 class="success">총 ${deletedCount}개 항목 삭제 완료</h3>`;
+        html += '<p>페이지를 새로고침하여 확인하세요.</p>';
+
+        output.innerHTML = html;
+    }
+    </script>
+</body>
+</html>

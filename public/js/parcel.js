@@ -646,10 +646,9 @@ async function applyColorToParcel(parcel, color) {
     }
 
     if (parcelData) {
-        // 현재 색상과 같은 색상으로 클릭하면 색상 제거
-        const existingColor = parcelData.color;
-        const newColor = (existingColor === color) ? 'transparent' : color;
-        const isRemoving = (existingColor === color);
+        // 항상 새로운 색상 적용 (토글 없음)
+        const newColor = color;
+        const isRemoving = false; // 색상 제거 기능 비활성화
 
         // 1. UI 즉시 업데이트
         parcelData.polygon.setOptions({
@@ -662,7 +661,25 @@ async function applyColorToParcel(parcel, color) {
 
         // 2. 색상 즉시 저장 (Supabase와 LocalStorage만 사용)
         if (isRemoving) {
-            console.log('🎨 색상 제거 처리:', pnu);
+            console.log('🎨 색상 제거 처리 (필지 데이터는 유지):', pnu);
+
+            // 색상만 transparent로 변경, 데이터는 유지
+            // Supabase에 색상 업데이트 (transparent로)
+            if (window.SupabaseManager && window.SupabaseManager.isConnected) {
+                try {
+                    const parcelToSave = {
+                        id: pnu,
+                        pnu: pnu,
+                        color: 'transparent',
+                        is_colored: false,
+                        updated_at: new Date().toISOString()
+                    };
+                    await window.SupabaseManager.saveParcels([parcelToSave]);
+                    console.log('✅ Supabase에 색상 제거 저장 완료');
+                } catch (error) {
+                    console.error('❌ Supabase 색상 제거 저장 실패:', error);
+                }
+            }
         } else {
             console.log('🎨 색상 적용:', pnu, newColor);
 
@@ -684,28 +701,37 @@ async function applyColorToParcel(parcel, color) {
             }
         }
 
-        // 3. LocalStorage 업데이트
-        const savedData = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEY) || '[]');
-        const existingIndex = savedData.findIndex(item => item.pnu === pnu);
+        // 3. LocalStorage 업데이트 - 모든 관련 키에서 업데이트
+        const storageKeys = ['parcelData', 'clickParcelData', 'parcels', 'parcels_current_session'];
 
-        if (existingIndex >= 0) {
-            if (isRemoving) {
-                // 색상 정보만 제거
-                savedData[existingIndex].color = 'transparent';
-                savedData[existingIndex].is_colored = false;
-                delete savedData[existingIndex].currentColor;
-            } else {
-                // 색상 정보 업데이트
-                savedData[existingIndex].color = newColor;
-                savedData[existingIndex].is_colored = true;
-                savedData[existingIndex].currentColor = newColor;
-                // geometry 정보가 없으면 추가
-                if (!savedData[existingIndex].geometry && parcel.geometry) {
-                    savedData[existingIndex].geometry = parcel.geometry;
+        // 색상 제거 시에도 데이터는 유지하고 색상만 transparent로 업데이트
+        if (isRemoving || !isRemoving) {
+            // 색상 업데이트 처리
+            for (const key of storageKeys) {
+                const savedData = JSON.parse(localStorage.getItem(key) || '[]');
+                const existingIndex = savedData.findIndex(item => item.pnu === pnu);
+
+                if (existingIndex >= 0) {
+                    // 색상 정보 업데이트
+                    savedData[existingIndex].color = newColor;
+                    savedData[existingIndex].is_colored = true;
+                    savedData[existingIndex].currentColor = newColor;
+                    // geometry 정보가 없으면 추가
+                    if (!savedData[existingIndex].geometry && parcel.geometry) {
+                        savedData[existingIndex].geometry = parcel.geometry;
+                    }
+                    localStorage.setItem(key, JSON.stringify(savedData));
                 }
             }
-            localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(savedData));
-        } else if (!isRemoving) {
+        }
+
+        // 새로운 필지를 모든 저장소에 추가해야 하는지 확인
+        const needToAddNew = storageKeys.some(key => {
+            const savedData = JSON.parse(localStorage.getItem(key) || '[]');
+            return savedData.findIndex(item => item.pnu === pnu) < 0;
+        });
+
+        if (needToAddNew) {
             // 🔥 새로운 필지 데이터 완전 저장 (geometry 포함)
             const jibun = formatJibun(parcel.properties);
 
@@ -766,15 +792,33 @@ async function applyColorToParcel(parcel, color) {
                 newParcelData.lng = parseFloat(centerLng);
             }
 
-            savedData.push(newParcelData);
-            localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(savedData));
+            // CONFIG.STORAGE_KEY에 저장
+            const mainSavedData = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEY) || '[]');
+            mainSavedData.push(newParcelData);
+            localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(mainSavedData));
             console.log('✅ 새 필지 완전 데이터 저장 완료:', pnu, jibun);
+
+            // 모든 관련 키에 새로운 데이터 추가
+            for (const key of ['clickParcelData', 'parcels', 'parcels_current_session']) {
+                if (key !== CONFIG.STORAGE_KEY) {
+                    const otherData = JSON.parse(localStorage.getItem(key) || '[]');
+                    const exists = otherData.findIndex(item => item.pnu === pnu);
+                    if (exists < 0) {
+                        otherData.push(newParcelData);
+                        localStorage.setItem(key, JSON.stringify(otherData));
+                        console.log(`✅ ${key}에도 새 필지 저장: ${pnu}`);
+                    }
+                }
+            }
         }
 
         // 3-1. parcelColors에도 저장 (색상 전용 저장소)
         const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
         if (isRemoving) {
-            delete parcelColors[pnu];
+            // 색상 제거 시 transparent로 저장 (완전 삭제가 아님)
+            parcelColors[pnu] = 'transparent';
+            localStorage.setItem('parcelColors', JSON.stringify(parcelColors));
+            console.log('✅ parcelColors에서 색상만 제거:', pnu);
         } else {
             // ColorPaletteManager를 사용하여 색상 인덱스 가져오기
             let colorIndex = null;
@@ -807,68 +851,25 @@ async function applyColorToParcel(parcel, color) {
         }
         localStorage.setItem('parcelColors', JSON.stringify(parcelColors));
 
-        // 4. 마커 상태 평가는 제거 (DataPersistenceManager 사용 안 함)
-
-        // 5. 색상 제거 시 필지 정보와 마커도 삭제
+        // 4. 마커 제거 처리 (색상 제거 시에만)
         if (isRemoving) {
-            // 삭제 확인 알림
-            const jibun = parcel.properties.JIBUN || parcel.properties.jibun || pnu;
-            if (confirm(`필지 "${jibun}"의 색상과 정보를 모두 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.`)) {
-                // 1. Supabase에서 삭제 (실시간 동기화를 위해 중요)
-                if (window.SupabaseManager && window.SupabaseManager.isConnected) {
-                    try {
-                        // Supabase에서 필지 삭제
-                        await window.SupabaseManager.deleteParcel(pnu);
-                        console.log('✅ Supabase에서 필지 삭제 완료');
-                    } catch (error) {
-                        console.error('❌ Supabase 삭제 실패:', error);
-                    }
+            // 마커 상태 삭제
+            const markerStates = JSON.parse(localStorage.getItem('markerStates') || '{}');
+            delete markerStates[pnu];
+            localStorage.setItem('markerStates', JSON.stringify(markerStates));
+
+            // 지도에서 마커 제거
+            if (window.MemoMarkerManager && window.MemoMarkerManager.markers) {
+                const markerInfo = window.MemoMarkerManager.markers.get(pnu);
+                if (markerInfo && markerInfo.marker) {
+                    markerInfo.marker.setMap(null);
+                    window.MemoMarkerManager.markers.delete(pnu);
+                    console.log('✅ 마커 제거 완료:', pnu);
                 }
-
-                // 2. LocalStorage에서도 삭제 (로컬 백업)
-                const savedData = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEY) || '[]');
-                const updatedData = savedData.filter(item => {
-                    return item.pnu !== pnu && item.parcelNumber !== jibun;
-                });
-                localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(updatedData));
-
-                // 3. 색상 정보 삭제
-                const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
-                delete parcelColors[pnu];
-                localStorage.setItem('parcelColors', JSON.stringify(parcelColors));
-
-                // 4. 마커 상태 삭제
-                const markerStates = JSON.parse(localStorage.getItem('markerStates') || '{}');
-                delete markerStates[pnu];
-                localStorage.setItem('markerStates', JSON.stringify(markerStates));
-
-                // 5. 지도에서 마커 제거
-                if (window.MemoMarkerManager && window.MemoMarkerManager.markers) {
-                    const markerInfo = window.MemoMarkerManager.markers.get(pnu);
-                    if (markerInfo && markerInfo.marker) {
-                        markerInfo.marker.setMap(null);
-                        window.MemoMarkerManager.markers.delete(pnu);
-                        console.log('✅ 마커 제거 완료:', pnu);
-                    }
-                }
-
-                // 6. clickParcels Map에서는 제거하지 않음 - 대신 투명 상태로 유지
-                // (재색칠이 가능하도록 폴리곤 정보는 보존)
-                console.log('✅ 필지 데이터는 투명 상태로 보존 (재색칠 가능):', pnu);
-
-                console.log(`✨ 필지 ${jibun}의 모든 데이터가 삭제되었습니다.`);
-            } else {
-                // 취소 시 색상 복원
-                parcelData.polygon.setOptions({
-                    fillColor: currentColor,
-                    fillOpacity: 0.5,
-                    strokeColor: currentColor,
-                    strokeOpacity: 0.7
-                });
-                parcelData.color = currentColor;
-                console.log('색상 제거가 취소되었습니다.');
-                return; // 함수 종료
             }
+
+            const jibun = parcel.properties.JIBUN || parcel.properties.jibun || pnu;
+            console.log(`✨ 필지 ${jibun}의 색상과 데이터가 완전 삭제되었습니다.`);
         }
     }
 }

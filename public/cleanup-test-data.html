@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>테스트 데이터 정리</title>
+</head>
+<body>
+    <h1>테스트 데이터 정리</h1>
+    <button onclick="cleanupTestData()">테스트 데이터 삭제</button>
+    <pre id="output"></pre>
+
+    <script>
+    function cleanupTestData() {
+        const output = document.getElementById('output');
+        let log = '';
+
+        // 모든 localStorage 키 확인
+        const keys = ['parcelData', 'clickParcelData', 'parcels', 'parcels_current_session'];
+
+        keys.forEach(key => {
+            try {
+                const data = localStorage.getItem(key);
+                if (data) {
+                    const parsed = JSON.parse(data);
+                    if (Array.isArray(parsed)) {
+                        // 테스트 데이터 제거
+                        const filtered = parsed.filter(item => {
+                            const pnu = item.pnu || item.id;
+                            return pnu !== 'SAVE_TEST_PNU_001';
+                        });
+
+                        if (filtered.length !== parsed.length) {
+                            localStorage.setItem(key, JSON.stringify(filtered));
+                            log += `${key}: 테스트 데이터 제거됨\n`;
+                        } else {
+                            log += `${key}: 테스트 데이터 없음\n`;
+                        }
+                    }
+                }
+            } catch (e) {
+                log += `${key}: 오류 ${e.message}\n`;
+            }
+        });
+
+        output.textContent = log;
+        console.log('테스트 데이터 정리 완료');
+    }
+    </script>
+</body>
+</html>

@@ -147,7 +147,7 @@ async function getParcelInfoViaProxyForClickMode(lat, lng) {
                         polygon: polygon,
                         data: parcelData,    // 'data' 키로 저장 (parcel.js와 호환)
                         parcel: parcelData,  // 'parcel' 키로도 저장 (mode-click-handler와 호환)
-                        color: currentColor || '#FF0000'
+                        color: 'transparent' // 초기값은 transparent (색상 없음)
                     });
                     console.log('✅ window.clickParcels에 저장:', pnu);
 
@@ -289,7 +289,7 @@ async function applyClickModeColor(parcelData, polygon) {
  * 🎨 클릭 모드 필지에 색상 적용
  */
 async function applyClickModeColorToParcel(parcel, color, polygon) {
-    const pnu = parcel.properties.PNU || parcel.properties.pnu;
+    const pnu = parcel.properties?.PNU || parcel.properties?.pnu || parcel.pnu;
 
     try {
         // 같은 색상 재클릭 시 삭제 (토글)
@@ -399,29 +399,65 @@ async function saveClickModeParcelData(parcelData) {
  */
 async function deleteClickModeParcel(pnu, polygon) {
     try {
-        // 폴리곤 제거
+        console.log(`🗑️ 클릭 모드 필지 삭제 시작: ${pnu}`);
+
+        // 1. 삭제 추적 시스템에 추가
+        if (window.addToDeletedParcels) {
+            window.addToDeletedParcels(pnu);
+            console.log('✅ 삭제 추적 시스템에 추가');
+        }
+
+        // 2. 폴리곤 제거
         if (polygon) {
             polygon.setMap(null);
+            console.log('✅ 폴리곤 지도에서 제거');
         }
+
+        // 3. 메모리 맵에서 제거
         clickModePolygons.delete(pnu);
         clickModeParcelData.delete(pnu);
 
-        // Supabase에서 삭제
-        if (window.SupabaseManager) {
-            await window.SupabaseManager.deleteParcel(pnu);
+        // window.clickParcels에서도 제거 (중요!)
+        if (window.clickParcels) {
+            window.clickParcels.delete(pnu);
+            console.log('✅ window.clickParcels에서 제거');
         }
 
-        // LocalStorage에서 삭제
-        const savedData = JSON.parse(localStorage.getItem('parcelData') || '[]');
-        const filteredData = savedData.filter(item => item.pnu !== pnu);
-        localStorage.setItem('parcelData', JSON.stringify(filteredData));
+        // 4. Supabase에서 삭제
+        if (window.SupabaseManager && window.SupabaseManager.deleteParcel) {
+            await window.SupabaseManager.deleteParcel(pnu);
+            console.log('✅ Supabase에서 삭제');
+        }
 
-        // 색상 정보 삭제
-        const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
-        delete parcelColors[pnu];
-        localStorage.setItem('parcelColors', JSON.stringify(parcelColors));
+        // 5. 모든 LocalStorage에서 완전 삭제 (utils.js 헬퍼 함수 사용)
+        if (window.removeParcelFromAllStorage) {
+            const removed = window.removeParcelFromAllStorage(pnu);
+            console.log(`✅ 총 ${removed}개 항목이 모든 localStorage에서 제거됨`);
+        }
 
-        console.log(`🗑️ 클릭 모드 필지 삭제: ${pnu}`);
+        // 6. 마커 제거
+        if (window.MemoMarkerManager && window.MemoMarkerManager.markers) {
+            const markerInfo = window.MemoMarkerManager.markers.get(pnu);
+            if (markerInfo && markerInfo.marker) {
+                markerInfo.marker.setMap(null);
+                window.MemoMarkerManager.markers.delete(pnu);
+                console.log('✅ 마커 제거');
+            }
+        }
+
+        // 7. UI 업데이트 (현재 선택된 필지라면)
+        if (window.currentSelectedPNU === pnu) {
+            // 폼 초기화
+            const fields = ['parcelNumber', 'ownerName', 'ownerAddress', 'ownerContact', 'memo'];
+            fields.forEach(fieldId => {
+                const field = document.getElementById(fieldId);
+                if (field) field.value = '';
+            });
+            window.currentSelectedPNU = null;
+            console.log('✅ UI 폼 초기화');
+        }
+
+        console.log(`✅ 클릭 모드 필지 완전 삭제 완료: ${pnu}`);
 
     } catch (error) {
         console.error('❌ 클릭 모드 필지 삭제 실패:', error);
@@ -454,8 +490,98 @@ async function handleClickModeLeftClick(lat, lng) {
     console.log('🎨 클릭 모드 왼쪽 클릭: 색칠 처리');
 
     try {
-        // 필지 정보 조회 및 색칠
-        await getParcelInfoForClickMode(lat, lng);
+        // 먼저 클릭한 위치에 이미 필지가 있는지 확인
+        const clickedPoint = new naver.maps.LatLng(lat, lng);
+        let existingPNU = null;
+        let existingPolygon = null;
+        let existingParcelData = null;
+
+        // window.clickParcels에서 먼저 확인
+        if (window.clickParcels && window.clickParcels.size > 0) {
+            for (const [pnu, data] of window.clickParcels) {
+                if (data && data.polygon) {
+                    const paths = data.polygon.getPaths();
+                    if (paths && paths.length > 0) {
+                        const path = paths.getAt(0);
+                        // 폴리곤 내부 클릭 확인
+                        if (window.isPointInPolygon && window.isPointInPolygon(lat, lng, path)) {
+                            existingPNU = pnu;
+                            existingPolygon = data.polygon;
+                            existingParcelData = data.parcel || data.data;
+                            console.log('✅ 기존 필지 발견 (clickParcels):', pnu);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // clickModePolygons에서도 확인
+        if (!existingPNU && clickModePolygons.size > 0) {
+            for (const [pnu, polygon] of clickModePolygons) {
+                if (polygon && polygon.getMap()) {
+                    const paths = polygon.getPaths();
+                    if (paths && paths.length > 0) {
+                        const path = paths.getAt(0);
+                        // 폴리곤 내부 클릭 확인
+                        if (window.isPointInPolygon && window.isPointInPolygon(lat, lng, path)) {
+                            existingPNU = pnu;
+                            existingPolygon = polygon;
+                            existingParcelData = clickModeParcelData.get(pnu);
+                            console.log('✅ 기존 필지 발견 (clickModePolygons):', pnu);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 기존 필지가 있으면 색상 토글 처리
+        if (existingPNU && existingPolygon && existingParcelData) {
+            const currentColor = getCurrentSelectedColor();
+            console.log('🎨 기존 필지에 색상 적용/토글:', existingPNU, '현재 색상:', currentColor);
+
+            // parcel.js의 applyColorToParcel 함수 호출 (토글 기능 포함)
+            if (window.applyColorToParcel && typeof window.applyColorToParcel === 'function') {
+                // applyColorToParcel이 기대하는 형식으로 데이터 구조 확인/변환
+                let parcelToPass = existingParcelData;
+
+                // properties 속성이 없으면 생성
+                if (!parcelToPass.properties) {
+                    parcelToPass = {
+                        properties: {
+                            PNU: existingPNU,
+                            pnu: existingPNU
+                        },
+                        geometry: existingParcelData.geometry || null,
+                        pnu: existingPNU,
+                        ...existingParcelData
+                    };
+                }
+
+                // PNU가 properties에 없으면 추가
+                if (!parcelToPass.properties.PNU && !parcelToPass.properties.pnu) {
+                    parcelToPass.properties.PNU = existingPNU;
+                    parcelToPass.properties.pnu = existingPNU;
+                }
+
+                console.log('📦 applyColorToParcel에 전달할 데이터:', {
+                    pnu: parcelToPass.properties?.PNU || parcelToPass.properties?.pnu,
+                    hasProperties: !!parcelToPass.properties,
+                    hasGeometry: !!parcelToPass.geometry
+                });
+
+                await window.applyColorToParcel(parcelToPass, currentColor);
+                console.log('✅ applyColorToParcel 호출 완료');
+            } else {
+                // 폴백: 직접 토글 처리
+                await applyClickModeColorToParcel(existingParcelData, currentColor, existingPolygon);
+            }
+        } else {
+            // 새로운 필지 조회 및 생성
+            console.log('🆕 새로운 필지 조회 시작');
+            await getParcelInfoForClickMode(lat, lng);
+        }
     } catch (error) {
         console.error('❌ 클릭 모드 색칠 실패:', error);
     }
@@ -569,6 +695,13 @@ async function loadSavedClickModeParcels() {
     try {
         console.error('🚨 [DEBUG] try 블록 진입');
         console.log('🔍 LocalStorage 접근 시도...');
+
+        // 삭제된 필지 목록 가져오기
+        const deletedParcels = window.getDeletedParcels ? window.getDeletedParcels() : [];
+        if (deletedParcels.length > 0) {
+            console.log(`🗑️ 삭제된 필지 ${deletedParcels.length}개는 복원하지 않음`);
+        }
+
         // LocalStorage에서 데이터 로드 (clickParcelData 우선, parcelData 대체)
         const clickParcels = JSON.parse(localStorage.getItem('clickParcelData') || '[]');
         const normalParcels = JSON.parse(localStorage.getItem('parcelData') || '[]');
@@ -580,6 +713,13 @@ async function loadSavedClickModeParcels() {
         // clickParcelData 먼저 처리
         for (const parcel of clickParcels) {
             const pnu = parcel.pnu || parcel.id;
+
+            // 삭제된 필지는 건너뛰기
+            if (deletedParcels.includes(pnu)) {
+                console.log(`⏩ 삭제된 필지 복원 제외: ${pnu}`);
+                continue;
+            }
+
             if (pnu && !pnuSet.has(pnu)) {
                 pnuSet.add(pnu);
 
@@ -616,6 +756,13 @@ async function loadSavedClickModeParcels() {
         // parcelData 추가 (중복 제외)
         for (const parcel of normalParcels) {
             const pnu = parcel.pnu || parcel.id;
+
+            // 삭제된 필지는 건너뛰기
+            if (deletedParcels.includes(pnu)) {
+                console.log(`⏩ 삭제된 필지 복원 제외 (parcelData): ${pnu}`);
+                continue;
+            }
+
             if (pnu && !pnuSet.has(pnu)) {
                 pnuSet.add(pnu);
                 savedParcels.push(parcel);

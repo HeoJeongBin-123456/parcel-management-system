@@ -222,6 +222,8 @@ class AppInitializer {
             const { data, error } = await window.supabase
                 .from('parcels')
                 .select('*')
+                .neq('color', 'transparent')  // transparent 색상 제외
+                .neq('color', null)            // null 색상 제외
                 .order('created_at', { ascending: false })
                 .limit(100);
 
@@ -238,6 +240,13 @@ class AppInitializer {
     // LocalStorage에서 데이터 로드
     async loadFromLocalStorage() {
         console.log('🔍 loadFromLocalStorage 시작');
+
+        // 삭제된 필지 목록 가져오기
+        const deletedParcels = window.getDeletedParcels ? window.getDeletedParcels() : [];
+        if (deletedParcels.length > 0) {
+            console.log(`🗑️ 삭제된 필지 ${deletedParcels.length}개 필터링 예정`);
+        }
+
         const sources = ['clickParcelData', 'parcelData', 'parcels', 'parcels_current_session'];
         const allParcels = [];
 
@@ -257,12 +266,19 @@ class AppInitializer {
             }
         }
 
-        // 중복 제거 (PNU 기준) 및 좌표 추출
+        // 중복 제거 (PNU 기준) 및 삭제된 필지 필터링
         const uniqueParcels = [];
         const pnuSet = new Set();
 
         for (const parcel of allParcels) {
             const pnu = parcel.pnu || parcel.id;
+
+            // 삭제된 필지는 건너뛰기
+            if (deletedParcels.includes(pnu)) {
+                console.log(`⏩ 삭제된 필지 건너뛰기: ${pnu}`);
+                continue;
+            }
+
             if (pnu && !pnuSet.has(pnu)) {
                 pnuSet.add(pnu);
 

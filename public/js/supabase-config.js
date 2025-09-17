@@ -469,42 +469,7 @@ class SupabaseManager {
         }
     }
 
-    // 필지 삭제 (모드별 구분)
-    async deleteParcel(pnu, parcelType = null) {
-        if (!this.isConnected) {
-            // 로컬 저장소에서 삭제
-            if (!parcelType || parcelType === 'click') {
-                const clickData = window.getClickParcelData();
-                const updatedClickData = clickData.filter(p => p.pnu !== pnu && p.id !== pnu);
-                window.saveClickParcelData(updatedClickData);
-            }
-            if (!parcelType || parcelType === 'search') {
-                const searchData = window.getSearchParcelData();
-                const updatedSearchData = searchData.filter(p => p.pnu !== pnu && p.id !== pnu);
-                window.saveSearchParcelData(updatedSearchData);
-            }
-            console.log('💾 필지 로컬 삭제 완료:', pnu);
-            return true;
-        }
-
-        try {
-            let query = this.supabase.from('parcels').delete();
-
-            if (parcelType) {
-                query = query.eq('parcel_type', parcelType);
-            }
-
-            const { error } = await query.eq('pnu', pnu);
-
-            if (error) throw error;
-
-            console.log('✅ 필지 Supabase 삭제 완료:', pnu, parcelType ? `(${parcelType})` : '(전체)');
-            return true;
-        } catch (error) {
-            console.error('❌ 필지 Supabase 삭제 실패:', error);
-            return false;
-        }
-    }
+    // 필지 삭제 메서드는 아래 1121번 라인에 통합됨
 
     async getConnectionStatus() {
         return {
