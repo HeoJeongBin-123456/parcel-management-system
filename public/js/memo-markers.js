@@ -15,11 +15,7 @@ class MemoMarkerManager {
         const ownerAddress = parcelData.ownerAddress || parcelData.owner_address || '';
         const ownerContact = parcelData.ownerContact || parcelData.owner_contact || parcelData.contact || '';
 
-        // 실제 정보가 있는지 확인 (빈 문자열과 플레이스홀더 제외)
-        const hasRealInfo = !!(
-            (parcelNumber && parcelNumber.trim() &&
-             parcelNumber.trim() !== '예: 123-4' &&
-             parcelNumber.trim() !== '') ||
+        const hasUserSuppliedInfo = !!(
             (memo && memo.trim() &&
              memo.trim() !== '(메모 없음)' &&
              memo.trim() !== '추가 메모...' &&
@@ -35,14 +31,17 @@ class MemoMarkerManager {
              ownerContact.trim() !== '')
         );
 
+        // 지번만 있는 경우에는 사용자 입력이 없다고 간주
+        const hasMeaningfulInfo = hasUserSuppliedInfo;
+
         // 검색 필지 여부는 로깅용으로만 사용 (조건 동일)
         const isSearchParcel = parcelData.pnu && window.searchParcels && window.searchParcels.has(parcelData.pnu);
 
         console.log(isSearchParcel ? '🔍 검색 필지 마커 조건 확인:' : '📍 일반 필지 마커 조건 확인:', {
             pnu: parcelData.pnu,
             parcelName: parcelData.parcelName || parcelData.parcel_name,
-            parcelNumber: parcelData.parcelNumber?.trim() || '(없음)',
-            hasRealInfo: hasRealInfo,
+            parcelNumber: parcelNumber.trim() || '(없음)',
+            hasRealInfo: hasMeaningfulInfo,
             memo: memo.trim() || '(없음)',
             ownerName: ownerName.trim() || '(없음)',
             ownerAddress: ownerAddress.trim() || '(없음)',
@@ -50,7 +49,7 @@ class MemoMarkerManager {
         });
 
         // 실제 정보가 있을 때만 마커 표시
-        return hasRealInfo;
+        return hasMeaningfulInfo;
     }
 
     // 초기화 (지도 없이도 가능)
@@ -654,6 +653,16 @@ class MemoMarkerManager {
 
         // PNU 설정
         window.currentSelectedPNU = parcelData.pnu || parcelData.id;
+
+        const baseGeometry = parcelData.geometry || parcelData.data?.geometry;
+        window.selectedParcel = {
+            ...parcelData,
+            pnu: window.currentSelectedPNU,
+            id: window.currentSelectedPNU,
+            geometry: baseGeometry,
+            color: parcelData.color || (window.currentMode === 'search' ? '#9370DB' : parcelData.color)
+        };
+        window.currentSelectedParcel = window.selectedParcel;
 
         console.log('📍 메모 마커 클릭:', parcelData.parcelNumber);
 

@@ -1,4 +1,4 @@
-// 고급 백업 관리자 - 일일 Supabase + 월간 Google Drive 백업
+// 고급 백업 관리자 - 일일 Supabase + 월간 Google Sheets 백업
 class AdvancedBackupManager {
     constructor() {
         this.lastDailyBackup = null;
@@ -249,7 +249,7 @@ class AdvancedBackupManager {
         }
     }
 
-    // 월간 Google Drive 백업 실행
+    // 월간 백업 실행 (구글 드라이브 비활성화)
     async performMonthlyBackup() {
         if (this.isBackupRunning) {
             console.log('⚠️ 백업이 이미 진행 중입니다');
@@ -257,7 +257,7 @@ class AdvancedBackupManager {
         }
 
         this.isBackupRunning = true;
-        console.log('🏃‍♂️ 월간 Google Drive 백업 시작...');
+        console.log('🏃‍♂️ 월간 Google Sheets 백업 시작...');
 
         const backupId = `monthly_${Date.now()}`;
         const startTime = new Date();
@@ -285,54 +285,53 @@ class AdvancedBackupManager {
                 };
             }
 
-            // 2. Excel/CSV 형태로 변환
-            const exportData = await this.convertToExportFormat(data);
-            
-            // 3. 스크린샷 캡처 (선택적)
-            let screenshot = null;
-            try {
-                screenshot = await this.captureMapScreenshot();
-            } catch (error) {
-                console.warn('스크린샷 캡처 실패:', error);
-            }
+            console.log(`📊 백업 대상 데이터: ${data.length}개 필지`);
 
-            // 4. Google Drive 업로드 (선택적)
-            let driveResult = null;
-            try {
-                driveResult = await this.uploadToGoogleDrive(exportData, screenshot, backupId);
-            } catch (error) {
-                console.warn('⚠️ Google Drive 업로드 실패:', error);
-                driveResult = { success: false, reason: error.message };
-            }
+            // 2. Google Sheets 백업 실행
+            const sheetsResult = await this.uploadToGoogleSheets(data, backupId);
 
-            // 5. 백업 메타데이터 생성
+            // 3. 로컬 백업도 병행 수행 (비상 대비)
+            const localBackupResult = await this.saveToLocalStorage(data, backupId);
+
+            // 4. 백업 메타데이터 생성
             const metadata = {
                 id: backupId,
                 type: 'monthly',
                 timestamp: startTime.toISOString(),
                 dataCount: data.length,
-                exportSize: exportData.length,
-                driveFileId: driveResult?.success ? driveResult.fileId : null,
-                driveBackupStatus: driveResult?.success ? 'success' : 'failed',
-                driveUrl: driveResult.url,
-                status: 'completed',
-                duration: Date.now() - startTime.getTime()
+                sheetsBackupStatus: sheetsResult?.success ? 'success' : 'failed',
+                sheetsUrl: sheetsResult?.spreadsheetUrl || null,
+                sheetName: sheetsResult?.sheetName || null,
+                localBackupStatus: localBackupResult ? 'success' : 'failed',
+                status: sheetsResult?.success ? 'completed' : 'partially_failed',
+                duration: Date.now() - startTime.getTime(),
+                error: sheetsResult?.success ? null : sheetsResult?.error
             };
 
-            // 6. 백업 히스토리에 추가
+            // 5. 백업 히스토리에 추가
             this.addToBackupHistory(metadata);
 
-            // 7. 설정 업데이트
+            // 6. 설정 업데이트
             this.lastMonthlyBackup = startTime;
             await this.saveBackupSettings();
 
-            console.log(`✅ 월간 백업 완료: Google Drive 업로드 성공`);
-
-            return {
-                success: true,
-                metadata: metadata,
-                message: `월간 백업 완료 (Google Drive)`
-            };
+            if (sheetsResult?.success) {
+                console.log(`✅ 월간 백업 완료: Google Sheets (🔗 ${sheetsResult.spreadsheetUrl})`);
+                return {
+                    success: true,
+                    metadata: metadata,
+                    message: `월간 백업 완료 (Google Sheets)`,
+                    spreadsheetUrl: sheetsResult.spreadsheetUrl
+                };
+            } else {
+                console.log(`⚠️ 월간 백업 부분 실패: Google Sheets 업로드 실패, 로컬 백업만 성공`);
+                return {
+                    success: false,
+                    metadata: metadata,
+                    message: `Google Sheets 백업 실패 (로컬 백업만 성공)`,
+                    error: sheetsResult?.error
+                };
+            }
 
         } catch (error) {
             console.error('❌ 월간 백업 실패:', error);
@@ -607,19 +606,302 @@ class AdvancedBackupManager {
         }
     }
 
-    // Google Drive 업로드
-    async uploadToGoogleDrive(csvData, screenshot, backupId) {
-        console.log('☁️ Google Drive 업로드 중...');
+    // Google Sheets 업로드
+    async uploadToGoogleSheets(data, backupId) {
+        console.log('📋 Google Sheets 백업 시작...');
 
-        // Google API 인증 확인
-        if (!window.gapi || !window.GoogleAuth) {
-            console.warn('⚠️ Google API가 로드되지 않음 - Google Drive 백업 건너뜀');
-            return { success: false, reason: 'Google API 미로드' };
+        try {
+            // Google 인증 확인
+            if (!window.GoogleAuth || !window.GoogleAuth.isAuthenticated()) {
+                throw new Error('Google 인증이 필요합니다');
+            }
+
+            // 스프레드시트 가져오기 또는 생성
+            const spreadsheetId = await window.GoogleAuth.getOrCreateSpreadsheet();
+            if (!spreadsheetId) {
+                throw new Error('스프레드시트 생성 실패');
+            }
+
+            // 월별 시트명 생성
+            const now = new Date();
+            const sheetName = `${now.getFullYear()}년_${String(now.getMonth() + 1).padStart(2, '0')}월`;
+
+            console.log(`📊 시트 생성 중: ${sheetName}`);
+
+            // 새 시트 생성
+            await this.createMonthlySheet(spreadsheetId, sheetName);
+
+            // 데이터 변환
+            const formattedData = this.formatDataForSheets(data);
+
+            // 데이터 삽입
+            const appendResult = await window.GoogleAuth.appendToSheet(spreadsheetId, formattedData, sheetName);
+
+            if (!appendResult) {
+                throw new Error('데이터 삽입 실패');
+            }
+
+            // 시트 포맷팅 적용
+            await this.formatMonthlySheet(spreadsheetId, sheetName);
+
+            // 오래된 시트 정리 (12개월 이상)
+            await this.cleanupOldSheets(spreadsheetId);
+
+            const spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}`;
+
+            console.log(`✅ Google Sheets 백업 완료: ${spreadsheetUrl}`);
+
+            return {
+                success: true,
+                spreadsheetId: spreadsheetId,
+                spreadsheetUrl: spreadsheetUrl,
+                sheetName: sheetName,
+                dataCount: data.length
+            };
+
+        } catch (error) {
+            console.error('❌ Google Sheets 백업 실패:', error);
+            return {
+                success: false,
+                error: error.message || error
+            };
+        }
+    }
+
+    // 월별 시트 생성
+    async createMonthlySheet(spreadsheetId, sheetName) {
+        try {
+            const requests = [{
+                addSheet: {
+                    properties: {
+                        title: sheetName,
+                        gridProperties: {
+                            rowCount: 1000,
+                            columnCount: 8
+                        }
+                    }
+                }
+            }];
+
+            const result = await window.GoogleAuth.callSheetsAPI(
+                'POST',
+                `/spreadsheets/${spreadsheetId}:batchUpdate`,
+                { requests }
+            );
+
+            console.log(`✅ 시트 '${sheetName}' 생성 완료`);
+            return result;
+
+        } catch (error) {
+            // 시트가 이미 존재하는 경우 무시
+            if (error.message && error.message.includes('already exists')) {
+                console.log(`시트 '${sheetName}'이 이미 존재합니다`);
+                return;
+            }
+            throw error;
+        }
+    }
+
+    // 데이터 포맷팅 (Google Sheets용)
+    formatDataForSheets(data) {
+        // 헤더 추가
+        const headers = ['지번', '소유자이름', '소유자주소', '연락처', '메모', '색상', '백업일시'];
+
+        const formattedData = [headers];
+
+        // 데이터 행 추가
+        data.forEach(item => {
+            const row = [
+                item.지번 || '',
+                item.소유자이름 || '',
+                item.소유자주소 || '',
+                item.연락처 || '',
+                item.메모 || '',
+                item.color || '미지정',
+                new Date().toISOString().split('T')[0] // 백업 날짜
+            ];
+            formattedData.push(row);
+        });
+
+        return formattedData;
+    }
+
+    // 시트 포맷팅 적용
+    async formatMonthlySheet(spreadsheetId, sheetName) {
+        try {
+            // 시트 ID 가져오기
+            const sheetId = await this.getSheetId(spreadsheetId, sheetName);
+            if (sheetId === null) return;
+
+            const requests = [
+                // 헤더 행 포맷팅
+                {
+                    repeatCell: {
+                        range: {
+                            sheetId: sheetId,
+                            startRowIndex: 0,
+                            endRowIndex: 1
+                        },
+                        cell: {
+                            userEnteredFormat: {
+                                backgroundColor: { red: 0.02, green: 0.78, blue: 0.35 }, // 초록색
+                                textFormat: {
+                                    foregroundColor: { red: 1, green: 1, blue: 1 },
+                                    bold: true
+                                },
+                                horizontalAlignment: 'CENTER'
+                            }
+                        },
+                        fields: 'userEnteredFormat'
+                    }
+                },
+                // 열 너비 자동 조정
+                {
+                    autoResizeDimensions: {
+                        dimensions: {
+                            sheetId: sheetId,
+                            dimension: 'COLUMNS',
+                            startIndex: 0,
+                            endIndex: 7
+                        }
+                    }
+                }
+            ];
+
+            await window.GoogleAuth.callSheetsAPI(
+                'POST',
+                `/spreadsheets/${spreadsheetId}:batchUpdate`,
+                { requests }
+            );
+
+            console.log(`✅ 시트 '${sheetName}' 포맷팅 완료`);
+
+        } catch (error) {
+            console.warn('시트 포맷팅 실패:', error);
+        }
+    }
+
+    // 시트 ID 가져오기
+    async getSheetId(spreadsheetId, sheetName) {
+        try {
+            const response = await window.GoogleAuth.callSheetsAPI(
+                'GET',
+                `/spreadsheets/${spreadsheetId}`,
+                null
+            );
+
+            if (response && response.sheets) {
+                const sheet = response.sheets.find(s => s.properties.title === sheetName);
+                return sheet ? sheet.properties.sheetId : null;
+            }
+
+            return null;
+        } catch (error) {
+            console.error('시트 ID 가져오기 실패:', error);
+            return null;
+        }
+    }
+
+    // 오래된 시트 정리 (12개월 이상 보존)
+    async cleanupOldSheets(spreadsheetId) {
+        try {
+            const response = await window.GoogleAuth.callSheetsAPI(
+                'GET',
+                `/spreadsheets/${spreadsheetId}`,
+                null
+            );
+
+            if (!response || !response.sheets) return;
+
+            // 날짜 형식의 시트만 필터링
+            const monthlySheets = response.sheets
+                .filter(sheet => {
+                    const title = sheet.properties.title;
+                    return /\d{4}년_\d{2}월/.test(title) && title !== '필지정보';
+                })
+                .sort((a, b) => {
+                    // 날짜순으로 정렬
+                    const dateA = this.parseSheetDate(a.properties.title);
+                    const dateB = this.parseSheetDate(b.properties.title);
+                    return dateB - dateA; // 최신순
+                });
+
+            // 12개월 이상 오래된 시트 삭제
+            if (monthlySheets.length > 12) {
+                const sheetsToDelete = monthlySheets.slice(12);
+                const deleteRequests = sheetsToDelete.map(sheet => ({
+                    deleteSheet: {
+                        sheetId: sheet.properties.sheetId
+                    }
+                }));
+
+                await window.GoogleAuth.callSheetsAPI(
+                    'POST',
+                    `/spreadsheets/${spreadsheetId}:batchUpdate`,
+                    { requests: deleteRequests }
+                );
+
+                console.log(`🗑️ 오래된 시트 ${sheetsToDelete.length}개 삭제 완료`);
+            }
+
+        } catch (error) {
+            console.warn('오래된 시트 정리 실패:', error);
+        }
+    }
+
+    // 시트명에서 날짜 파싱
+    parseSheetDate(sheetName) {
+        const match = sheetName.match(/(\d{4})년_(\d{2})월/);
+        if (match) {
+            const year = parseInt(match[1]);
+            const month = parseInt(match[2]) - 1; // JavaScript에서는 0부터 시작
+            return new Date(year, month);
+        }
+        return new Date(0); // 파싱 실패시 가장 오래된 날짜
+    }
+
+    // 로컬 저장소에 백업 저장
+    async saveToLocalStorage(exportData, backupId) {
+        try {
+            const backupKey = `monthly_backup_${backupId}`;
+            const backupData = {
+                id: backupId,
+                timestamp: new Date().toISOString(),
+                data: exportData
+            };
+
+            localStorage.setItem(backupKey, JSON.stringify(backupData));
+
+            // 오래된 월간 백업 정리 (최대 3개만 유지)
+            this.cleanupOldMonthlyBackups();
+
+            console.log('✅ 월간 백업을 로컬 저장소에 저장했습니다.');
+            return true;
+        } catch (error) {
+            console.error('❌ 로컬 저장소 백업 실패:', error);
+            return false;
+        }
+    }
+
+    // 오래된 월간 백업 정리
+    cleanupOldMonthlyBackups() {
+        const monthlyBackupKeys = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('monthly_backup_')) {
+                monthlyBackupKeys.push(key);
+            }
         }
 
-        if (!window.GoogleAuth.isAuthenticated()) {
-            console.warn('⚠️ Google 인증이 필요합니다 - Google Drive 백업 건너뜀');
-            return { success: false, reason: 'Google 인증 필요' };
+        // 날짜순으로 정렬
+        monthlyBackupKeys.sort().reverse();
+
+        // 3개 초과시 오래된 백업 삭제
+        if (monthlyBackupKeys.length > 3) {
+            for (let i = 3; i < monthlyBackupKeys.length; i++) {
+                localStorage.removeItem(monthlyBackupKeys[i]);
+                console.log(`🗑️ 오래된 월간 백업 삭제: ${monthlyBackupKeys[i]}`);
+            }
         }
 
         try {

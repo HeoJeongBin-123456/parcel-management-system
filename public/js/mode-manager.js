@@ -268,6 +268,13 @@ class ModeManager {
             activeContainer.classList.add('active');
         }
 
+        if (window.restoreMapViewForMode) {
+            const activeMap = window.getMapByMode ? window.getMapByMode(activeMode) : null;
+            if (activeMap) {
+                window.restoreMapViewForMode(activeMode, activeMap);
+            }
+        }
+
         console.log(`🎯 지도 전환: ${activeMode} 모드 활성화`);
     }
 
@@ -349,6 +356,9 @@ class ModeManager {
 
         // 모드별 지도 커서 설정
         this.updateMapCursors(mode);
+
+        // 색상 패널 표시 상태 업데이트
+        this.updateColorPanel(mode);
     }
 
     /**
@@ -382,6 +392,34 @@ class ModeManager {
                 }
             }
         });
+    }
+
+    /**
+     * 🎨 색상 패널 표시 상태 업데이트
+     */
+    updateColorPanel(mode) {
+        const colorContent = document.getElementById('colorPanelContent');
+        const colorPlaceholder = document.getElementById('colorPanelPlaceholder');
+
+        if (!colorContent && !colorPlaceholder) {
+            return;
+        }
+
+        if (mode === 'click') {
+            if (colorContent) {
+                colorContent.style.removeProperty('display');
+            }
+            if (colorPlaceholder) {
+                colorPlaceholder.style.display = 'none';
+            }
+        } else {
+            if (colorContent) {
+                colorContent.style.display = 'none';
+            }
+            if (colorPlaceholder) {
+                colorPlaceholder.style.display = 'flex';
+            }
+        }
     }
 
     /**

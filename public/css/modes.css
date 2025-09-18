@@ -62,19 +62,14 @@ body.mode-search .map-instance {
     cursor: default !important;
 }
 
-/* 검색 모드에서 사이드바 숨기기 */
+/* 검색 모드에서도 사이드바 유지 */
 body.mode-search .sidebar {
-    display: none;
+    display: flex;
 }
 
-/* 검색 모드에서 검색 결과창 표시 - 사용자 요청으로 제거 */
-/* body.mode-search .search-results-container {
-    display: block !important;
-} */
-
-/* 검색 모드에서 지도가 전체 영역 사용 */
+/* 검색 모드에서도 기본 레이아웃 유지 */
 body.mode-search .map-container {
-    width: 100%;
+    flex: 1;
 }
 
 /* 손 모드 */
@@ -334,14 +329,7 @@ body.mode-hand #pano * {
     color: white;
 }
 
-.mode-button[data-mode="click"]::before {
-    content: "🎯 ";
-}
-
-
-.mode-button[data-mode="hand"]::before {
-    content: "✋ ";
-}
+/* 버튼 텍스트에 포함된 이모지를 그대로 사용한다. */
 
 /* ============= 모드 인디케이터 ============= */
 

@@ -24,6 +24,91 @@ const mapLayers = {
     }
 };
 
+const MAP_POSITION_KEY = 'mapPosition';
+const MODE_POSITION_PREFIX = 'mapPosition_';
+let mapPositionSaveTimer = null;
+
+function saveMapViewState(mode, mapInstance) {
+    if (!mapInstance) return;
+
+    const center = mapInstance.getCenter();
+    if (!center) return;
+
+    const position = {
+        mode,
+        lat: center.lat(),
+        lng: center.lng(),
+        zoom: mapInstance.getZoom()
+    };
+
+    try {
+        localStorage.setItem(MAP_POSITION_KEY, JSON.stringify(position));
+        if (mode) {
+            localStorage.setItem(`${MODE_POSITION_PREFIX}${mode}`, JSON.stringify(position));
+        }
+    } catch (error) {
+        console.warn('⚠️ 지도 위치 로컬 저장 실패:', error);
+    }
+
+    if (window.SupabaseManager && window.SupabaseManager.isConnected) {
+        if (mapPositionSaveTimer) {
+            clearTimeout(mapPositionSaveTimer);
+        }
+        mapPositionSaveTimer = setTimeout(() => {
+            window.SupabaseManager.saveMapPosition(position.lat, position.lng, position.zoom)
+                .then(() => console.log('🗺️ 지도 위치 클라우드 저장 완료:', position))
+                .catch(error => console.warn('⚠️ 지도 위치 클라우드 저장 실패:', error));
+        }, 600);
+    }
+}
+
+function attachMapViewPersistence(mapInstance, mode) {
+    if (!mapInstance || mapInstance.__hasViewPersistence) return;
+
+    naver.maps.Event.addListener(mapInstance, 'idle', () => saveMapViewState(mode, mapInstance));
+    mapInstance.__hasViewPersistence = true;
+}
+
+function restoreMapViewForMode(mode, mapInstance) {
+    if (!mapInstance) return;
+
+    let stored = null;
+
+    try {
+        const modeSpecific = localStorage.getItem(`${MODE_POSITION_PREFIX}${mode}`);
+        if (modeSpecific) {
+            stored = JSON.parse(modeSpecific);
+        }
+    } catch (error) {
+        console.warn('⚠️ 모드별 지도 위치 파싱 실패:', error);
+    }
+
+    if (!stored) {
+        try {
+            const generic = localStorage.getItem(MAP_POSITION_KEY);
+            if (generic) {
+                stored = JSON.parse(generic);
+            }
+        } catch (error) {
+            console.warn('⚠️ 지도 위치 파싱 실패:', error);
+        }
+    }
+
+    if (stored && typeof stored.lat === 'number' && typeof stored.lng === 'number') {
+        const currentCenter = mapInstance.getCenter();
+        const currentZoom = mapInstance.getZoom();
+        const targetCenter = new naver.maps.LatLng(stored.lat, stored.lng);
+
+        if (!currentCenter || currentCenter.lat() !== stored.lat || currentCenter.lng() !== stored.lng) {
+            mapInstance.setCenter(targetCenter);
+        }
+
+        if (stored.zoom && currentZoom !== stored.zoom) {
+            mapInstance.setZoom(stored.zoom);
+        }
+    }
+}
+
 // 공통 지도 옵션 생성
 async function createMapOptions() {
     // 저장된 위치 정보 불러오기
@@ -96,6 +181,9 @@ async function initClickModeMap() {
 
         console.log('🎯 클릭 모드 지도 초기화 완료');
 
+        attachMapViewPersistence(window.mapClick, 'click');
+        saveMapViewState('click', window.mapClick);
+
         // 🔧 클릭 모드 이벤트 핸들러 설정 (지연 실행)
         setTimeout(() => {
             if (window.setupClickModeEventListeners) {
@@ -136,6 +224,9 @@ async function initSearchModeMap() {
 
         console.log('🔍 검색 모드 지도 초기화 완료');
 
+        attachMapViewPersistence(window.mapSearch, 'search');
+        saveMapViewState('search', window.mapSearch);
+
         // 🔧 검색 모드 이벤트 핸들러 설정 (지연 실행)
         setTimeout(() => {
             if (window.setupSearchModeEventListeners) {
@@ -168,6 +259,9 @@ async function initHandModeMap() {
         mapLayers.hand.street = new naver.maps.StreetLayer();
 
         console.log('✋ 손 모드 지도 초기화 완료');
+
+        attachMapViewPersistence(window.mapHand, 'hand');
+        saveMapViewState('hand', window.mapHand);
 
         // 손 모드는 폴리곤 없이 순수 탐색용
         return window.mapHand;
@@ -585,6 +679,8 @@ window.setMapTypeForMode = setMapTypeForMode;
 window.updateWindowMapForMode = updateWindowMapForMode;
 window.openPanorama = openPanorama;
 window.closePanorama = closePanorama;
+window.saveMapViewState = saveMapViewState;
+window.restoreMapViewForMode = restoreMapViewForMode;
 
 // 초기화 완료 후 자동 실행하지 않음 (mode-manager에서 호출)
 console.log('🗺️ map-instances.js 로드 완료');

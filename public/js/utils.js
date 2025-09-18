@@ -667,7 +667,7 @@ function isParcelDeleted(pnu) {
  * 모든 localStorage 키에서 필지 완전 삭제
  */
 function removeParcelFromAllStorage(pnu) {
-    const storageKeys = ['parcelData', 'clickParcelData', 'parcels', 'parcels_current_session'];
+    const storageKeys = ['parcelData', 'clickParcelData', 'parcels', 'parcels_current_session', 'parcelData_backup'];
     let totalRemoved = 0;
 
     for (const key of storageKeys) {

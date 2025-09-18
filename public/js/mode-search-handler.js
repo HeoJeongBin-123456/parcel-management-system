@@ -1,6 +1,6 @@
 /**
  * 검색 모드 전용 이벤트 핸들러
- * 검색 결과 표시만 가능, 지도 클릭으로 필지 추가 불가
+ * 검색 결과 표시 및 편집을 지원하며, 지도 클릭으로 신규 추가는 제한
  */
 
 // 🔍 검색 모드 전용 폴리곤 저장소
@@ -130,10 +130,10 @@ async function drawSearchModeParcelPolygon(parcelData) {
             strokeOpacity: 0.8
         });
 
-        // 클릭 이벤트 (정보 표시만, 색상 변경 불가)
+        // 클릭 이벤트 (정보 편집 허용)
         naver.maps.Event.addListener(polygon, 'click', async function(e) {
             e.cancelBubble = true;
-            displaySearchParcelInfoOnly(parcelData);
+            await displaySearchParcelInfoOnly(parcelData);
         });
 
         // 저장
@@ -150,9 +150,9 @@ async function drawSearchModeParcelPolygon(parcelData) {
 }
 
 /**
- * 📝 검색 필지 정보만 표시 (색상 변경 불가)
+ * 📝 검색 필지 정보 표시 및 편집 준비
  */
-function displaySearchParcelInfoOnly(parcelData) {
+async function displaySearchParcelInfoOnly(parcelData) {
     const pnu = parcelData.properties?.PNU || parcelData.properties?.pnu || parcelData.pnu;
     const jibun = formatJibun(parcelData.properties);
 
@@ -162,11 +162,75 @@ function displaySearchParcelInfoOnly(parcelData) {
     document.getElementById('parcelNumber').value = jibun;
     window.currentSelectedPNU = pnu;
 
-    // 저장된 정보 로드
-    loadSavedParcelInfo(pnu);
+    const baseGeometry = parcelData.geometry || parcelData.data?.geometry;
+    let lat = parcelData.lat || parcelData.data?.lat || null;
+    let lng = parcelData.lng || parcelData.data?.lng || null;
 
-    // 검색 필지임을 알리는 메시지 (선택사항)
-    console.log('🔍 검색 필지: 색상 변경 불가, 정보 확인만 가능');
+    if ((!lat || !lng) && baseGeometry?.coordinates?.length) {
+        const coordinateSet = baseGeometry.coordinates[0];
+        if (typeof calculatePolygonCenter === 'function') {
+            const [centerLng, centerLat] = calculatePolygonCenter(coordinateSet);
+            lat = centerLat;
+            lng = centerLng;
+        } else {
+            const total = coordinateSet.reduce((acc, coord) => {
+                if (Array.isArray(coord) && coord.length >= 2) {
+                    acc.lng += coord[0];
+                    acc.lat += coord[1];
+                    acc.count += 1;
+                }
+                return acc;
+            }, { lat: 0, lng: 0, count: 0 });
+            if (total.count > 0) {
+                lng = total.lng / total.count;
+                lat = total.lat / total.count;
+            }
+        }
+    }
+
+    const savedInfo = await loadSavedParcelInfo(pnu);
+
+    const ownerNameInput = document.getElementById('ownerName');
+    const ownerAddressInput = document.getElementById('ownerAddress');
+    const ownerContactInput = document.getElementById('ownerContact');
+    const memoInput = document.getElementById('memo');
+
+    if (ownerNameInput && !ownerNameInput.value) {
+        ownerNameInput.value = parcelData.ownerName || parcelData.savedInfo?.ownerName || '';
+    }
+    if (ownerAddressInput && !ownerAddressInput.value) {
+        ownerAddressInput.value = parcelData.ownerAddress || parcelData.savedInfo?.ownerAddress || '';
+    }
+    if (ownerContactInput && !ownerContactInput.value) {
+        ownerContactInput.value = parcelData.ownerContact || parcelData.savedInfo?.ownerContact || parcelData.contact || '';
+    }
+    if (memoInput && !memoInput.value) {
+        memoInput.value = parcelData.memo || parcelData.savedInfo?.memo || '';
+    }
+
+    window.selectedParcel = {
+        pnu,
+        id: pnu,
+        parcelNumber: document.getElementById('parcelNumber').value || jibun || '',
+        ownerName: ownerNameInput?.value || savedInfo?.ownerName || parcelData.ownerName || '',
+        ownerAddress: ownerAddressInput?.value || savedInfo?.ownerAddress || parcelData.ownerAddress || '',
+        ownerContact: ownerContactInput?.value || savedInfo?.ownerContact || savedInfo?.contact || parcelData.ownerContact || '',
+        memo: memoInput?.value || savedInfo?.memo || parcelData.memo || '',
+        geometry: baseGeometry,
+        lat,
+        lng,
+        color: parcelData.color || SEARCH_MODE_COLOR,
+        source: parcelData.source || 'search',
+        mode: 'search'
+    };
+
+    window.currentSelectedParcel = window.selectedParcel;
+
+    console.log('✏️ 검색 모드 편집 준비 완료:', {
+        pnu: window.selectedParcel.pnu,
+        ownerName: window.selectedParcel.ownerName,
+        ownerContact: window.selectedParcel.ownerContact
+    });
 }
 
 /**
@@ -393,19 +457,22 @@ async function loadSavedParcelInfo(pnu) {
             if (savedInfo.ownerAddress) {
                 document.getElementById('ownerAddress').value = savedInfo.ownerAddress;
             }
-            if (savedInfo.contact) {
-                document.getElementById('contact').value = savedInfo.contact;
+            if (savedInfo.contact || savedInfo.ownerContact) {
+                document.getElementById('ownerContact').value = savedInfo.ownerContact || savedInfo.contact;
             }
             if (savedInfo.memo) {
                 document.getElementById('memo').value = savedInfo.memo;
             }
 
             console.log(`📋 저장된 필지 정보 로드: ${pnu}`);
+            return savedInfo;
         }
 
     } catch (error) {
         console.error('❌ 저장된 필지 정보 로드 실패:', error);
     }
+
+    return null;
 }
 
 /**

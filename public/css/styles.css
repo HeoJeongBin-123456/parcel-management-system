@@ -26,22 +26,32 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 2rem;
+    gap: 1rem;
+    flex-wrap: nowrap;
 }
 
 .header-left {
     display: flex;
     align-items: center;
-    gap: 1rem;
-    flex-shrink: 0;
+    gap: 0.75rem;
+    flex: 1 1 auto;
+    flex-wrap: nowrap;
+    min-width: 0;
+}
+
+.header-left .site-title {
+    color: white;
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 .header-center {
     display: flex;
     align-items: center;
     justify-content: center;
-    flex-shrink: 0;
-    margin-left: 3rem;
+    flex: 0 1 auto;
+    margin-left: 0;
+    min-width: 220px;
 }
 
 /* 연결 상태 표시 - 시인성 강화 */
@@ -108,14 +118,18 @@ body {
     gap: 0.5rem;
     align-items: center;
     justify-content: flex-end;
-    flex-shrink: 0;
-    margin-right: 20rem;
+    flex: 0 1 auto;
+    min-width: 0;
+    flex-wrap: wrap;
 }
 
 .header h1 {
     font-size: 1.1rem;
     margin: 0;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    word-break: keep-all;
 }
 
 /* 모드 선택 버튼 (제목 옆에 배치) */
@@ -203,6 +217,11 @@ body {
     border-radius: 8px !important;
     padding: 0.2rem !important;
     border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    flex-wrap: nowrap;
+    min-width: 0;
+    white-space: nowrap;
+    flex: 0 0 auto;
+    margin-left: 1rem;
 }
 
 .header .map-type-btn {
@@ -217,6 +236,8 @@ body {
     font-weight: 500 !important;
     white-space: nowrap !important;
     min-height: 32px !important;
+    flex: 0 0 auto;
+    min-width: 64px;
 }
 
 .header .map-type-btn:hover {
@@ -231,6 +252,20 @@ body {
     box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
 }
 
+
+.mode-switcher-header {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: nowrap;
+    justify-content: center;
+    white-space: nowrap;
+}
+
+.mode-switcher-header .mode-button {
+    flex: 0 0 auto;
+    min-width: 72px;
+    text-align: center;
+}
 /* 지도 위 검색 입력창 (검색 모드 전용) */
 .search-input-container {
     position: absolute;
@@ -391,14 +426,14 @@ body.mode-hand .header *:not(#map):not(#map *) {
     cursor: pointer !important;
 }
 
-/* 손 모드에서 사이드바 숨기기 */
+/* 손 모드에서도 사이드바 유지 */
 body.mode-hand .sidebar {
-    display: none;
+    display: flex;
 }
 
-/* 손 모드에서 지도가 전체 영역 사용 */
+/* 손 모드에서도 기본 레이아웃 유지 */
 body.mode-hand .map-container {
-    width: 100%;
+    flex: 1;
 }
 
 /* 손 모드에서 검색 입력창 위치 조정 */
@@ -421,6 +456,54 @@ body.mode-hand .search-input-container {
     border-radius: 8px;
     padding: 0.6rem;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.color-panel-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.color-panel-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 1.2rem 0.8rem;
+    border: 1px dashed #cbd5e0;
+    border-radius: 8px;
+    background: #f8fafc;
+    text-align: center;
+    color: #4a5568;
+    min-height: 160px;
+}
+
+.color-panel-placeholder .placeholder-text {
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+.btn-switch-mode {
+    border: none;
+    border-radius: 20px;
+    padding: 0.55rem 1.4rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    box-shadow: 0 6px 15px rgba(102, 126, 234, 0.35);
+}
+
+.btn-switch-mode:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 18px rgba(118, 75, 162, 0.35);
+}
+
+.btn-switch-mode:active {
+    transform: translateY(0);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.25);
 }
 
 .color-panel h3 {

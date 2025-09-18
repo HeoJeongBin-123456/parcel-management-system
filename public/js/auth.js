@@ -351,26 +351,26 @@ document.addEventListener('DOMContentLoaded', function() {
         if (userInfo) {
             console.log('👤 로그인 사용자:', userInfo.email);
 
-            // 헤더에 간단한 로그아웃 버튼만 표시
-            const header = document.querySelector('.header-right');
-            if (header && !document.getElementById('userInfo')) {
-                const userDiv = document.createElement('div');
-                userDiv.id = 'userInfo';
-                userDiv.style.cssText = `
-                    display: flex;
-                    align-items: center;
-                    margin-right: 15px;
-                `;
-                userDiv.innerHTML = `
-                    <button onclick="GoogleAuth.logout()"
-                            style="padding: 6px 12px; background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3);
-                                   border-radius: 15px; color: white; cursor: pointer; font-size: 0.8rem;
-                                   transition: all 0.3s ease;">
-                        로그아웃
-                    </button>
-                `;
-                header.insertBefore(userDiv, header.firstChild);
-            }
+            // 헤더에 간단한 로그아웃 버튼만 표시 - 중복 제거를 위해 주석처리
+            // const header = document.querySelector('.header-right');
+            // if (header && !document.getElementById('userInfo')) {
+            //     const userDiv = document.createElement('div');
+            //     userDiv.id = 'userInfo';
+            //     userDiv.style.cssText = `
+            //         display: flex;
+            //         align-items: center;
+            //         margin-right: 15px;
+            //     `;
+            //     userDiv.innerHTML = `
+            //         <button onclick="GoogleAuth.logout()"
+            //                 style="padding: 6px 12px; background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3);
+            //                        border-radius: 15px; color: white; cursor: pointer; font-size: 0.8rem;
+            //                        transition: all 0.3s ease;">
+            //             로그아웃
+            //         </button>
+            //     `;
+            //     header.insertBefore(userDiv, header.firstChild);
+            // }
         }
 
         // 주기적으로 토큰 유효성 체크 (30분마다)
