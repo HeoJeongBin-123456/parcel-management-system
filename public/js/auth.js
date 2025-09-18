@@ -23,31 +23,31 @@ const GoogleAuth = {
         return new Date().getTime() > parseInt(expiryTime);
     },
     
-    // 로그인 상태 확인 (로깅 최소화)
+    // 로그인 상태 확인
     isAuthenticated() {
-        // 개발 환경 및 테스트 환경에서는 인증 건너뛰기
-        if (window.location.hostname === 'localhost' || 
-            window.location.hostname.includes('vercel.app')) {
+        // 개발 환경에서는 인증 건너뛰기 (선택적)
+        if (window.location.hostname === 'localhost' &&
+            window.location.search.includes('dev=true')) {
             return true;
         }
-        
-        // localStorage로 변경하여 브라우저 재시작해도 유지
+
+        // localStorage에서 토큰 확인
         const idToken = localStorage.getItem('googleToken');
         const accessToken = localStorage.getItem('accessToken');
-        
-        // ID 토큰만 있어도 인증된 것으로 처리
-        if (idToken) {
-            // 토큰 만료 체크
-            if (!this.isTokenExpired()) {
-                return true;
-            } else {
-                // 토큰 만료시 자동 갱신 시도 (로깅 최소화)
-                this.refreshToken();
-                return false;
-            }
+
+        // ID 토큰이 있어야 인증된 것으로 처리
+        if (!idToken) {
+            return false;
         }
-        
-        return false;
+
+        // 토큰 만료 체크
+        if (this.isTokenExpired()) {
+            console.log('⚠️ 토큰이 만료되었습니다');
+            this.clearExpiredTokens();
+            return false;
+        }
+
+        return true;
     },
     
     // 액세스 토큰 가져오기
@@ -93,7 +93,17 @@ const GoogleAuth = {
     
     // 로그인 페이지로 리다이렉트
     redirectToLogin() {
-        window.location.href = '/login.html';
+        console.log('🔄 로그인 페이지로 리다이렉트 중...');
+        window.location.href = '/login.html?redirected=true';
+    },
+
+    // 만료된 토큰 정리
+    clearExpiredTokens() {
+        localStorage.removeItem('googleToken');
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('userInfo');
+        localStorage.removeItem('tokenExpiry');
+        console.log('🗑️ 만료된 토큰 삭제 완료');
     },
     
     // 로그아웃
@@ -237,15 +247,24 @@ const GoogleAuth = {
     },
     
     // 스프레드시트에 데이터 추가
-    async appendToSheet(spreadsheetId, data) {
-        const range = '필지정보!A:E';
-        const values = data.map(item => [
-            item.지번 || '',
-            item.소유자이름 || '',
-            item.소유자주소 || '',
-            item.연락처 || '',
-            item.메모 || ''
-        ]);
+    async appendToSheet(spreadsheetId, data, sheetName = '필지정보') {
+        const range = `${sheetName}!A:H`;
+
+        // 데이터가 이미 배열의 배열 형태인지 확인
+        let values;
+        if (Array.isArray(data) && Array.isArray(data[0])) {
+            // 이미 포맷된 데이터
+            values = data;
+        } else {
+            // 객체 배열인 경우 변환
+            values = data.map(item => [
+                item.지번 || '',
+                item.소유자이름 || '',
+                item.소유자주소 || '',
+                item.연락처 || '',
+                item.메모 || ''
+            ]);
+        }
         
         const body = {
             values: values,
@@ -311,49 +330,63 @@ const GoogleAuth = {
     }
 };
 
-// 페이지 로드 시 인증 확인 (로깅 최소화)
+// 페이지 로드 시 인증 확인
 document.addEventListener('DOMContentLoaded', function() {
     // login.html이 아닌 경우에만 인증 확인
-    if (!window.location.pathname.includes('login.html')) {        
-        if (!GoogleAuth.isAuthenticated()) {
-            console.log('⚠️ 인증 실패 - 로그인 페이지로 리다이렉트');
-            GoogleAuth.redirectToLogin();
-        } else {
-            // 인증된 경우 사용자 정보 표시
-            const userInfo = GoogleAuth.getUserInfo();
-            if (userInfo) {
-                console.log('✅ 로그인 사용자:', userInfo.email);
-                
-                // 헤더에 사용자 정보 표시 (선택사항)
-                const header = document.querySelector('.header');
-                if (header && !document.getElementById('userInfo')) {
-                    const userDiv = document.createElement('div');
-                    userDiv.id = 'userInfo';
-                    userDiv.style.cssText = 'position: absolute; top: 1rem; right: 1rem; color: white; font-size: 0.875rem;';
-                    userDiv.innerHTML = `
-                        <span>${userInfo.name || userInfo.email}님</span>
-                        <button onclick="GoogleAuth.logout()" style="margin-left: 1rem; padding: 0.25rem 0.5rem; background: rgba(255,255,255,0.2); border: 1px solid white; border-radius: 4px; color: white; cursor: pointer;">
-                            로그아웃
-                        </button>
-                    `;
-                    header.appendChild(userDiv);
-                }
+    if (window.location.pathname.includes('login.html')) {
+        console.log('🔐 로그인 페이지 - 인증 건너뛰기');
+        return;
+    }
+
+    console.log('🔍 인증 상태 확인 중...');
+
+    if (!GoogleAuth.isAuthenticated()) {
+        console.log('⚠️ 인증 실패 - 로그인 페이지로 리다이렉트');
+        GoogleAuth.redirectToLogin();
+    } else {
+        console.log('✅ 인증 성공 - 메인 페이지 접근 허용');
+
+        // 인증된 경우 사용자 정보 표시
+        const userInfo = GoogleAuth.getUserInfo();
+        if (userInfo) {
+            console.log('👤 로그인 사용자:', userInfo.email);
+
+            // 헤더에 간단한 로그아웃 버튼만 표시
+            const header = document.querySelector('.header-right');
+            if (header && !document.getElementById('userInfo')) {
+                const userDiv = document.createElement('div');
+                userDiv.id = 'userInfo';
+                userDiv.style.cssText = `
+                    display: flex;
+                    align-items: center;
+                    margin-right: 15px;
+                `;
+                userDiv.innerHTML = `
+                    <button onclick="GoogleAuth.logout()"
+                            style="padding: 6px 12px; background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3);
+                                   border-radius: 15px; color: white; cursor: pointer; font-size: 0.8rem;
+                                   transition: all 0.3s ease;">
+                        로그아웃
+                    </button>
+                `;
+                header.insertBefore(userDiv, header.firstChild);
             }
-            
-            // 주기적으로 토큰 유효성 체크 및 갱신 (30분마다, 로깅 최소화)
-            setInterval(() => {
-                if (GoogleAuth.isTokenExpired()) {
-                    GoogleAuth.refreshToken();
-                }
-            }, 30 * 60 * 1000); // 30분
-            
-            // 페이지가 포커스를 받을 때마다 토큰 체크 (로깅 최소화)
-            window.addEventListener('focus', () => {
-                if (GoogleAuth.isTokenExpired()) {
-                    GoogleAuth.refreshToken();
-                }
-            });
         }
+
+        // 주기적으로 토큰 유효성 체크 (30분마다)
+        setInterval(() => {
+            if (GoogleAuth.isTokenExpired()) {
+                console.log('⏰ 토큰 만료 - 재로그인 필요');
+                GoogleAuth.redirectToLogin();
+            }
+        }, 30 * 60 * 1000); // 30분
+
+        // 페이지가 포커스를 받을 때마다 토큰 체크
+        window.addEventListener('focus', () => {
+            if (!GoogleAuth.isAuthenticated()) {
+                GoogleAuth.redirectToLogin();
+            }
+        });
     }
 });
 
