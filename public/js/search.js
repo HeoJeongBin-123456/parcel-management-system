@@ -1372,16 +1372,7 @@ async function searchAddressByKeyword(keyword) {
                             ownerAddress: item.roadAddress || item.jibunAddress,
                             lat: parseFloat(item.y),
                             lng: parseFloat(item.x),
-                            geometry: {
-                                type: "Polygon",
-                                coordinates: [[
-                                    [parseFloat(item.x) - 0.0002, parseFloat(item.y) - 0.0002],
-                                    [parseFloat(item.x) + 0.0002, parseFloat(item.y) - 0.0002],
-                                    [parseFloat(item.x) + 0.0002, parseFloat(item.y) + 0.0002],
-                                    [parseFloat(item.x) - 0.0002, parseFloat(item.y) + 0.0002],
-                                    [parseFloat(item.x) - 0.0002, parseFloat(item.y) - 0.0002]
-                                ]]
-                            }
+                            geometry: null
                         }));
 
                         // SearchModeManager에 결과 전달
