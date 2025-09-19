@@ -2048,36 +2048,16 @@ body.mode-hand .search-input-container {
 .mode-switcher-header .mode-button:hover,
 .header .map-type-btn:hover {
     transform: translateY(-1px);
-    border-color: rgba(144, 205, 244, 0.65) !important;
-    background: rgba(148, 197, 255, 0.18) !important;
+    border-color: rgba(var(--mode-accent-rgb), 0.45) !important;
+    background: rgba(var(--mode-accent-rgb), 0.14) !important;
 }
 
 .mode-switcher-header .mode-button.active,
 .header .map-type-btn.active {
-    background: rgba(59, 130, 246, 0.25) !important;
-    border-color: rgba(96, 165, 250, 0.75) !important;
+    background: radial-gradient(circle at 20% 20%, rgba(var(--mode-accent-rgb), 0.3), rgba(var(--mode-accent-rgb), 0.08)) !important;
+    border-color: rgba(var(--mode-accent-rgb), 0.48) !important;
     color: #f8fafc !important;
-}
-
-body.mode-click .mode-switcher-header .mode-button[data-mode="click"].active {
-    background: rgba(66, 66, 66, 0.88) !important;
-    border-color: rgba(148, 163, 184, 0.6) !important;
-    color: #f8fafc !important;
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
-}
-
-body.mode-search .mode-switcher-header .mode-button[data-mode="search"].active {
-    background: rgba(155, 89, 182, 0.85) !important;
-    border-color: rgba(165, 105, 189, 0.8) !important;
-    color: #fdf2ff !important;
-    box-shadow: 0 8px 20px rgba(155, 89, 182, 0.35) !important;
-}
-
-body.mode-hand .mode-switcher-header .mode-button[data-mode="hand"].active {
-    background: rgba(33, 150, 243, 0.85) !important;
-    border-color: rgba(96, 165, 250, 0.85) !important;
-    color: #f1f9ff !important;
-    box-shadow: 0 8px 20px rgba(33, 150, 243, 0.32) !important;
+    box-shadow: 0 10px 26px rgba(var(--mode-accent-rgb), 0.22), inset 0 0 0 1px rgba(255, 255, 255, 0.1) !important;
 }
 
 .header .connection-status {

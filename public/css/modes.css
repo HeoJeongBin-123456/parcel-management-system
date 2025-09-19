@@ -5,10 +5,15 @@
 
 /* ============= 모드별 기본 스타일 ============= */
 
+:root {
+    --mode-accent-rgb: 147, 197, 253;
+}
+
 /* 클릭 모드 */
 body.mode-click {
     --primary-color: #424242;
     --mode-indicator-bg: #F5F5F5;
+    --mode-accent-rgb: 148, 163, 184;
 }
 
 body.mode-click .search-only,
@@ -40,6 +45,7 @@ body.mode-click .map-instance * {
 body.mode-search {
     --primary-color: #9B59B6;
     --mode-indicator-bg: #F3E5F5;
+    --mode-accent-rgb: 176, 156, 255;
 }
 
 body.mode-search .click-only,
@@ -76,6 +82,7 @@ body.mode-search .map-container {
 body.mode-hand {
     --primary-color: #2196F3;
     --mode-indicator-bg: #E3F2FD;
+    --mode-accent-rgb: 120, 194, 204;
 }
 
 body.mode-hand .click-only,
