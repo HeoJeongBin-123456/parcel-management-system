@@ -2013,7 +2013,7 @@ body.mode-hand .search-input-container {
 
 @media (min-width: 1200px) {
     .map-type-selector {
-        margin-left: calc(1.8rem + 120px);
+        margin-left: 5.5rem;
     }
 }
 
