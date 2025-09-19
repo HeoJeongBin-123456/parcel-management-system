@@ -375,7 +375,7 @@ body {
 .map-floating-actions {
     position: absolute;
     top: 1.25rem;
-    right: 1.25rem;
+    right: 0.75rem;
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
@@ -438,7 +438,7 @@ body {
 @media (max-width: 1024px) {
     .map-floating-actions {
         top: 1rem;
-        right: 1rem;
+        right: 0.65rem;
         gap: 0.6rem;
     }
 
@@ -452,7 +452,7 @@ body {
     .map-floating-actions {
         top: auto;
         bottom: 1.2rem;
-        right: 1rem;
+        right: 0.65rem;
     }
 
     .map-floating-actions .floating-action-btn {
@@ -2009,6 +2009,12 @@ body.mode-hand .search-input-container {
     align-items: center;
     gap: 0.4rem;
     margin-left: 1.8rem;
+}
+
+@media (min-width: 1200px) {
+    .map-type-selector {
+        margin-left: calc(1.8rem + 120px);
+    }
 }
 
 /* 헤더 모드/지도 버튼 리프레시 */
