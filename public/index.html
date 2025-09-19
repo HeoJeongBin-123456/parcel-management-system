@@ -33,9 +33,12 @@
         <!-- 헤더 영역 -->
         <header class="header">
             <div class="header-left">
-                <h1 class="site-title">네이버 지도 필지 관리 프로그램</h1>
+                <div class="brand-text">
+                    <h1 class="site-title">필지 관리 프로그램</h1>
+                    <span class="brand-eyebrow">Parcel Management System</span>
+                </div>
                 <!-- 지도 타입 선택 -->
-                <div class="map-type-selector">
+                <div class="map-type-selector map-type-inner">
                     <button class="map-type-btn active" data-type="normal">일반지도</button>
                     <button class="map-type-btn" data-type="satellite">위성지도</button>
                     <button class="map-type-btn" data-type="cadastral">지적편집도</button>
@@ -45,9 +48,9 @@
             <div class="header-center">
                 <!-- 모드 전환 버튼 -->
                 <div class="mode-switcher-header">
-                    <button class="mode-button active" data-mode="click">🎯 클릭</button>
-                    <button class="mode-button" data-mode="search">🔍 검색</button>
-                    <button class="mode-button" data-mode="hand">✋ 손</button>
+                    <button class="mode-button active" data-mode="click" data-emoji="🎯">클릭</button>
+                    <button class="mode-button" data-mode="search" data-emoji="🔍">검색</button>
+                    <button class="mode-button" data-mode="hand" data-emoji="✋">손</button>
                 </div>
             </div>
             <div class="header-right">

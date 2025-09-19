@@ -41,8 +41,8 @@ body {
 
 .header-left .site-title {
     color: white;
-    flex: 1 1 auto;
-    min-width: 0;
+    margin-right: 1rem;
+    flex: 0 0 auto;
 }
 
 .header-center {
@@ -210,8 +210,7 @@ body {
 }
 
 /* 지도 타입 선택 버튼 그룹 */
-.header .map-type-selector {
-    display: flex !important;
+.header     display: flex !important;
     gap: 0.2rem !important;
     background: rgba(255, 255, 255, 0.1) !important;
     border-radius: 8px !important;
@@ -1087,8 +1086,7 @@ body.mode-hand .search-input-container {
         text-align: center !important;
     }
 
-    .header .map-type-selector {
-        gap: 0.1rem !important;
+    .header         gap: 0.1rem !important;
         padding: 0.1rem !important;
     }
 
@@ -1811,4 +1809,225 @@ body.mode-hand .search-input-container {
         font-size: 0.7rem !important;
         gap: 4px !important;
     }
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #2c3e50;
+    color: white;
+    padding: 0.6rem 1rem;
+}
+
+.header__brand {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+
+.header__meta {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.map-type-inner {
+    display: flex;
+    gap: 0.4rem;
+    align-items: center;
+    background: rgba(0,0,0,0.15);
+    padding: 0.4rem 0.6rem;
+    border-radius: 12px;
+}
+
+.mode-inner {
+    display: flex;
+    gap: 0.4rem;
+    align-items: center;
+    background: rgba(0,0,0,0.15);
+    padding: 0.4rem 0.6rem;
+    border-radius: 12px;
+}
+
+.header {
+    background: #2c3e50;
+    color: white;
+    padding: 0.6rem 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2rem;
+}
+
+.header__brand {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.header__brand .site-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.header__controls {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 1.5rem;
+    flex: 1;
+    margin-right: 1.5rem;
+}
+
+    display: flex;
+    gap: 0.5rem;
+}
+
+.mode-switcher-header {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.header__meta {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.map-type-selector { display:flex; align-items:center; gap:0.4rem; }
+
+/* 헤더 모드/지도 버튼 리프레시 */
+.mode-switcher-header .mode-button,
+.header .map-type-btn {
+    border-radius: 10px !important;
+    border: 1px solid rgba(255, 255, 255, 0.22) !important;
+    background: rgba(255, 255, 255, 0.07) !important;
+    color: rgba(248, 250, 252, 0.95) !important;
+    padding: 0.48rem 0.9rem !important;
+    min-width: 70px !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.01em !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 0.4rem !important;
+    transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease !important;
+    box-shadow: none !important;
+}
+
+.mode-switcher-header .mode-button::before,
+. {
+    content: attr(data-emoji);
+    font-size: 1.05rem;
+}
+
+.mode-switcher-header .mode-button:hover,
+.header .map-type-btn:hover {
+    transform: translateY(-1px);
+    border-color: rgba(144, 205, 244, 0.65) !important;
+    background: rgba(148, 197, 255, 0.18) !important;
+}
+
+.mode-switcher-header .mode-button.active,
+.header .map-type-btn.active {
+    background: rgba(59, 130, 246, 0.25) !important;
+    border-color: rgba(96, 165, 250, 0.75) !important;
+    color: #f8fafc !important;
+}
+
+.header .connection-status {
+    border-radius: 10px !important;
+    border: 1px solid rgba(148, 163, 184, 0.4) !important;
+    background: rgba(34, 197, 94, 0.18) !important;
+    color: #ecfdf5 !important;
+    padding: 0.45rem 0.9rem !important;
+    font-weight: 500 !important;
+    box-shadow: none !important;
+}
+
+#logoutBtn.logout-btn {
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.08);
+    color: #f8fafc;
+    padding: 0.45rem 0.85rem;
+    font-weight: 500;
+    transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+#logoutBtn.logout-btn:hover {
+    background: rgba(239, 68, 68, 0.18);
+    border-color: rgba(239, 68, 68, 0.6);
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 1.2rem;
+}
+
+.brand-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: max-content;
+}
+
+.brand-text .brand-eyebrow {
+    font-size: 0.7rem;
+    letter-spacing: 0.3em;
+    color: rgba(226, 232, 240, 0.8);
+    text-transform: uppercase;
+}
+
+.brand-text .site-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.header .map-type-btn,
+.header .mode-button,
+.header .connection-status,
+#logoutBtn.logout-btn {
+    font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+}
+
+.,
+.header .mode-button::before {
+    font-size: 1rem;
+}
+
+.header .map-type-btn,
+.header .mode-button {
+    background: rgba(30, 30, 32, 0.2) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    color: rgba(248, 250, 252, 0.9) !important;
+    padding: 0.5rem 1rem !important;
+    border-radius: 10px !important;
+}
+
+.header .map-type-btn.active,
+.header .mode-button.active {
+    background: rgba(44, 120, 224, 0.35) !important;
+    border-color: rgba(94, 162, 255, 0.6) !important;
+    color: #f8fafc !important;
+}
+
+#logoutBtn.logout-btn {
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.header .connection-status {
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    background: rgba(34, 197, 94, 0.25) !important;
+    border: 1px solid rgba(34, 197, 94, 0.4) !important;
 }
