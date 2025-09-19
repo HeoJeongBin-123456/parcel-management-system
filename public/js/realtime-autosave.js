@@ -749,12 +749,13 @@ class RealtimeAutoSave {
             const style = styles[status] || styles.saving;
             indicator.style.backgroundColor = style.bg;
             indicator.textContent = style.text;
-            indicator.style.opacity = '1';
+            indicator.style.opacity = status === 'success' ? '0' : '1';
             
-            // 3초 후 숨김
-            setTimeout(() => {
-                indicator.style.opacity = '0';
-            }, 3000);
+            if (status !== 'success') {
+                setTimeout(() => {
+                    indicator.style.opacity = '0';
+                }, 3000);
+            }
             
         } catch (error) {
             console.warn('⚠️ 저장 표시기 업데이트 실패:', error);
