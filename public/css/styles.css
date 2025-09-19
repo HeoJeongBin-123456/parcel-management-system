@@ -579,10 +579,10 @@ body.mode-hand .search-input-container {
 }
 
 .color-panel-placeholder .placeholder-text {
-    font-size: 0.92rem;
-    line-height: 1.55;
-    letter-spacing: 0.01em;
-    color: rgba(15, 23, 42, 0.68);
+    font-size: 0.94rem;
+    line-height: 1.6;
+    letter-spacing: 0.015em;
+    color: rgba(15, 23, 42, 0.7);
 }
 
 .btn-switch-mode {
