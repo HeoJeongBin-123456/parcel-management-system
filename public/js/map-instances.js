@@ -112,33 +112,33 @@ function restoreMapViewForMode(mode, mapInstance) {
 // 공통 지도 옵션 생성
 async function createMapOptions() {
     // 저장된 위치 정보 불러오기
-    let center, zoom;
+    let center = null;
+    let zoom = null;
 
+    // 1) localStorage 우선 사용 (즉시 복원용)
+    try {
+        const savedPosition = JSON.parse(localStorage.getItem('mapPosition') || '{}');
+        if (savedPosition.lat && savedPosition.lng) {
+            center = new naver.maps.LatLng(savedPosition.lat, savedPosition.lng);
+            zoom = savedPosition.zoom || CONFIG.MAP_DEFAULT_ZOOM;
+            console.log('🗺️ localStorage에서 위치 로드:', savedPosition);
+        }
+    } catch (error) {
+        console.warn('⚠️ localStorage 위치 로드 실패:', error.message);
+    }
+
+    // 2) Supabase가 있으면 최신 값으로 업데이트 (있을 때만 덮어쓰기)
     try {
         if (window.SupabaseManager) {
             const savedPosition = await window.SupabaseManager.loadMapPosition();
             if (savedPosition && savedPosition.lat && savedPosition.lng) {
                 center = new naver.maps.LatLng(savedPosition.lat, savedPosition.lng);
-                zoom = savedPosition.zoom || CONFIG.MAP_DEFAULT_ZOOM;
+                zoom = savedPosition.zoom || zoom || CONFIG.MAP_DEFAULT_ZOOM;
                 console.log('🗺️ Supabase에서 저장된 위치 로드:', savedPosition);
             }
         }
     } catch (error) {
-        console.warn('⚠️ Supabase 위치 로드 실패, localStorage 시도:', error.message);
-    }
-
-    // localStorage에서 백업 위치 로드
-    if (!center) {
-        try {
-            const savedPosition = JSON.parse(localStorage.getItem('mapPosition') || '{}');
-            if (savedPosition.lat && savedPosition.lng) {
-                center = new naver.maps.LatLng(savedPosition.lat, savedPosition.lng);
-                zoom = savedPosition.zoom || CONFIG.MAP_DEFAULT_ZOOM;
-                console.log('🗺️ localStorage에서 위치 로드:', savedPosition);
-            }
-        } catch (error) {
-            console.warn('⚠️ localStorage 위치 로드 실패:', error.message);
-        }
+        console.warn('⚠️ Supabase 위치 로드 실패:', error.message);
     }
 
     // 기본 위치 사용
