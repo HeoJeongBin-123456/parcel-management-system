@@ -70,7 +70,7 @@ body {
 
 /* 헤더 - 깔끔하고 전문적인 스타일 */
 .header {
-    background: var(--primary-color);
+    background: #000000;
     color: white;
     padding: 0.75rem 1.5rem;
     box-shadow: var(--shadow-md);
@@ -101,10 +101,10 @@ body {
 /* 지도 타입 선택 버튼 - 탭 스타일 */
 .map-type-selector {
     display: flex;
-    background: rgba(255,255,255,0.1);
-    border: 1px solid rgba(255,255,255,0.2);
-    border-radius: 2px;
-    overflow: hidden;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    overflow: visible;
 }
 
 .map-type-btn {
@@ -274,70 +274,71 @@ body {
 }
 
 .form-group {
-    margin-bottom: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin-bottom: 0.85rem;
 }
 
 .form-group label {
-    display: block;
-    font-size: 0.75rem;
-    font-weight: 500;
-    color: var(--text-secondary);
-    margin-bottom: 0.25rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #334155;
 }
 
 .form-group input,
 .form-group textarea {
     width: 100%;
-    padding: 0.4rem;
-    border: 1px solid var(--border-color);
-    border-radius: 2px;
-    font-size: 0.85rem;
-    background: white;
-    transition: border-color 0.2s;
+    padding: 0.45rem 0.5rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 0.88rem;
+    background: #ffffff;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .form-group input:focus,
 .form-group textarea:focus {
     outline: none;
-    border-color: var(--accent-color);
-    background: #fafbfc;
+    border-color: rgba(59, 130, 246, 0.6);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+    background: #ffffff;
 }
 
-/* 버튼 스타일 - 깔끔하고 각진 디자인 */
-.form-buttons {
+/* 버튼 영역 - 행정용 톤 다운 */
+.form-actions {
+    margin-top: 1.2rem;
+    border-top: 1px solid rgba(148, 163, 184, 0.25);
+    padding-top: 1rem;
     display: flex;
-    gap: 0.5rem;
-    margin-top: 1rem;
+    flex-direction: column;
+    gap: 0.75rem;
 }
 
-.form-buttons button {
+.form-actions-primary {
+    display: flex;
+    gap: 0.6rem;
+}
+
+.form-actions-primary button {
     flex: 1;
-    padding: 0.6rem;
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    font-size: 0.8rem;
-    font-weight: 500;
+    min-width: 90px;
+    padding: 0.65rem 0.8rem;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 10px;
     cursor: pointer;
-    transition: all 0.3s;
-    min-height: 44px; /* 버튼 최소 높이 고정 */
+    font-size: 0.82rem;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    color: #1f2933;
+    background: linear-gradient(135deg, rgba(248, 250, 252, 0.96), rgba(237, 242, 247, 0.94));
+    box-shadow: 0 6px 14px rgba(15, 23, 42, 0.06);
 }
 
-#saveBtn {
-    background: #2c3e50;
-    color: white;
-    border: none;
-}
-
-#saveBtn:hover {
-    background: #34495e;
+.form-actions-primary button:hover {
     transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(44, 62, 80, 0.3);
-}
-
-#clearBtn {
-    background: var(--danger-color);
-    color: white;
-    border: none;
+    border-color: rgba(59, 130, 246, 0.4);
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
 }
 
 #clearBtn:hover {

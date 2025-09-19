@@ -157,48 +157,205 @@ class ParcelManager {
     }
     
     // 전체 데이터 초기화
-    clearAllData() {
-        const confirmMsg = `경고: 전체 초기화\n\n모든 필지 정보와 색상이 영구적으로 삭제됩니다.\n이 작업은 되돌릴 수 없습니다.\n\n정말로 전체 초기화를 진행하시겠습니까?`;
-        
-        if (!confirm(confirmMsg)) return;
-        
-        // 두 번 확인
-        const secondConfirm = prompt(`정말로 모든 데이터를 삭제하시려면 "초기화"를 입력하세요:`);
-        if (secondConfirm !== "초기화") {
-            alert('초기화가 취소되었습니다.');
-            return;
+    async clearAllData(options = {}) {
+        const { skipPrompt = false, skipRemote = false } = options;
+        const autoSaveController = window.realtimeAutoSave &&
+            typeof window.realtimeAutoSave.suspendAutoSave === 'function'
+            ? window.realtimeAutoSave
+            : null;
+        const persistenceManager = window.dataPersistenceManager &&
+            typeof window.dataPersistenceManager.clearAllData === 'function'
+            ? window.dataPersistenceManager
+            : null;
+        let autoSaveSuspended = false;
+
+        if (!skipPrompt) {
+            const confirmMsg = `경고: 전체 초기화\n\n모든 필지 정보와 색상이 영구적으로 삭제됩니다.\n이 작업은 되돌릴 수 없습니다.\n\n정말로 전체 초기화를 진행하시겠습니까?`;
+
+            if (!confirm(confirmMsg)) {
+                return false;
+            }
+
+            const secondConfirm = prompt('정말로 모든 데이터를 삭제하시려면 "초기화"를 입력하세요:');
+            if (secondConfirm !== '초기화') {
+                alert('초기화가 취소되었습니다.');
+                return false;
+            }
         }
-        
-        // 모든 데이터 삭제
-        this.parcels = [];
-        this.filteredParcels = [];
-        this.selectedParcels.clear();
-        
-        // LocalStorage 초기화
-        const STORAGE_KEY = window.CONFIG && window.CONFIG.STORAGE_KEY ? window.CONFIG.STORAGE_KEY : 'parcelData';
-        localStorage.removeItem(STORAGE_KEY);
-        
-        // 지도에서 모든 색상 제거
-        this.clearAllMapColors();
-        
-        // 검색 필지도 모두 제거 (search.js의 clearAllSearchResults 함수 호출)
-        if (typeof window.clearAllSearchResults === 'function') {
-            window.clearAllSearchResults();
-    // console.log('검색 필지도 모두 제거됨');
-        } else {
-    // console.log('clearAllSearchResults 함수를 찾을 수 없음');
+
+        try {
+            if (autoSaveController) {
+                await autoSaveController.suspendAutoSave('clear-all-data');
+                autoSaveSuspended = true;
+            }
+
+            if (persistenceManager) {
+                await persistenceManager.clearAllData();
+            }
+
+            console.log('🧹 전체 데이터 초기화 실행 시작');
+
+            // 1) 메모 마커 및 지도 시각화 제거
+            if (window.MemoMarkerManager && typeof window.MemoMarkerManager.forceRemoveAllMarkers === 'function') {
+                window.MemoMarkerManager.forceRemoveAllMarkers();
+            }
+
+            this.clearAllMapColors();
+
+            if (window.parcels && typeof window.parcels.forEach === 'function') {
+                window.parcels.forEach((parcelData) => {
+                    if (parcelData && parcelData.polygon && typeof parcelData.polygon.setMap === 'function') {
+                        parcelData.polygon.setMap(null);
+                    }
+                    if (parcelData && parcelData.label && typeof parcelData.label.setMap === 'function') {
+                        parcelData.label.setMap(null);
+                    }
+                });
+
+                if (typeof window.parcels.clear === 'function') {
+                    window.parcels.clear();
+                }
+            }
+
+            if (window.searchParcels && typeof window.searchParcels.clear === 'function') {
+                window.searchParcels.forEach((result) => {
+                    if (result?.polygon) result.polygon.setMap(null);
+                    if (result?.label) result.label.setMap(null);
+                });
+                window.searchParcels.clear();
+            }
+
+            if (window.clickParcels && typeof window.clickParcels.clear === 'function') {
+                window.clickParcels.clear();
+            }
+
+            // 2) 로컬 상태 및 저장소 정리
+            this.parcels = [];
+            this.filteredParcels = [];
+            this.selectedParcels.clear();
+
+            if (Array.isArray(window.parcelsData)) {
+                window.parcelsData = [];
+            }
+
+            if (window.restoredMarkers && Array.isArray(window.restoredMarkers)) {
+                window.restoredMarkers.forEach(marker => {
+                    if (marker && typeof marker.setMap === 'function') {
+                        marker.setMap(null);
+                    }
+                });
+                window.restoredMarkers = [];
+            }
+
+            const storageKeys = [
+                window.CONFIG && window.CONFIG.STORAGE_KEY ? window.CONFIG.STORAGE_KEY : 'parcelData',
+                'parcelData',
+                'parcelData_backup',
+                'clickParcelData',
+                'parcels',
+                'parcels_current_session',
+                'window.searchParcels',
+                'searchParcels',
+                'memoMarkers',
+                'memoMarkers_v2'
+            ];
+
+            const additionalLocalKeys = [
+                'parcelData_snapshot',
+                'parcelData_meta',
+                'parcelData_backup_history',
+                'snapshots',
+                'parcelColors',
+                'markerStates',
+                'backup_settings',
+                'lastAutoSave',
+                'emergency_autosave_backup'
+            ];
+
+            const allLocalKeys = [...new Set([...storageKeys, ...additionalLocalKeys])];
+
+            allLocalKeys.forEach(key => {
+                try {
+                    localStorage.removeItem(key);
+                } catch (storageError) {
+                    console.warn('⚠️ 로컬 스토리지 삭제 실패:', key, storageError);
+                }
+            });
+
+            try {
+                sessionStorage.removeItem('parcelData_session');
+            } catch (sessionError) {
+                console.warn('⚠️ 세션 스토리지 삭제 실패: parcelData_session', sessionError);
+            }
+
+            // 3) Supabase 데이터 제거
+            if (!skipRemote && window.SupabaseManager && window.SupabaseManager.isConnected && typeof window.SupabaseManager.deleteAllParcelData === 'function') {
+                const remoteResult = await window.SupabaseManager.deleteAllParcelData();
+                if (!remoteResult) {
+                    console.warn('⚠️ Supabase 데이터 초기화가 완전히 완료되지 않았습니다.');
+                }
+            }
+
+            // 4) UI 및 상태 초기화
+            const parcelForm = document.getElementById('parcelForm');
+            if (parcelForm) {
+                parcelForm.reset();
+            }
+
+            const formFields = ['parcelNumber', 'ownerName', 'ownerAddress', 'ownerContact', 'memo'];
+            formFields.forEach(id => {
+                const field = document.getElementById(id);
+                if (field) field.value = '';
+            });
+
+            if (window.ColorPaletteManager) {
+                if (typeof window.ColorPaletteManager.deselectColor === 'function') {
+                    window.ColorPaletteManager.deselectColor();
+                }
+                if (typeof window.ColorPaletteManager.resetUsageCounts === 'function') {
+                    window.ColorPaletteManager.resetUsageCounts();
+                }
+                if (typeof window.ColorPaletteManager.updatePaletteUI === 'function') {
+                    window.ColorPaletteManager.updatePaletteUI();
+                }
+            }
+
+            const colorStats = document.getElementById('colorStats');
+            if (colorStats) {
+                colorStats.textContent = '총 0개 필지';
+            }
+
+            const currentColorChip = document.getElementById('currentColor');
+            if (currentColorChip) {
+                currentColorChip.style.background = 'transparent';
+            }
+
+            const countEl = document.getElementById('apCount');
+            if (countEl) {
+                countEl.textContent = '0';
+            }
+
+            if (typeof window.clearAllSearchResults === 'function') {
+                window.clearAllSearchResults();
+            }
+
+            window.currentSelectedPNU = null;
+            window.currentColor = null;
+
+            this.render();
+
+            alert('전체 초기화가 완료되었습니다.');
+            console.log('✅ 전체 데이터 초기화 완료');
+            return true;
+        } catch (error) {
+            console.error('❌ 전체 데이터 초기화 실패:', error);
+            alert('전체 초기화 중 오류가 발생했습니다. 콘솔 로그를 확인하세요.');
+            return false;
+        } finally {
+            if (autoSaveSuspended && autoSaveController) {
+                autoSaveController.resumeAutoSave();
+            }
         }
-        
-        // UI 업데이트
-        this.render();
-        
-        // 수량 표시 업데이트
-        const countEl = document.getElementById('apCount');
-        if (countEl) {
-            countEl.textContent = '0';
-        }
-        
-        alert('전체 초기화가 완료되었습니다.');
     }
     
     // 전체 필지를 구글 시트로 전송

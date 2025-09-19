@@ -9,7 +9,9 @@ class RealtimeAutoSave {
         this.maxRetries = 3;
         this.saveInProgress = false;
         this.dataValidator = new DataValidator();
-        
+        this.isSuspended = false;
+        this.suspendReason = null;
+
         // 통계
         this.stats = {
             totalSaves: 0,
@@ -178,6 +180,11 @@ class RealtimeAutoSave {
 
     // 자동저장 트리거
     triggerAutoSave(reason) {
+        if (this.isSuspended) {
+            console.log(`⏸️ 자동저장 일시정지 상태 - 트리거(${reason}) 무시`);
+            return;
+        }
+
         this.saveQueue.add(reason);
         
         // 즉시 저장이 필요한 경우들
@@ -196,6 +203,12 @@ class RealtimeAutoSave {
 
     // 자동저장 실행
     async performAutoSave(reason) {
+        if (this.isSuspended) {
+            console.log('⏸️ 자동저장 일시정지 상태 - 저장 실행 취소');
+            this.saveQueue.clear();
+            return;
+        }
+
         if (this.saveInProgress) {
             console.log('⏳ 이미 저장 중이므로 대기');
             return;
@@ -209,6 +222,12 @@ class RealtimeAutoSave {
             
             // 1. 현재 데이터 수집 및 검증
             const currentData = await this.collectCurrentData();
+            if (this.isSuspended) {
+                console.log('⏸️ 자동저장 일시정지 상태 - 데이터 저장 단계 취소');
+                this.saveQueue.clear();
+                this.saveInProgress = false;
+                return;
+            }
             const validationResult = await this.dataValidator.validateData(currentData);
             
             if (!validationResult.isValid) {
@@ -256,6 +275,11 @@ class RealtimeAutoSave {
 
     // 현재 데이터 수집
     async collectCurrentData() {
+        if (this.isSuspended) {
+            console.log('⏸️ 자동저장 일시정지 상태 - 데이터 수집 건너뜀');
+            return [];
+        }
+
         let data = [];
 
         try {
@@ -530,11 +554,20 @@ class RealtimeAutoSave {
         // 재시도 로직
         for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
             try {
+                if (this.isSuspended) {
+                    console.log('⏸️ 자동저장 일시정지 상태 - 저장 재시도 중단');
+                    return;
+                }
+
                 console.log(`🔄 저장 재시도 ${attempt}/${this.maxRetries}`);
                 
                 await new Promise(resolve => setTimeout(resolve, attempt * 1000)); // 지수 백오프
                 
                 const currentData = await this.collectCurrentData();
+                if (this.isSuspended) {
+                    console.log('⏸️ 자동저장 일시정지 상태 - 재시도 데이터 저장 취소');
+                    return;
+                }
                 await this.saveToMultipleLayers(currentData, `retry_${reason}`);
                 
                 console.log(`✅ 저장 재시도 ${attempt} 성공`);
@@ -577,6 +610,10 @@ class RealtimeAutoSave {
     // 주기적 자동저장 설정
     setupPeriodicSave() {
         setInterval(() => {
+            if (this.isSuspended) {
+                return;
+            }
+
             // 마지막 저장 후 일정 시간이 지났고, 대기열에 작업이 있으면 저장
             const timeSinceLastSave = Date.now() - this.lastSaveTime;
             
@@ -637,6 +674,10 @@ class RealtimeAutoSave {
     setupNetworkMonitoring() {
         window.addEventListener('online', () => {
             console.log('🌐 네트워크 연결됨 - 지연된 저장 시도');
+            if (this.isSuspended) {
+                console.log('⏸️ 자동저장 일시정지 상태 - 네트워크 복구 저장 보류');
+                return;
+            }
             if (this.saveQueue.size > 0) {
                 this.performAutoSave('network_reconnect');
             }
@@ -949,6 +990,53 @@ class DataValidator {
                 isValid: false,
                 message: `크기 검사 실패: ${error.message}`
             };
+        }
+    }
+
+    async suspendAutoSave(reason = 'manual') {
+        if (this.isSuspended) {
+            return;
+        }
+
+        this.isSuspended = true;
+        this.suspendReason = reason;
+        this.saveQueue.clear();
+        clearTimeout(this.saveTimeout);
+        clearTimeout(this.inputTimeout);
+
+        if (this.saveInProgress) {
+            console.log(`⏸️ 자동저장 일시정지 대기 중 (${reason})`);
+            await this.waitUntilIdle();
+        }
+
+        this.saveInProgress = false;
+        console.log(`⏸️ 자동저장 일시정지 완료 (${reason})`);
+    }
+
+    async waitUntilIdle(timeout = 3000) {
+        const start = Date.now();
+
+        while (this.saveInProgress) {
+            if (Date.now() - start > timeout) {
+                console.warn('⚠️ 자동저장 일시정지 대기 타임아웃 도달');
+                break;
+            }
+            await new Promise(resolve => setTimeout(resolve, 50));
+        }
+    }
+
+    resumeAutoSave(triggerImmediate = false) {
+        if (!this.isSuspended) {
+            return;
+        }
+
+        const previousReason = this.suspendReason;
+        this.isSuspended = false;
+        this.suspendReason = null;
+        console.log(`▶️ 자동저장 재개 (${previousReason || 'no reason'})`);
+
+        if (triggerImmediate && this.saveQueue.size > 0) {
+            this.performAutoSave('resume');
         }
     }
 }

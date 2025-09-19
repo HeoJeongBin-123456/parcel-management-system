@@ -1213,6 +1213,28 @@ document.addEventListener('DOMContentLoaded', async function() {
         });
     });
 
+    const resetButton = document.getElementById('resetMapBtn');
+    if (resetButton) {
+        resetButton.addEventListener('click', async () => {
+            if (!window.parcelManager || typeof window.parcelManager.clearAllData !== 'function') {
+                alert('초기화 기능을 사용할 수 없습니다. 잠시 후 다시 시도하세요.');
+                return;
+            }
+
+            try {
+                resetButton.disabled = true;
+                resetButton.classList.add('pending');
+                await window.parcelManager.clearAllData();
+            } catch (error) {
+                console.error('❌ 전체 초기화 중 오류:', error);
+                alert('전체 초기화에 실패했습니다. 콘솔 로그를 확인하세요.');
+            } finally {
+                resetButton.classList.remove('pending');
+                resetButton.disabled = false;
+            }
+        });
+    }
+
     // 2. 나머지는 비동기로 로드
     requestIdleCallback(async () => {
         if (window.appInitializer && !window.appInitializer.isInitialized) {

@@ -239,7 +239,7 @@ const server = app.listen(PORT, () => {
     📍 로컬: http://localhost:${PORT}
     📍 네트워크: http://127.0.0.1:${PORT}
     
-    ✅ NAVER Maps Field Management Program
+    ✅ parcel-management-system
     ======================================
     `);
 });
@@ -258,7 +258,7 @@ server.on('error', (err) => {
             📍 로컬: http://localhost:${newPort}
             📍 네트워크: http://127.0.0.1:${newPort}
             
-            ✅ NAVER Maps Field Management Program
+            ✅ parcel-management-system
             ======================================
             `);
         });

@@ -1,4 +1,4 @@
-# NAVER Maps Field Management Program
+# parcel-management-system
 
 네이버 지도와 Vworld API를 활용한 필지 관리 웹 애플리케이션
 

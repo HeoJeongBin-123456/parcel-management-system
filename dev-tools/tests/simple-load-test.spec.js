@@ -24,7 +24,7 @@ test.describe('간단한 로드 테스트', () => {
         // 페이지 제목 확인
         const title = await page.title();
         console.log('📄 페이지 제목:', title);
-        expect(title).toBe('NAVER Maps Field Management Program');
+        expect(title).toBe('parcel-management-system');
         
         // 지도 컨테이너 확인
         const mapContainer = page.locator('#map');

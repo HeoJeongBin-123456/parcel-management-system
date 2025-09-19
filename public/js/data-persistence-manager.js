@@ -316,6 +316,88 @@ class DataPersistenceManager {
         return [];
     }
 
+    async clearAllData() {
+        console.log('🧹 DataPersistenceManager 전체 데이터 초기화 시작');
+
+        this.saveQueue = [];
+        this.isSaving = false;
+        this.lastSaveTime = 0;
+        clearTimeout(this.saveTimeout);
+
+        const localKeys = new Set([
+            ...Object.values(this.STORAGE_KEYS),
+            'snapshots',
+            'lastAutoSave',
+            'emergency_autosave_backup',
+            'backup_settings',
+            'parcelColors',
+            'markerStates'
+        ]);
+
+        localKeys.forEach(key => {
+            try {
+                localStorage.removeItem(key);
+            } catch (error) {
+                console.warn('⚠️ DataPersistenceManager 로컬 키 삭제 실패:', key, error);
+            }
+        });
+
+        try {
+            sessionStorage.removeItem(this.STORAGE_KEYS.SESSION);
+        } catch (error) {
+            console.warn('⚠️ DataPersistenceManager 세션 키 삭제 실패:', error);
+        }
+
+        this.colorStates.clear();
+        this.markerStates.clear();
+
+        if (this.isIndexedDBReady && this.db) {
+            const storeNames = ['parcels', 'polygons', 'snapshots'];
+            for (const storeName of storeNames) {
+                await this.clearIndexedDBStore(storeName);
+            }
+        } else {
+            if (typeof indexedDB !== 'undefined') {
+                try {
+                    const deleteRequest = indexedDB.deleteDatabase('ParcelDB');
+                    await new Promise(resolve => {
+                        deleteRequest.onsuccess = () => resolve();
+                        deleteRequest.onerror = () => resolve();
+                        deleteRequest.onblocked = () => resolve();
+                    });
+                    this.db = null;
+                    this.isIndexedDBReady = false;
+                } catch (error) {
+                    console.warn('⚠️ IndexedDB 삭제 실패:', error);
+                }
+            }
+        }
+
+        console.log('✅ DataPersistenceManager 전체 데이터 초기화 완료');
+    }
+
+    async clearIndexedDBStore(storeName) {
+        if (!this.db) {
+            return;
+        }
+
+        if (!this.db.objectStoreNames.contains(storeName)) {
+            return;
+        }
+
+        await new Promise(resolve => {
+            const transaction = this.db.transaction([storeName], 'readwrite');
+            const store = transaction.objectStore(storeName);
+            const request = store.clear();
+
+            request.onsuccess = () => resolve();
+            request.onerror = () => {
+                console.warn(`⚠️ IndexedDB 스토어 초기화 실패: ${storeName}`);
+                resolve();
+            };
+        });
+    }
+
     // localStorage에서 복원
     restoreFromLocalStorage() {
         const data = localStorage.getItem(this.STORAGE_KEYS.MAIN);

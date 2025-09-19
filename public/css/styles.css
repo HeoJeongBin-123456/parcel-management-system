@@ -18,7 +18,7 @@ body {
 
 /* 헤더 스타일 */
 .header {
-    background: #2c3e50;
+    background: #000000;
     color: white;
     padding: 0.6rem 1rem;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
@@ -66,6 +66,7 @@ body {
     white-space: nowrap !important;
     display: flex !important;
     align-items: center !important;
+    justify-content: center !important;
     gap: 0.4rem !important;
     min-height: 36px !important;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
@@ -371,6 +372,96 @@ body {
     position: relative;
 }
 
+.map-floating-actions {
+    position: absolute;
+    top: 1.25rem;
+    right: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    z-index: 1200;
+    pointer-events: auto;
+}
+
+.map-floating-actions .floating-action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    min-width: 140px;
+    padding: 0.55rem 0.95rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: #f8fafc;
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.8), rgba(30, 41, 59, 0.92));
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 14px;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.18);
+    backdrop-filter: blur(10px);
+    text-shadow: 0 1px 2px rgba(15, 23, 42, 0.4);
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.map-floating-actions .floating-action-btn.critical {
+    color: #fee2e2;
+    background: linear-gradient(135deg, rgba(220, 38, 38, 0.88), rgba(153, 27, 27, 0.92));
+    border-color: rgba(248, 113, 113, 0.45);
+    text-shadow: 0 1px 3px rgba(127, 29, 29, 0.45);
+}
+
+.map-floating-actions .floating-action-btn.pending {
+    pointer-events: none;
+    filter: grayscale(0.25);
+    opacity: 0.9;
+}
+
+.map-floating-actions .floating-action-btn:hover {
+    transform: translateY(-2px);
+    color: #e0f2fe;
+    border-color: rgba(148, 163, 184, 0.45);
+    box-shadow: 0 12px 26px rgba(37, 99, 235, 0.28);
+}
+
+.map-floating-actions .floating-action-btn.critical:hover {
+    color: #fef2f2;
+    border-color: rgba(248, 113, 113, 0.65);
+    box-shadow: 0 12px 26px rgba(220, 38, 38, 0.35);
+}
+
+.map-floating-actions .floating-action-btn:focus-visible {
+    outline: 2px solid rgba(59, 130, 246, 0.8);
+    outline-offset: 3px;
+}
+
+@media (max-width: 1024px) {
+    .map-floating-actions {
+        top: 1rem;
+        right: 1rem;
+        gap: 0.6rem;
+    }
+
+    .map-floating-actions .floating-action-btn {
+        min-width: 128px;
+        padding: 0.5rem 0.85rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .map-floating-actions {
+        top: auto;
+        bottom: 1.2rem;
+        right: 1rem;
+    }
+
+    .map-floating-actions .floating-action-btn {
+        min-width: 120px;
+        padding: 0.5rem 0.8rem;
+        box-shadow: 0 6px 18px rgba(15, 23, 42, 0.18);
+    }
+}
+
 /* 모드별 독립 지도 인스턴스 스타일 */
 .map-instance {
     width: 100%;
@@ -572,84 +663,99 @@ body.mode-hand .search-input-container {
     flex-direction: column;
     overflow-y: auto;
     min-height: 0;
+    gap: 0.25rem;
 }
 
 .form-group {
-    margin-bottom: 0.4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin-bottom: 0.75rem;
 }
 
 .form-group label {
-    display: block;
-    font-size: 0.75rem;
-    color: #495057;
-    margin-bottom: 0.1rem;
+    font-size: 0.78rem;
+    color: #334155;
+    font-weight: 600;
 }
 
 .form-group input,
 .form-group textarea {
     width: 100%;
-    padding: 0.35rem;
-    border: 1px solid #dee2e6;
-    border-radius: 4px;
-    font-size: 0.85rem;
+    padding: 0.45rem 0.5rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 0.88rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    background: #ffffff;
 }
 
 .form-group input:focus,
 .form-group textarea:focus {
     outline: none;
-    border-color: #3498db;
+    border-color: rgba(59, 130, 246, 0.65);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
 }
 
-.form-buttons {
+
+.form-actions {
+    margin-top: 1.2rem;
+    border-top: 1px solid rgba(148, 163, 184, 0.25);
+    padding-top: 1rem;
     display: flex;
-    gap: 0.4rem;
-    margin-top: 0.6rem;
-    flex-wrap: wrap;
+    flex-direction: column;
+    gap: 0.75rem;
 }
 
-.form-buttons button {
+.form-actions-primary {
+    display: flex;
+    gap: 0.6rem;
+}
+
+.form-actions-primary button {
     flex: 1;
-    min-width: 80px;
-    padding: 0.6rem 0.7rem;
-    border: none;
-    border-radius: 8px;
+    min-width: 90px;
+    padding: 0.65rem 0.8rem;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 10px;
     cursor: pointer;
-    font-size: 0.8rem;
+    font-size: 0.82rem;
     font-weight: 600;
-    transition: all 0.3s ease;
-    color: white;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s ease;
+    color: #1f2933;
+    background: linear-gradient(135deg, rgba(248, 250, 252, 0.95), rgba(237, 242, 247, 0.92));
+    box-shadow: 0 6px 14px rgba(15, 23, 42, 0.06);
+}
+
+.form-actions-primary button:hover {
+    transform: translateY(-1px);
+    border-color: rgba(59, 130, 246, 0.4);
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
 }
 
 /* 필지 정보 버튼 스타일 */
 .btn-save, #saveParcelInfoBtn {
-    background-color: #28a745;
-    color: white;
+    border-color: rgba(16, 185, 129, 0.35);
 }
 .btn-save:hover, #saveParcelInfoBtn:hover {
-    background-color: #218838;
-    transform: translateY(-1px);
-    box-shadow: 0 2px 5px rgba(40, 167, 69, 0.3);
+    border-color: rgba(16, 185, 129, 0.65);
+    color: #0f5132;
 }
 
 .btn-delete, #deleteParcelInfoBtn {
-    background-color: #dc3545;
-    color: white;
+    border-color: rgba(239, 68, 68, 0.35);
 }
 .btn-delete:hover, #deleteParcelInfoBtn:hover {
-    background-color: #c82333;
-    transform: translateY(-1px);
-    box-shadow: 0 2px 5px rgba(220, 53, 69, 0.3);
+    border-color: rgba(239, 68, 68, 0.65);
+    color: #7f1d1d;
 }
 
 .btn-copy, #copyToClipboardBtn {
-    background-color: #007bff;
-    color: white;
+    border-color: rgba(37, 99, 235, 0.35);
 }
 .btn-copy:hover, #copyToClipboardBtn:hover {
-    background-color: #0056b3;
-    transform: translateY(-1px);
-    box-shadow: 0 2px 5px rgba(0, 123, 255, 0.3);
+    border-color: rgba(37, 99, 235, 0.65);
+    color: #1d3a8a;
 }
 
 #clearBtn {
@@ -1815,7 +1921,7 @@ body.mode-hand .search-input-container {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    background: #2c3e50;
+    background: #000000;
     color: white;
     padding: 0.6rem 1rem;
 }
@@ -1839,9 +1945,9 @@ body.mode-hand .search-input-container {
     display: flex;
     gap: 0.4rem;
     align-items: center;
-    background: rgba(0,0,0,0.15);
-    padding: 0.4rem 0.6rem;
-    border-radius: 12px;
+    background: transparent;
+    padding: 0;
+    border-radius: 0;
 }
 
 .mode-inner {
@@ -1854,7 +1960,7 @@ body.mode-hand .search-input-container {
 }
 
 .header {
-    background: #2c3e50;
+    background: #000000;
     color: white;
     padding: 0.6rem 1rem;
     display: flex;
@@ -1898,7 +2004,12 @@ body.mode-hand .search-input-container {
     gap: 1rem;
 }
 
-.map-type-selector { display:flex; align-items:center; gap:0.4rem; }
+.map-type-selector {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-left: 1.8rem;
+}
 
 /* 헤더 모드/지도 버튼 리프레시 */
 .mode-switcher-header .mode-button,
@@ -1907,13 +2018,17 @@ body.mode-hand .search-input-container {
     border: 1px solid rgba(255, 255, 255, 0.22) !important;
     background: rgba(255, 255, 255, 0.07) !important;
     color: rgba(248, 250, 252, 0.95) !important;
-    padding: 0.48rem 0.9rem !important;
+    padding: 0.52rem 1rem !important;
     min-width: 70px !important;
+    min-height: 40px !important;
+    border-right: none !important;
     font-weight: 500 !important;
     letter-spacing: 0.01em !important;
     display: inline-flex !important;
     align-items: center !important;
+    justify-content: center !important;
     gap: 0.4rem !important;
+    line-height: 1 !important;
     transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease !important;
     box-shadow: none !important;
 }
@@ -1936,6 +2051,27 @@ body.mode-hand .search-input-container {
     background: rgba(59, 130, 246, 0.25) !important;
     border-color: rgba(96, 165, 250, 0.75) !important;
     color: #f8fafc !important;
+}
+
+body.mode-click .mode-switcher-header .mode-button[data-mode="click"].active {
+    background: rgba(66, 66, 66, 0.88) !important;
+    border-color: rgba(148, 163, 184, 0.6) !important;
+    color: #f8fafc !important;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
+}
+
+body.mode-search .mode-switcher-header .mode-button[data-mode="search"].active {
+    background: rgba(155, 89, 182, 0.85) !important;
+    border-color: rgba(165, 105, 189, 0.8) !important;
+    color: #fdf2ff !important;
+    box-shadow: 0 8px 20px rgba(155, 89, 182, 0.35) !important;
+}
+
+body.mode-hand .mode-switcher-header .mode-button[data-mode="hand"].active {
+    background: rgba(33, 150, 243, 0.85) !important;
+    border-color: rgba(96, 165, 250, 0.85) !important;
+    color: #f1f9ff !important;
+    box-shadow: 0 8px 20px rgba(33, 150, 243, 0.32) !important;
 }
 
 .header .connection-status {

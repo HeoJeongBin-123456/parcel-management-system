@@ -142,6 +142,16 @@ function highlightParcel(parcelData) {
             console.log('🔍 검색 필지 고유 PNU 생성:', pnu);
         }
 
+        const existingResult = window.searchParcels.get(pnu);
+        if (existingResult) {
+            if (existingResult.polygon) {
+                existingResult.polygon.setMap(null);
+            }
+            if (existingResult.label) {
+                existingResult.label.setMap(null);
+            }
+        }
+
         const searchResult = {
             pnu: pnu,
             polygon: highlightPolygon,
@@ -154,6 +164,8 @@ function highlightParcel(parcelData) {
         window.searchParcels.set(pnu, searchResult);
     // console.log('💾 searchParcels에 저장 완료, 총 개수:', window.searchParcels.size);
 
+        saveSearchResultsToStorage();
+
         // 검색 필지가 clickParcels에 잘못 추가되는 것을 방지
         if (window.clickParcels && window.clickParcels.has(pnu)) {
             console.log('🚫 검색 필지가 clickParcels에서 제거됨:', pnu);
@@ -163,9 +175,6 @@ function highlightParcel(parcelData) {
         // currentSelectedPNU 설정 (저장 시 검색 필지로 인식되도록)
         window.currentSelectedPNU = pnu;
     // console.log('📌 currentSelectedPNU 설정:', pnu);
-
-        // 🚫 검색 필지는 자동 저장하지 않음 (사용자가 명시적으로 저장할 때만)
-        // saveSearchResultsToStorage(); // 주석 처리
 
         // 왼쪽 폼에 지번 자동 입력 (저장 없이 표시만)
         const parcelNumberInput = document.getElementById('parcelNumber');
@@ -359,12 +368,17 @@ function loadSearchResultsFromStorage() {
         const searchData = JSON.parse(savedData);
     // console.log('📂 저장된 검색 결과를 복원:', searchData.length + '개');
         
+        // 이미 메모리에 검색 결과가 있는 경우 지도에 다시 표시만 수행
+        if (window.searchParcels && window.searchParcels.size > 0) {
+            if (window.currentMode === 'search') {
+                window.showSearchParcels();
+            }
+            return;
+        }
+
         // 현재 모드를 먼저 체크
         const isSearchMode = window.currentMode === 'search';
     // console.log('🔍 현재 모드:', window.currentMode, '(검색 모드:', isSearchMode + ')');
-        
-        // 기존 검색 결과 초기화
-        clearSearchResults();
         
         // 검색 모드일 때만 폴리곤을 지도에 표시
         if (isSearchMode) {
@@ -382,12 +396,13 @@ function loadSearchResultsFromStorage() {
                     window.searchParcels.set(pnu, {
                         data: item.data,
                         polygon: null,
-                        label: null
+                        label: null,
+                        displayText: item.displayText
                     });
                 }
             });
         }
-        
+
     // console.log('✅ 검색 결과 복원 완료 (검색 필지 개수:', window.searchParcels.size + ')');
     } catch (error) {
         console.error('💥 검색 결과 복원 실패:', error);
@@ -412,6 +427,7 @@ function clearSearchResults() {
             window.searchParcels.clear();
         }
     // console.log('🧹 검색 결과 지도에서 제거 완료');
+        saveSearchResultsToStorage();
     } catch (error) {
         console.error('💥 검색 결과 제거 실패:', error);
     }
@@ -760,11 +776,6 @@ async function searchParcelByJibun(jibun) {
         return;
     }
 
-    // 🔥 새로운 검색 시작 시 기존 검색 결과 완전 정리
-    console.log('🧹 기존 검색 결과 정리 중...');
-    clearSearchResults();
-    removeSearchResultsFromStorage();
-    
     // 더 넓은 범위로 검색 - 서울 전체 영역
     // 현재 모드에 따른 지도 인스턴스 선택
     const currentMap = window.mapSearch || window.map || window.mapClick;
@@ -1024,7 +1035,7 @@ async function searchParcelAtLocation(lat, lng) {
             
             const response = await fetch(apiUrl, {
                 headers: {
-                    'User-Agent': 'NAVER Maps Field Management Program'
+                    'User-Agent': 'parcel-management-system'
                 }
             });
             
@@ -1321,10 +1332,6 @@ function clearAllSearchResults() {
 // 주소로 검색하는 함수 (네이버 Geocoding API 사용)
 async function searchAddressByKeyword(keyword) {
     console.log('🔍 주소 검색 시작:', keyword);
-
-    // 검색 결과 초기화
-    clearSearchResults();
-    removeSearchResultsFromStorage();
 
     // 현재 지도 확인
     const searchMap = window.mapSearch || window.map;

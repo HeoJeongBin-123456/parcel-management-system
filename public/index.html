@@ -6,7 +6,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="theme-color" content="#667eea">
-    <title>NAVER Maps Field Management Program</title>
+    <title>parcel-management-system</title>
     
     <!-- 네이버 지도 API -->
     <script type="text/javascript" src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=xzbnwd2h1z&submodules=geocoder,panorama"></script>
@@ -48,9 +48,9 @@
             <div class="header-center">
                 <!-- 모드 전환 버튼 -->
                 <div class="mode-switcher-header">
-                    <button class="mode-button active" data-mode="click" data-emoji="🎯">클릭</button>
-                    <button class="mode-button" data-mode="search" data-emoji="🔍">검색</button>
-                    <button class="mode-button" data-mode="hand" data-emoji="✋">손</button>
+                    <button class="mode-button active" data-mode="click" data-emoji="🎯">🎯 클릭</button>
+                    <button class="mode-button" data-mode="search" data-emoji="🔍">🔍 검색</button>
+                    <button class="mode-button" data-mode="hand" data-emoji="✋">✋ 손</button>
                 </div>
             </div>
             <div class="header-right">
@@ -94,7 +94,7 @@
             <!-- 필지 정보 입력 -->
             <div class="parcel-info">
                 <h3>필지 정보</h3>
-                <form id="parcelForm">
+                <form id="parcelForm" class="parcel-form">
                     <div class="form-group">
                         <label>지번</label>
                         <input type="text" id="parcelNumber" placeholder="예: 123-4">
@@ -111,29 +111,15 @@
                         <label>연락처</label>
                         <input type="text" id="ownerContact" placeholder="010-1234-5678">
                     </div>
-                    <div class="form-group">
+                    <div class="form-group form-group-wide">
                         <label>메모</label>
-                        <textarea id="memo" rows="3" placeholder="추가 메모..." style="resize: vertical; min-height: 60px;"></textarea>
+                        <textarea id="memo" rows="3" placeholder="추가 메모..." style="resize: vertical; min-height: 52px; max-height: 120px;"></textarea>
                     </div>
-                    <div class="form-buttons">
-                        <div class="form-buttons-row">
-                            <button type="button" id="saveParcelInfoBtn" class="btn-save">
-                                📝 저장
-                            </button>
-                            <button type="button" id="deleteParcelInfoBtn" class="btn-delete">
-                                🗑️ 삭제
-                            </button>
-                            <button type="button" id="copyToClipboardBtn" class="btn-copy">
-                                📋 복사
-                            </button>
-                        </div>
-                        <div class="form-buttons-row">
-                            <button type="button" id="calendarBtn" class="btn-calendar" onclick="openCalendarModal()">
-                                📅 캘린더
-                            </button>
-                            <button type="button" id="backupBtn" class="btn-backup" onclick="showBackupModal()">
-                                💾 백업
-                            </button>
+                    <div class="form-actions form-actions-wide">
+                        <div class="form-actions-primary">
+                            <button type="button" id="saveParcelInfoBtn" class="btn-save">저장</button>
+                            <button type="button" id="deleteParcelInfoBtn" class="btn-delete">삭제</button>
+                            <button type="button" id="copyToClipboardBtn" class="btn-copy">복사</button>
                         </div>
                     </div>
                 </form>
@@ -144,6 +130,17 @@
 
             <!-- 지도 영역 -->
             <div class="map-container">
+                <div class="map-floating-actions">
+                    <button type="button" id="calendarBtn" class="floating-action-btn" onclick="openCalendarModal()">
+                        📅 캘린더
+                    </button>
+                    <button type="button" id="backupBtn" class="floating-action-btn" onclick="showBackupModal()">
+                        💾 백업
+                    </button>
+                    <button type="button" id="resetMapBtn" class="floating-action-btn critical">
+                        데이터 초기화
+                    </button>
+                </div>
                 <!-- 모드 인디케이터 제거됨 -->
 
                 <!-- 검색 입력 (검색 모드 전용) -->

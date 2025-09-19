@@ -1117,6 +1117,40 @@ class SupabaseManager {
             return false;
         }
     }
+
+    // 전체 필지 데이터 삭제 (관리자 기능)
+    async deleteAllParcelData() {
+        if (!this.isConnected) {
+            console.warn('⚠️ Supabase 미연결 상태 - 원격 데이터 삭제 불가');
+            return false;
+        }
+
+        try {
+            const { error: parcelsError } = await this.supabase
+                .from('parcels')
+                .delete()
+                .neq('pnu', '0');
+
+            if (parcelsError && parcelsError.code !== 'PGRST116') {
+                throw parcelsError;
+            }
+
+            const { error: polygonsError } = await this.supabase
+                .from('parcel_polygons')
+                .delete()
+                .neq('pnu', '0');
+
+            if (polygonsError && polygonsError.code !== 'PGRST116') {
+                throw polygonsError;
+            }
+
+            console.log('🧹 Supabase 전체 필지 데이터 삭제 완료');
+            return true;
+        } catch (error) {
+            console.error('❌ Supabase 전체 데이터 삭제 실패:', error);
+            return false;
+        }
+    }
 }
 
 // 전역 인스턴스 생성 - 중복 생성 방지

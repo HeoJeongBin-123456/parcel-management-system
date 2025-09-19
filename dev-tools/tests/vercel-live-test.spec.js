@@ -12,7 +12,7 @@ test.describe('Vercel 라이브 테스트 - Mock API', () => {
             // 페이지 로드 확인
             const title = await page.title();
             console.log('페이지 제목:', title);
-            expect(title).toContain('NAVER Maps Field Management Program');
+            expect(title).toContain('parcel-management-system');
             
             // 지도 로드 대기
             await page.waitForFunction(() => window.map && window.naver, { timeout: 15000 });
