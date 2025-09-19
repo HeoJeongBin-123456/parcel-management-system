@@ -368,12 +368,14 @@ function loadSearchResultsFromStorage() {
         const searchData = JSON.parse(savedData);
     // console.log('📂 저장된 검색 결과를 복원:', searchData.length + '개');
         
-        // 이미 메모리에 검색 결과가 있는 경우 지도에 다시 표시만 수행
+        const hasExistingPolygons = window.searchParcels && Array.from(window.searchParcels.values()).some(result => result.polygon);
+
         if (window.searchParcels && window.searchParcels.size > 0) {
-            if (window.currentMode === 'search') {
+            if (isSearchMode && hasExistingPolygons) {
                 window.showSearchParcels();
+                return;
             }
-            return;
+            window.searchParcels.clear();
         }
 
         // 현재 모드를 먼저 체크
