@@ -76,21 +76,8 @@ function highlightParcel(parcelData) {
             map: window.mapSearch || window.map
         });
 
-        // 검색 필지 색상 고정 - setOptions 메서드 오버라이드
-        const originalSetOptions = highlightPolygon.setOptions;
-        highlightPolygon.setOptions = function(options) {
-            // 검색 필지는 색상 변경을 무시하고 보라색 유지
-            const fixedOptions = {
-                ...options,
-                fillColor: '#9370DB',
-                fillOpacity: 0.7,
-                strokeColor: '#6A0DAD',
-                strokeWeight: 3,
-                strokeOpacity: 1.0
-            };
-            console.log('🔍 검색 필지 색상 고정:', pnu);
-            return originalSetOptions.call(this, fixedOptions);
-        };
+        // 검색 필지 색상 고정 - 네이버 지도 API 호환성을 위해 setOptions 오버라이드 제거
+        // 대신 폴리곤 생성 시 고정 색상으로 설정하고 이후 변경하지 않음
 
     // console.log('✅ 형광색 폴리곤 생성 완료');
     // console.log('🔍 폴리곤 paths 확인:', highlightPolygon.getPaths());
@@ -158,13 +145,16 @@ function highlightParcel(parcelData) {
             label: label,
             data: parcelData,
             displayText: displayText,
-            colorType: 'search' // 검색 필지 구분자 추가
+            colorType: 'search', // 검색 필지 구분자 추가
+            timestamp: Date.now() // 생성 시간 추가
         };
 
         window.searchParcels.set(pnu, searchResult);
-    // console.log('💾 searchParcels에 저장 완료, 총 개수:', window.searchParcels.size);
+        console.log('💾 searchParcels에 저장 완료, 총 개수:', window.searchParcels.size);
 
+        // 즉시 localStorage에 저장
         saveSearchResultsToStorage();
+        console.log('💾 검색 필지 즉시 저장 완료:', pnu);
 
         // 검색 필지가 clickParcels에 잘못 추가되는 것을 방지
         if (window.clickParcels && window.clickParcels.has(pnu)) {
@@ -226,88 +216,11 @@ function highlightParcel(parcelData) {
                 window.currentSelectedPNU = clickedPNU;
                 console.log('🎯 실제 클릭된 PNU:', clickedPNU);
 
-                // 🗑️ 이미 보라색인 검색 필지 클릭 시 삭제 확인 다이얼로그 표시
-                const searchParcel = window.searchParcels.get(clickedPNU);
-                console.log('🔍 검색 필지 클릭 확인:', { clickedPNU, searchParcel, hasPolygon: !!searchParcel?.polygon });
-                if (searchParcel && searchParcel.polygon) {
-                    if (confirm(`검색 필지 "${displayText}"를 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.`)) {
-                        console.log('🗑️ 검색 필지 삭제 시작:', clickedPNU);
+                // ✅ 검색 필지 좌클릭 - 정보만 표시 (삭제는 우클릭으로 처리됨)
+                console.log('🔍 검색 필지 좌클릭 - 정보 표시:', clickedPNU);
 
-                        try {
-                            // ❌ 검색 필지는 Supabase에 저장된 데이터가 아니므로 삭제하지 않음
-                            // 검색 필지는 VWorld API에서 가져온 임시 데이터이므로 메모리에서만 제거
-                            console.log('🔍 검색 필지는 임시 데이터 - Supabase 삭제 건너뜀');
-
-                            // 1. LocalStorage에서 삭제 (혹시 저장된 검색 필지가 있다면)
-                            const savedData = JSON.parse(localStorage.getItem('parcelData') || '[]');
-                            const updatedData = savedData.filter(item => {
-                                return item.pnu !== clickedPNU && item.parcelNumber !== jibun;
-                            });
-                            localStorage.setItem('parcelData', JSON.stringify(updatedData));
-
-                            // 3. 색상 정보 삭제
-                            ParcelColorStorage.remove(clickedPNU);
-
-                            // 4. 마커 상태 삭제
-                            const markerStates = JSON.parse(localStorage.getItem('markerStates') || '{}');
-                            delete markerStates[clickedPNU];
-                            localStorage.setItem('markerStates', JSON.stringify(markerStates));
-
-                            // 5. 지도에서 마커 제거
-                            if (window.MemoMarkerManager && window.MemoMarkerManager.markers) {
-                                const markerInfo = window.MemoMarkerManager.markers.get(clickedPNU);
-                                if (markerInfo && markerInfo.marker) {
-                                    markerInfo.marker.setMap(null);
-                                    window.MemoMarkerManager.markers.delete(clickedPNU);
-                                    console.log('✅ 마커 제거 완료:', clickedPNU);
-                                }
-                            }
-
-                            // 6. 지도에서 폴리곤과 라벨 제거
-                            if (searchParcel.polygon) {
-                                searchParcel.polygon.setMap(null);
-                            }
-                            if (searchParcel.label) {
-                                searchParcel.label.setMap(null);
-                            }
-
-                            // 7. searchParcels Map에서 제거
-                            window.searchParcels.delete(clickedPNU);
-
-                            // 8. localStorage 업데이트 (삭제된 상태 저장)
-                            saveSearchResultsToStorage();
-
-                            // 9. clickParcels에서도 제거 (혹시 있다면)
-                            if (window.clickParcels && window.clickParcels.has(clickedPNU)) {
-                                window.clickParcels.delete(clickedPNU);
-                            }
-
-                            // 9. 폼 초기화
-                            document.getElementById('parcelForm').reset();
-                            window.currentSelectedPNU = null;
-
-                            console.log('✨ 검색 필지 삭제 완료:', jibun);
-                            alert(`검색 필지 "${displayText}"가 삭제되었습니다.`);
-
-                        } catch (error) {
-                            console.error('❌ 검색 필지 삭제 실패:', error);
-                            alert('필지 삭제 중 오류가 발생했습니다.');
-                        }
-
-                        return; // 삭제했으면 더 이상 진행하지 않음
-                    }
-                }
-
-                // 검색 필지 색상을 다시 고정
-                highlightPolygon.setOptions({
-                    fillColor: '#9370DB',
-                    fillOpacity: 0.7,
-                    strokeColor: '#6A0DAD',
-                    strokeWeight: 3,
-                    strokeOpacity: 1.0
-                });
-
-                console.log('🔍 검색 필지 클릭 - 보라색 유지:', pnu);
+                // 검색 필지는 생성 시 보라색으로 고정되어 있으므로 별도 설정 불필요
+                console.log('🔍 검색 필지 클릭 - 색상 유지:', pnu);
 
                 // 기존 저장된 데이터 로드 (메모가 있다면)
                 await loadExistingParcelData(jibun, 'search');
@@ -317,6 +230,31 @@ function highlightParcel(parcelData) {
 
                 console.log('📝 검색 필지 메모 기능 활성화:', pnu);
             }
+            });
+
+            // 오른쪽 클릭 이벤트 (삭제) - 추가
+            naver.maps.Event.addListener(highlightPolygon, 'rightclick', async function(e) {
+                // 이벤트 전파 중지
+                if (e && e.domEvent) {
+                    if (typeof e.domEvent.stopPropagation === 'function') {
+                        e.domEvent.stopPropagation();
+                    }
+                    if (typeof e.domEvent.preventDefault === 'function') {
+                        e.domEvent.preventDefault();
+                    }
+                }
+
+                console.log('🗑️ 검색 폴리곤 오른쪽 클릭 (삭제):', pnu);
+
+                // 삭제 확인
+                const confirmDelete = confirm('이 검색 필지를 삭제하시겠습니까?');
+                if (confirmDelete) {
+                    if (window.removeSearchParcel) {
+                        await window.removeSearchParcel(pnu);
+                    } else {
+                        console.error('removeSearchParcel 함수를 찾을 수 없습니다.');
+                    }
+                }
             });
         }
 
@@ -334,79 +272,112 @@ if (typeof window.searchParcels === 'undefined') {
 // localStorage 키 정의
 const SEARCH_STORAGE_KEY = 'window.searchParcels';
 
-// 검색 결과를 localStorage에 저장
+// 검색 결과를 localStorage에 저장 (강화된 버전)
 function saveSearchResultsToStorage() {
     try {
         const searchData = [];
         window.searchParcels.forEach((result, pnu) => {
             // 폴리곤과 라벨은 저장하지 않고, 데이터만 저장
             searchData.push({
-                pnu: result.pnu,
+                pnu: result.pnu || pnu, // PNU 백업
                 data: result.data,
-                displayText: result.displayText
+                displayText: result.displayText,
+                colorType: result.colorType || 'search',
+                timestamp: result.timestamp || Date.now()
             });
         });
-        
+
+        // 통일된 키로 저장 (기존 키도 함께 저장하여 호환성 유지)
+        localStorage.setItem('searchParcels', JSON.stringify(searchData));
         localStorage.setItem(SEARCH_STORAGE_KEY, JSON.stringify(searchData));
-    // console.log('💾 검색 결과를 localStorage에 저장:', searchData.length + '개');
+        console.log('💾 검색 필지를 localStorage에 저장 완료:', searchData.length + '개');
+
+        // 디버깅용 정보
+        console.log('💾 저장된 검색 필지 PNU 목록:', searchData.map(item => item.pnu));
     } catch (error) {
         console.error('💥 검색 결과 저장 실패:', error);
     }
 }
 
-// localStorage에서 검색 결과 복원
+// localStorage에서 검색 결과 복원 (강화된 버전)
 function loadSearchResultsFromStorage() {
     try {
-        const savedData = localStorage.getItem(SEARCH_STORAGE_KEY);
-        if (!savedData) {
-    // console.log('📂 저장된 검색 결과가 없습니다');
+        console.log('🔄 localStorage에서 검색 필지 복원 시작...');
+
+        // 여러 키에서 데이터 확인 (호환성을 위해)
+        let savedData = localStorage.getItem('searchParcels') ||
+                       localStorage.getItem(SEARCH_STORAGE_KEY);
+
+        if (!savedData || savedData === '[]' || savedData === 'null') {
+            console.log('📂 저장된 검색 결과가 없음');
             return;
         }
-        
-        const searchData = JSON.parse(savedData);
-    // console.log('📂 저장된 검색 결과를 복원:', searchData.length + '개');
-        
-        const hasExistingPolygons = window.searchParcels && Array.from(window.searchParcels.values()).some(result => result.polygon);
 
-        if (window.searchParcels && window.searchParcels.size > 0) {
-            if (isSearchMode && hasExistingPolygons) {
-                window.showSearchParcels();
-                return;
-            }
-            window.searchParcels.clear();
+        const searchData = JSON.parse(savedData);
+        console.log('📂 저장된 검색 결과 발견:', searchData.length + '개');
+
+        // 유효성 검사
+        if (!Array.isArray(searchData) || searchData.length === 0) {
+            console.log('📂 유효하지 않은 검색 데이터');
+            return;
         }
 
-        // 현재 모드를 먼저 체크
+        // 기존 검색 필지 확인
+        const hasExistingPolygons = window.searchParcels &&
+                                   Array.from(window.searchParcels.values()).some(result => result.polygon);
+
+        if (window.searchParcels && window.searchParcels.size > 0 && hasExistingPolygons) {
+            console.log('🔍 기존 검색 필지가 있어 복원 건너뜀');
+            return;
+        }
+
+        // 현재 모드 체크
         const isSearchMode = window.currentMode === 'search';
-    // console.log('🔍 현재 모드:', window.currentMode, '(검색 모드:', isSearchMode + ')');
-        
+        console.log('🔍 현재 모드:', window.currentMode, '(검색 모드:', isSearchMode + ')');
+
+        // window.searchParcels 초기화
+        if (!window.searchParcels) {
+            window.searchParcels = new Map();
+        }
+
+        let restoredCount = 0;
+
         // 검색 모드일 때만 폴리곤을 지도에 표시
         if (isSearchMode) {
-    // console.log('🔍 검색 모드이므로 검색 필지를 표시합니다');
+            console.log('🔍 검색 모드 - 검색 필지 시각적 복원 시작');
             searchData.forEach(item => {
-                highlightParcel(item.data);
+                if (item.data && item.data.properties) {
+                    highlightParcel(item.data);
+                    restoredCount++;
+                }
             });
+            console.log('✅ 검색 모드 시각적 복원 완료:', restoredCount + '개');
         } else {
-    // console.log('🔧 클릭 모드이므로 검색 필지를 메모리에만 로드하고 표시하지 않습니다');
+            console.log('🔧 클릭/손 모드 - 검색 필지 메모리 복원만 수행');
             // 데이터는 window.searchParcels에 저장하되 지도에는 표시하지 않음
             searchData.forEach(item => {
-                const pnu = item.data.properties.PNU;
-                if (pnu) {
-                    // 폴리곤 없이 데이터만 저장
+                const pnu = item.pnu || item.data?.properties?.PNU;
+                if (pnu && item.data) {
                     window.searchParcels.set(pnu, {
+                        pnu: pnu,
                         data: item.data,
                         polygon: null,
                         label: null,
-                        displayText: item.displayText
+                        displayText: item.displayText,
+                        colorType: item.colorType || 'search',
+                        timestamp: item.timestamp || Date.now()
                     });
+                    restoredCount++;
                 }
             });
+            console.log('✅ 메모리 복원 완료:', restoredCount + '개');
         }
 
-    // console.log('✅ 검색 결과 복원 완료 (검색 필지 개수:', window.searchParcels.size + ')');
+        console.log('✅ 검색 결과 복원 완료 (총 검색 필지:', window.searchParcels.size + '개)');
     } catch (error) {
         console.error('💥 검색 결과 복원 실패:', error);
         // 오류 발생 시 손상된 데이터 제거
+        localStorage.removeItem('searchParcels');
         localStorage.removeItem(SEARCH_STORAGE_KEY);
     }
 }

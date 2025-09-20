@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 앞으로 모든 언어를 한국말로 말하라.
 
-## 🚨 필수 테스트 규칙 (CRITICAL - 2025-01-15 추가)
+## 🚨 필수 테스트 규칙 (CRITICAL)
 
 ### 모든 구현 완료 시 반드시 수행해야 할 사항:
 1. **Playwright로 스크린샷 확인** - 실제 화면이 예상대로 동작하는지 확인

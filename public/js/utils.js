@@ -4,7 +4,7 @@ const COLOR_PALETTE_DEFINITION = [
     { index: 0, hex: '#FF0000', name: '빨강' },
     { index: 1, hex: '#FFA500', name: '주황' },
     { index: 2, hex: '#FFFF00', name: '노랑' },
-    { index: 3, hex: '#00FF00', name: '초록' },
+    { index: 3, hex: '#90EE90', name: '연두' },
     { index: 4, hex: '#0000FF', name: '파랑' },
     { index: 5, hex: '#000000', name: '검정' },
     { index: 6, hex: '#FFFFFF', name: '흰색' },
@@ -650,26 +650,42 @@ async function deleteCurrentParcel() {
         return;
     }
 
-    const confirmReset = confirm(`필지 "${parcelNumber}"의 정보를 초기화하시겠습니까?\n\n색상은 유지되고, 입력된 정보(소유자명, 주소, 연락처, 메모)는 삭제됩니다.\n메모 마커는 함께 제거됩니다.`);
+    const confirmReset = confirm(`필지 "${parcelNumber}"를 완전히 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.\n색상, 정보, 마커가 모두 제거되며 새로고침 후에도 복원되지 않습니다.`);
     if (!confirmReset) {
         return;
     }
 
     try {
-        // 1. 모든 LocalStorage 키에서 해당 필지 정보만 초기화 (색상은 유지)
-        const storageKeys = [
+        // 1. 모든 LocalStorage 키에서 해당 필지를 완전히 삭제
+        // 동적으로 localStorage의 모든 키를 확인하여 필지 관련 키 찾기
+        const allStorageKeys = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && (
+                key.includes('parcel') ||
+                key.includes('Parcel') ||
+                key === 'parcels' ||
+                key === 'clickParcelData' ||
+                key === 'searchParcels'
+            )) {
+                allStorageKeys.push(key);
+            }
+        }
+
+        // 기본 키들도 추가 (혹시 누락된 것이 있을 수 있음)
+        const defaultKeys = [
             CONFIG.STORAGE_KEY,           // 'parcelData'
             'parcels_current_session',    // 실제 저장되는 키
             'parcels',                    // 다른 가능한 키
             'parcelData_backup',          // 백업 키
-            'clickParcelData'             // 클릭 모드 데이터
+            'clickParcelData',            // 클릭 모드 데이터
+            'searchParcels'               // 검색 필지 데이터
         ];
 
-        let colorToKeep = null;
-        let latToKeep = null;
-        let lngToKeep = null;
+        const storageKeys = [...new Set([...allStorageKeys, ...defaultKeys])]; // 중복 제거
+        console.log(`🔍 완전 삭제 대상 localStorage 키: ${storageKeys.join(', ')}`);
 
-        // 각 키에서 데이터 업데이트
+        // 각 키에서 데이터 완전 삭제
         storageKeys.forEach(key => {
             try {
                 const data = localStorage.getItem(key);
@@ -688,93 +704,57 @@ async function deleteCurrentParcel() {
                     return; // 배열이 아니면 건너뛰기
                 }
 
-                const updatedData = savedData.map(item => {
-                    if (item.pnu === currentPNU || item.parcelNumber === parcelNumber) {
-                        // 유지할 데이터 보관
-                        if (!colorToKeep) {
-                            colorToKeep = item.color;
-                            latToKeep = item.lat;
-                            lngToKeep = item.lng;
-                        }
-
-                        // 색상 정보는 유지하고 나머지 정보만 null로 초기화
-                        const updatedItem = {
-                            ...item,
-                            parcelNumber: null,  // null로 설정
-                            parcel_name: null,   // parcel_name도 null로 설정 (마커 생성 방지)
-                            parcel_number: null, // parcel_number도 null로 설정
-                            ownerName: null,     // null로 설정
-                            owner_name: null,    // owner_name도 null로 설정
-                            ownerAddress: null,   // null로 설정
-                            owner_address: null,  // owner_address도 null로 설정
-                            ownerContact: null,   // null로 설정
-                            owner_contact: null,  // owner_contact도 null로 설정
-                            memo: null,          // null로 설정
-                            parcelMemo: null,    // parcelMemo도 null로 설정
-                            // 색상 관련 필드는 유지
-                            color: item.color,
-                            is_colored: item.is_colored,
-                            currentColor: item.currentColor
-                        };
-
-                        // properties 객체가 있으면 jibun과 JIBUN도 null로 설정
-                        if (updatedItem.properties) {
-                            updatedItem.properties = {
-                                ...updatedItem.properties,
-                                jibun: null,
-                                JIBUN: null
-                            };
-                        }
-
-                        return updatedItem;
-                    }
-                    return item;
+                // 해당 필지를 배열에서 완전히 제거
+                const updatedData = savedData.filter(item => {
+                    // PNU, parcelNumber, parcel_name, id 등 다양한 식별자로 매칭
+                    const matches = (
+                        item.pnu === currentPNU ||
+                        item.parcelNumber === parcelNumber ||
+                        item.parcel_name === parcelNumber ||
+                        (currentPNU && item.id && item.id.toString().includes(currentPNU.slice(-6))) // ID 부분 매칭
+                    );
+                    return !matches; // 매칭되지 않는 것만 유지 (매칭되는 것은 삭제)
                 });
 
                 localStorage.setItem(key, JSON.stringify(updatedData));
-                console.log(`✅ ${key}에서 필지 정보 초기화`);
+                console.log(`✅ ${key}에서 필지 완전 삭제: ${savedData.length} -> ${updatedData.length}개`);
             } catch (e) {
                 console.warn(`⚠️ ${key} 처리 중 오류:`, e);
             }
         });
 
-        // 2. Supabase에도 동일하게 업데이트 (색상은 유지, 정보만 초기화)
-        if (window.SupabaseManager && window.SupabaseManager.isConnected && currentPNU) {
+        // 2. 색상 정보 완전 삭제 (parcelColors에서 제거)
+        if (currentPNU) {
             try {
-                const supabaseData = {
-                    parcelNumber: null,  // null로 설정하여 마커 생성 조건에서 제외
-                    parcel_name: null,   // parcel_name도 null로 설정
-                    parcel_number: null, // parcel_number도 null로 설정
-                    pnu: currentPNU,
-                    ownerName: null,     // null로 설정
-                    owner_name: null,    // owner_name도 null로 설정
-                    ownerAddress: null,   // null로 설정
-                    owner_address: null,  // owner_address도 null로 설정
-                    ownerContact: null,   // null로 설정
-                    owner_contact: null,  // owner_contact도 null로 설정
-                    memo: null,          // null로 설정
-                    parcelMemo: null,    // parcelMemo도 null로 설정
-                    // 색상 정보는 유지
-                    color: colorToKeep,
-                    lat: latToKeep,
-                    lng: lngToKeep,
-                    color_info: colorToKeep ? {
-                        color: colorToKeep,
-                        applied_at: new Date().toISOString(),
-                        mode: 'preserved'
-                    } : null,
-                    marker_data: null // 마커 데이터는 제거
-                };
+                const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
+                if (parcelColors && parcelColors[currentPNU] !== undefined) {
+                    delete parcelColors[currentPNU];
+                    localStorage.setItem('parcelColors', JSON.stringify(parcelColors));
+                    console.log(`✅ parcelColors에서 필지 색상 삭제: ${currentPNU}`);
+                }
 
-                await window.SupabaseManager.saveParcel(currentPNU, supabaseData);
-                console.log('✅ Supabase 정보 초기화 완료:', currentPNU);
+                // ColorPaletteManager를 통한 색상 제거
+                if (window.ColorPaletteManager && window.ColorPaletteManager.removeColorFromParcel) {
+                    window.ColorPaletteManager.removeColorFromParcel(currentPNU);
+                    console.log(`✅ ColorPaletteManager에서 색상 제거: ${currentPNU}`);
+                }
+            } catch (e) {
+                console.warn('색상 정보 삭제 중 오류:', e);
+            }
+        }
+
+        // 3. Supabase에서도 완전히 삭제
+        if (window.SupabaseManager && window.SupabaseManager.deleteParcel && currentPNU) {
+            try {
+                await window.SupabaseManager.deleteParcel(currentPNU);
+                console.log('✅ Supabase에서 필지 완전 삭제:', currentPNU);
             } catch (supabaseError) {
-                console.error('⚠️ Supabase 업데이트 실패 (로컬은 성공):', supabaseError);
+                console.error('⚠️ Supabase 삭제 실패 (로컬은 성공):', supabaseError);
                 // Supabase 실패해도 계속 진행 (로컬은 이미 업데이트됨)
             }
         }
 
-        // 3. 폼 초기화 (마커 생성 방지를 위해 지번도 초기화)
+        // 4. 폼 초기화 (마커 생성 방지를 위해 지번도 초기화)
         document.getElementById('parcelNumber').value = ''; // 지번도 초기화해야 마커가 생성되지 않음
         document.getElementById('ownerName').value = '';
         document.getElementById('ownerAddress').value = '';
@@ -805,9 +785,9 @@ async function deleteCurrentParcel() {
             window.parcelManager.renderParcelList();
         }
 
-    // console.log('✅ 필지 정보 초기화 완료:', currentPNU || parcelNumber);
+    // console.log('✅ 필지 완전 삭제 완료:', currentPNU || parcelNumber);
         // 성공 메시지는 콘솔에만 표시 (알림 제거)
-        console.log(`✅ 필지 "${parcelNumber}"의 정보가 초기화되었습니다. 색상은 유지되었습니다.`);
+        console.log(`✅ 필지 "${parcelNumber}"가 완전히 삭제되었습니다. (색상, 정보, 마커 모두 제거)`);
 
     } catch (error) {
         console.error('❌ 필지 정보 초기화 실패:', error);

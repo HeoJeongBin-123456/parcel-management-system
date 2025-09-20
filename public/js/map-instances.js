@@ -29,34 +29,56 @@ const MODE_POSITION_PREFIX = 'mapPosition_';
 let mapPositionSaveTimer = null;
 
 function saveMapViewState(mode, mapInstance) {
-    if (!mapInstance) return;
+    if (!mapInstance) {
+        console.warn('⚠️ saveMapViewState: mapInstance가 null');
+        return;
+    }
 
     const center = mapInstance.getCenter();
-    if (!center) return;
+    if (!center) {
+        console.warn('⚠️ saveMapViewState: center가 null');
+        return;
+    }
 
     const position = {
         mode,
         lat: center.lat(),
         lng: center.lng(),
-        zoom: mapInstance.getZoom()
+        zoom: mapInstance.getZoom(),
+        timestamp: Date.now()
     };
+
+    // 유효성 검사
+    if (typeof position.lat !== 'number' || typeof position.lng !== 'number' ||
+        position.lat === 0 || position.lng === 0 ||
+        isNaN(position.lat) || isNaN(position.lng)) {
+        console.warn('⚠️ 유효하지 않은 위치 데이터:', position);
+        return;
+    }
 
     try {
         localStorage.setItem(MAP_POSITION_KEY, JSON.stringify(position));
         if (mode) {
             localStorage.setItem(`${MODE_POSITION_PREFIX}${mode}`, JSON.stringify(position));
         }
+        console.log('💾 지도 위치 localStorage 저장 완료:', {
+            mode,
+            lat: position.lat.toFixed(6),
+            lng: position.lng.toFixed(6),
+            zoom: position.zoom
+        });
     } catch (error) {
         console.warn('⚠️ 지도 위치 로컬 저장 실패:', error);
     }
 
+    // Supabase 저장 (디바운싱 적용)
     if (window.SupabaseManager && window.SupabaseManager.isConnected) {
         if (mapPositionSaveTimer) {
             clearTimeout(mapPositionSaveTimer);
         }
         mapPositionSaveTimer = setTimeout(() => {
             window.SupabaseManager.saveMapPosition(position.lat, position.lng, position.zoom)
-                .then(() => console.log('🗺️ 지도 위치 클라우드 저장 완료:', position))
+                .then(() => console.log('☁️ 지도 위치 클라우드 저장 완료:', position))
                 .catch(error => console.warn('⚠️ 지도 위치 클라우드 저장 실패:', error));
         }, 600);
     }
@@ -111,17 +133,39 @@ function restoreMapViewForMode(mode, mapInstance) {
 
 // 공통 지도 옵션 생성
 async function createMapOptions() {
+    console.log('🗺️ 지도 옵션 생성 시작 - 위치 복원 중...');
+
     // 저장된 위치 정보 불러오기
     let center = null;
-    let zoom = null;
+    let zoom = CONFIG.MAP_DEFAULT_ZOOM;
 
-    // 1) localStorage 우선 사용 (즉시 복원용)
+    // 1) localStorage 우선 사용 (즉시 복원용) - 강화된 체크
     try {
-        const savedPosition = JSON.parse(localStorage.getItem('mapPosition') || '{}');
-        if (savedPosition.lat && savedPosition.lng) {
-            center = new naver.maps.LatLng(savedPosition.lat, savedPosition.lng);
-            zoom = savedPosition.zoom || CONFIG.MAP_DEFAULT_ZOOM;
-            console.log('🗺️ localStorage에서 위치 로드:', savedPosition);
+        const storedData = localStorage.getItem('mapPosition');
+        console.log('🔍 localStorage mapPosition 체크:', storedData);
+
+        if (storedData && storedData !== '{}' && storedData !== 'null') {
+            const savedPosition = JSON.parse(storedData);
+            console.log('📍 파싱된 위치 데이터:', savedPosition);
+
+            if (savedPosition &&
+                typeof savedPosition.lat === 'number' &&
+                typeof savedPosition.lng === 'number' &&
+                savedPosition.lat !== 0 &&
+                savedPosition.lng !== 0) {
+
+                center = new naver.maps.LatLng(savedPosition.lat, savedPosition.lng);
+                zoom = savedPosition.zoom || CONFIG.MAP_DEFAULT_ZOOM;
+                console.log('✅ localStorage에서 위치 복원 성공:', {
+                    lat: savedPosition.lat,
+                    lng: savedPosition.lng,
+                    zoom: zoom
+                });
+            } else {
+                console.warn('⚠️ localStorage 위치 데이터가 유효하지 않음:', savedPosition);
+            }
+        } else {
+            console.log('📂 localStorage에 저장된 위치 없음');
         }
     } catch (error) {
         console.warn('⚠️ localStorage 위치 로드 실패:', error.message);
@@ -129,23 +173,34 @@ async function createMapOptions() {
 
     // 2) Supabase가 있으면 최신 값으로 업데이트 (있을 때만 덮어쓰기)
     try {
-        if (window.SupabaseManager) {
+        if (window.SupabaseManager && window.SupabaseManager.isConnected) {
             const savedPosition = await window.SupabaseManager.loadMapPosition();
-            if (savedPosition && savedPosition.lat && savedPosition.lng) {
+            if (savedPosition &&
+                typeof savedPosition.lat === 'number' &&
+                typeof savedPosition.lng === 'number' &&
+                savedPosition.lat !== 0 &&
+                savedPosition.lng !== 0) {
+
                 center = new naver.maps.LatLng(savedPosition.lat, savedPosition.lng);
-                zoom = savedPosition.zoom || zoom || CONFIG.MAP_DEFAULT_ZOOM;
-                console.log('🗺️ Supabase에서 저장된 위치 로드:', savedPosition);
+                zoom = savedPosition.zoom || zoom;
+                console.log('✅ Supabase에서 최신 위치 업데이트:', savedPosition);
             }
         }
     } catch (error) {
         console.warn('⚠️ Supabase 위치 로드 실패:', error.message);
     }
 
-    // 기본 위치 사용
+    // 3) 기본 위치 사용 (저장된 위치가 없을 때만)
     if (!center) {
         center = new naver.maps.LatLng(CONFIG.MAP_DEFAULT_CENTER.lat, CONFIG.MAP_DEFAULT_CENTER.lng);
         zoom = CONFIG.MAP_DEFAULT_ZOOM;
-        console.log('🎯 기본 위치 사용:', CONFIG.MAP_DEFAULT_CENTER);
+        console.log('🎯 저장된 위치가 없어 기본 위치 사용:', CONFIG.MAP_DEFAULT_CENTER);
+    } else {
+        console.log('🎉 저장된 위치로 지도 생성:', {
+            lat: center.lat(),
+            lng: center.lng(),
+            zoom: zoom
+        });
     }
 
     return {

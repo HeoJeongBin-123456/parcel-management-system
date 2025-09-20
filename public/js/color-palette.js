@@ -8,7 +8,7 @@ class ColorPaletteManager {
             { index: 0, hex: '#FF0000', name: '빨강', isActive: false, usageCount: 0 },
             { index: 1, hex: '#FFA500', name: '주황', isActive: false, usageCount: 0 },
             { index: 2, hex: '#FFFF00', name: '노랑', isActive: false, usageCount: 0 },
-            { index: 3, hex: '#00FF00', name: '초록', isActive: false, usageCount: 0 },
+            { index: 3, hex: '#90EE90', name: '연두', isActive: false, usageCount: 0 },
             { index: 4, hex: '#0000FF', name: '파랑', isActive: false, usageCount: 0 },
             { index: 5, hex: '#000000', name: '검정', isActive: false, usageCount: 0 },
             { index: 6, hex: '#FFFFFF', name: '흰색', isActive: false, usageCount: 0 },
@@ -81,6 +81,9 @@ class ColorPaletteManager {
 
         // UI 업데이트
         this.updatePaletteUI();
+
+        // 색상 변경 시 이전 색상 필지 제거 기능 비활성화 (버그 수정)
+        // 사용자가 같은 색상으로 여러 필지를 칠할 수 있도록 허용
 
         // 콜백 실행
         this.notifyColorSelection(index, this.colors[index]);

@@ -33,8 +33,8 @@ class AppInitializer {
                 window.migrateOldParcelData();
             }
 
-            // 데이터 로드는 의존성 완료 후 실행
-            await this.loadAndDisplaySavedParcelsOptimized();
+            // 🎯 순서 보장된 데이터 복원 프로세스
+            await this.restoreDataInOrder();
 
             const loadTime = ((performance.now() - startTime) / 1000).toFixed(2);
             console.log(`⚡ 초기화 완료: ${loadTime}초`);
@@ -94,6 +94,56 @@ class AppInitializer {
         }
 
         console.log('✅ 모든 의존성 로딩 완료');
+    }
+
+    /**
+     * 🎯 순서 보장된 데이터 복원 프로세스
+     * 1. 지도 위치 복원 (이미 createMapOptions에서 처리됨)
+     * 2. 검색 필지 복원 (검색 모드일 때)
+     * 3. 클릭 필지 복원
+     * 4. 마커 생성
+     */
+    async restoreDataInOrder() {
+        console.log('🎯 순서 보장된 데이터 복원 시작');
+
+        try {
+            // Step 1: 현재 모드 확인
+            const currentMode = window.currentMode || 'click';
+            console.log('📍 현재 모드:', currentMode);
+
+            // Step 2: 검색 필지 복원 (검색 모드이거나 메모리에 저장된 경우)
+            if (typeof window.loadSearchResultsFromStorage === 'function') {
+                console.log('🔍 검색 필지 복원 시작...');
+                window.loadSearchResultsFromStorage();
+                console.log('✅ 검색 필지 복원 완료');
+            } else {
+                console.warn('⚠️ loadSearchResultsFromStorage 함수 없음');
+            }
+
+            // Step 3: 클릭 필지 복원
+            console.log('🎯 클릭 필지 복원 시작...');
+            await this.loadAndDisplaySavedParcelsOptimized();
+            console.log('✅ 클릭 필지 복원 완료');
+
+            // Step 4: 마커 생성 및 복원 (지연 실행)
+            setTimeout(() => {
+                if (window.MemoMarkerManager) {
+                    console.log('📍 마커 복원 시작...');
+                    if (typeof window.MemoMarkerManager.refreshAllMarkers === 'function') {
+                        window.MemoMarkerManager.refreshAllMarkers();
+                        console.log('✅ 마커 복원 완료');
+                    }
+                } else {
+                    console.warn('⚠️ MemoMarkerManager 없음');
+                }
+            }, 1000);
+
+            console.log('🎉 순서 보장된 데이터 복원 완료');
+
+        } catch (error) {
+            console.error('❌ 데이터 복원 중 오류:', error);
+            throw error;
+        }
     }
 
     async initializeSupabase() {

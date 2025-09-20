@@ -1355,6 +1355,46 @@ async function saveParcelData() {
 // Phase 2: 모드별로 분리된 저장 함수들
 // =====================================================================
 
+// geometry에서 중심 좌표를 추출하는 헬퍼 함수
+function getGeometryCenter(geometry) {
+    if (!geometry) return [0, 0];
+
+    // Point 타입 처리
+    if (geometry.type === 'Point' && Array.isArray(geometry.coordinates) && geometry.coordinates.length >= 2) {
+        return [geometry.coordinates[0], geometry.coordinates[1]];
+    }
+
+    if (geometry.coordinates) {
+        let coordinates = geometry.coordinates;
+
+        // MultiPolygon 처리: 첫 번째 폴리곤의 첫 번째 링 사용
+        if (geometry.type === 'MultiPolygon' && coordinates.length > 0) {
+            coordinates = coordinates[0]; // 첫 번째 폴리곤 선택
+        }
+
+        // Polygon 처리: 첫 번째 링(외곽) 사용
+        if ((geometry.type === 'Polygon' || geometry.type === 'MultiPolygon') && coordinates.length > 0) {
+            coordinates = coordinates[0]; // 외곽 링 선택
+        }
+
+        // 단순 배열 순회로 중심점 계산
+        let totalX = 0, totalY = 0, count = 0;
+        for (const coord of coordinates) {
+            if (Array.isArray(coord) && coord.length >= 2) {
+                totalX += coord[0];
+                totalY += coord[1];
+                count++;
+            }
+        }
+
+        if (count > 0) {
+            return [totalX / count, totalY / count];
+        }
+    }
+
+    return [0, 0];
+}
+
 // 클릭 필지 저장 함수
 async function saveClickParcelData() {
     let parcelNumber = document.getElementById('parcelNumber').value;
@@ -1456,12 +1496,12 @@ async function saveClickParcelData() {
             const [centerLng, centerLat] = getGeometryCenter(geometry);
             console.log('🗺️ [DEBUG] 중심점 계산:', { centerLng, centerLat });
 
-            if (centerLat && centerLng) {
+            if (centerLat !== 0 || centerLng !== 0) {  // 둘 중 하나라도 0이 아니면 유효
                 formData.lat = parseFloat(centerLat);
                 formData.lng = parseFloat(centerLng);
                 console.log('✅ [DEBUG] 좌표 저장: lat=' + formData.lat + ', lng=' + formData.lng);
             } else {
-                console.error('❌ [DEBUG] 좌표 계산 실패');
+                console.error('❌ [DEBUG] 좌표 계산 실패 (둘 다 0)');
             }
         } else {
             console.error('❌ [DEBUG] geometry 또는 coordinates 없음');
@@ -1486,8 +1526,42 @@ async function saveClickParcelData() {
 
             // localStorage에 직접 저장 (재귀 호출 방지)
             localStorage.setItem(window.STORAGE_KEYS.CLICK_PARCEL_DATA, JSON.stringify(savedData));
+
+            // 🆕 일반 parcelData에도 저장 (새로고침 시 복원을 위해)
+            // formData를 그대로 사용하여 모든 필드가 포함되도록 함
+            let generalParcels = JSON.parse(localStorage.getItem('parcelData') || '[]');
+            const generalIndex = generalParcels.findIndex(item =>
+                (item.pnu && item.pnu === currentPNU) ||
+                item.parcelNumber === formData.parcelNumber
+            );
+
+            // 완전한 데이터 구조로 저장 (필지 정보 및 좌표 포함)
+            const completeData = {
+                ...formData,  // 모든 필드 포함 (ownerName, ownerAddress, ownerContact, memo 등)
+                pnu: currentPNU,
+                parcelNumber: formData.parcelNumber,
+                ownerName: formData.ownerName,
+                ownerAddress: formData.ownerAddress,
+                ownerContact: formData.ownerContact,
+                memo: formData.memo,
+                lat: formData.lat,  // 좌표 정보 명시적 포함
+                lng: formData.lng,  // 좌표 정보 명시적 포함
+                geometry: formData.geometry,  // 폴리곤 복원용 geometry 포함
+                properties: formData.properties,  // 필지 속성 정보 포함
+                mode: 'click',  // 클릭 모드 명시
+                source: 'click'  // 소스 명시
+            };
+
+            if (generalIndex > -1) {
+                generalParcels[generalIndex] = completeData;
+            } else {
+                generalParcels.push(completeData);
+            }
+
+            localStorage.setItem('parcelData', JSON.stringify(generalParcels));
+
             localStorageSuccess = true;
-            console.log('✅ 클릭 필지 localStorage 저장 성공');
+            console.log('✅ 클릭 필지 localStorage 저장 성공 (clickParcelData + parcelData)');
         } catch (localError) {
             console.error('❌ 클릭 필지 localStorage 저장 실패:', localError);
         }

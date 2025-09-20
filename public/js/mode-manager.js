@@ -298,12 +298,60 @@ class ModeManager {
                     break;
                 case 'hand':
                     // 손 모드는 별도 이벤트 핸들러가 필요 없음 (순수 탐색용)
-                    console.log('✋ 손 모드: 이벤트 핸들러 없음 (탐색 전용)');
+                    this.setupHandModeEventListeners();
+                    console.log('✋ 손 모드: 탐색 전용 모드로 설정 완료');
                     break;
             }
         } catch (error) {
             console.error(`❌ ${mode} 모드 이벤트 핸들러 설정 실패:`, error);
         }
+    }
+
+    /**
+     * ✋ 손 모드 이벤트 핸들러 설정 (색칠 기능 비활성화)
+     */
+    setupHandModeEventListeners() {
+        if (!window.mapHand) {
+            console.warn('⚠️ 손 모드 지도 인스턴스가 없음');
+            return;
+        }
+
+        // 기존 이벤트 제거
+        naver.maps.Event.clearListeners(window.mapHand, 'click');
+        naver.maps.Event.clearListeners(window.mapHand, 'rightclick');
+
+        // 손 모드에서는 클릭 시 색칠 대신 필지 정보만 표시
+        naver.maps.Event.addListener(window.mapHand, 'click', function(e) {
+            const coord = e.coord;
+            console.log('✋ 손 모드 클릭: 필지 정보 조회만 수행 (색칠 비활성화)');
+
+            // 색칠 없이 필지 정보만 조회
+            if (window.getParcelInfoForHandMode) {
+                window.getParcelInfoForHandMode(coord.lat(), coord.lng());
+            } else {
+                console.log('✋ 손 모드: 필지 정보 입력 기능 사용 가능');
+                // 기본 필지 정보 조회 (색칠 없이)
+                if (window.getParcelInfoViaProxy) {
+                    window.getParcelInfoViaProxy(coord.lat(), coord.lng(), { coloringDisabled: true });
+                }
+            }
+        });
+
+        // 오른쪽 클릭도 비활성화
+        naver.maps.Event.addListener(window.mapHand, 'rightclick', function(e) {
+            e.originalEvent?.preventDefault();
+            console.log('✋ 손 모드: 색상 삭제 기능 비활성화됨');
+        });
+
+        // 컨텍스트 메뉴 방지
+        if (window.mapHand.getElement()) {
+            window.mapHand.getElement().addEventListener('contextmenu', function(e) {
+                e.preventDefault();
+                return false;
+            });
+        }
+
+        console.log('✋ 손 모드 이벤트 핸들러 설정 완료 - 색칠 기능 비활성화됨');
     }
 
     /**

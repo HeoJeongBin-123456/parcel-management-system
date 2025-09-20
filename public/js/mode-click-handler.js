@@ -3,6 +3,57 @@
  * 필지 클릭, 색칠, 정보 저장 등 클릭 모드만의 로직 처리
  */
 
+// Geometry 중심점 계산 함수
+function getGeometryCenter(geometry) {
+    if (!geometry) {
+        return [0, 0];
+    }
+
+    if (geometry.type === 'Point' && Array.isArray(geometry.coordinates) && geometry.coordinates.length >= 2) {
+        return [geometry.coordinates[0], geometry.coordinates[1]];
+    }
+
+    if (geometry.coordinates) {
+        let coordinates = geometry.coordinates;
+
+        // MultiPolygon 처리: 첫 번째 폴리곤의 첫 번째 링 사용
+        if (geometry.type === 'MultiPolygon' && coordinates.length > 0) {
+            coordinates = coordinates[0]; // 첫 번째 폴리곤 선택
+        }
+
+        // Polygon 처리: 첫 번째 링(외곽) 사용
+        if ((geometry.type === 'Polygon' || geometry.type === 'MultiPolygon') && coordinates.length > 0) {
+            coordinates = coordinates[0]; // 외곽 링 선택
+        }
+
+        // 이제 coordinates는 [[lng, lat], [lng, lat], ...] 형태
+        if (!Array.isArray(coordinates) || coordinates.length === 0) {
+            return [0, 0];
+        }
+
+        let totalX = 0;
+        let totalY = 0;
+        let count = 0;
+
+        // 단순 배열 순회
+        for (const coord of coordinates) {
+            if (Array.isArray(coord) && coord.length >= 2) {
+                totalX += coord[0];
+                totalY += coord[1];
+                count++;
+            }
+        }
+
+        if (count === 0) {
+            return [0, 0];
+        }
+
+        return [totalX / count, totalY / count];
+    }
+
+    return [0, 0];
+}
+
 // 🎨 클릭 모드 전용 폴리곤 저장소
 const clickModePolygons = new Map(); // PNU -> polygon 맵핑
 const clickModeParcelData = new Map(); // PNU -> parcel data 맵핑
@@ -11,6 +62,9 @@ const clickModeParcelData = new Map(); // PNU -> parcel data 맵핑
 if (!window.clickParcels) {
     window.clickParcels = new Map();
 }
+
+// 이전 색상 추적을 위한 변수
+let previousSelectedColor = null;
 
 // 디바운싱 타이머
 let clickModeDebounceTimer = null;
@@ -385,6 +439,12 @@ async function saveClickModeParcelData(parcelData) {
         // 색상 정보 저장
         ParcelColorStorage.setHex(pnu, parcelData.color);
 
+        // 삭제 목록에서 제거 (재색칠 = 활성화)
+        if (window.removeFromDeletedParcels) {
+            window.removeFromDeletedParcels(pnu);
+            console.log(`🔄 클릭 모드: 삭제 목록에서 제거: ${pnu}`);
+        }
+
         console.log(`💾 클릭 모드 데이터 저장: ${pnu}`);
 
     } catch (error) {
@@ -476,9 +536,58 @@ function updateParcelFormForClickMode(parcelData) {
     const pnu = parcelData.properties.PNU || parcelData.properties.pnu;
     const jibun = formatJibun(parcelData.properties);
 
-    // 폼 업데이트
+    // PNU가 변경되었는지 확인 (다른 필지 클릭)
+    const previousPNU = window.currentSelectedPNU;
+    const isNewParcel = previousPNU !== pnu;
+
+    // 지번 업데이트
     document.getElementById('parcelNumber').value = jibun;
     window.currentSelectedPNU = pnu;
+
+    // 다른 필지를 클릭한 경우 나머지 필드 초기화
+    if (isNewParcel) {
+        console.log(`🔄 다른 필지 선택: ${previousPNU} → ${pnu}, 필드 초기화`);
+
+        // 나머지 필드들 초기화
+        const fieldsToReset = ['ownerName', 'ownerAddress', 'ownerContact', 'memo'];
+        fieldsToReset.forEach(fieldId => {
+            const field = document.getElementById(fieldId);
+            if (field) {
+                field.value = '';
+            }
+        });
+
+        // 해당 필지의 저장된 데이터가 있으면 불러오기
+        try {
+            // LocalStorage에서 데이터 확인
+            const savedData = JSON.parse(localStorage.getItem('parcelData') || '[]');
+            const savedParcel = savedData.find(item => item.pnu === pnu);
+
+            if (savedParcel) {
+                // 저장된 데이터가 있으면 폼에 채우기
+                console.log(`📥 저장된 데이터 로드: ${pnu}`);
+
+                if (savedParcel.ownerName && document.getElementById('ownerName')) {
+                    document.getElementById('ownerName').value = savedParcel.ownerName;
+                }
+                if (savedParcel.ownerAddress && document.getElementById('ownerAddress')) {
+                    document.getElementById('ownerAddress').value = savedParcel.ownerAddress;
+                }
+                if (savedParcel.ownerContact && document.getElementById('ownerContact')) {
+                    document.getElementById('ownerContact').value = savedParcel.ownerContact;
+                }
+                if (savedParcel.memo && document.getElementById('memo')) {
+                    document.getElementById('memo').value = savedParcel.memo;
+                }
+            } else {
+                console.log(`📭 저장된 데이터 없음: ${pnu} (빈 폼 유지)`);
+            }
+        } catch (error) {
+            console.error('❌ 저장된 데이터 로드 실패:', error);
+        }
+    } else {
+        console.log(`🔁 같은 필지 재클릭: ${pnu} (필드 유지)`);
+    }
 }
 
 /**
@@ -571,9 +680,17 @@ async function handleClickModeLeftClick(lat, lng) {
 
                 await window.applyColorToParcel(parcelToPass, currentColor);
                 console.log('✅ applyColorToParcel 호출 완료');
+
+                // 🆕 UI 업데이트 - 지번을 필지 정보 폼에 자동 입력
+                updateParcelFormForClickMode(parcelToPass);
+                console.log('📝 기존 필지 UI 업데이트 완료');
             } else {
                 // 폴백: 직접 토글 처리
                 await applyClickModeColorToParcel(existingParcelData, currentColor, existingPolygon);
+
+                // 🆕 UI 업데이트 - 지번을 필지 정보 폼에 자동 입력
+                updateParcelFormForClickMode(existingParcelData);
+                console.log('📝 기존 필지 UI 업데이트 완료 (폴백)');
             }
         } else {
             // 새로운 필지 조회 및 생성
@@ -671,6 +788,68 @@ function getCurrentSelectedColor() {
 }
 
 /**
+ * 🎨 색상 변경 감지 및 이전 색상 필지 제거
+ */
+async function handleColorChange() {
+    const currentColor = getCurrentSelectedColor();
+
+    // 색상이 실제로 변경되었는지 확인
+    if (previousSelectedColor && previousSelectedColor !== currentColor) {
+        console.log('🎨 색상 변경 감지:', previousSelectedColor, '->', currentColor);
+        await removeParcelsWithColor(previousSelectedColor);
+    }
+
+    // 현재 색상을 이전 색상으로 업데이트
+    previousSelectedColor = currentColor;
+}
+
+/**
+ * 🗑️ 특정 색상의 모든 필지 제거
+ */
+async function removeParcelsWithColor(colorToRemove) {
+    if (!colorToRemove) return;
+
+    console.log('🗑️ 클릭 모드: 색상 변경으로 인한 기존 필지 제거 시작:', colorToRemove);
+
+    const parcelsToRemove = [];
+
+    // window.clickParcels에서 해당 색상의 필지들 찾기
+    if (window.clickParcels) {
+        for (const [pnu, parcelInfo] of window.clickParcels) {
+            // 저장소에서 해당 필지의 색상 확인
+            const storedColor = await getParcelColorFromStorage(pnu);
+            if (storedColor === colorToRemove) {
+                parcelsToRemove.push({ pnu, parcelInfo });
+            }
+        }
+    }
+
+    // clickModePolygons에서도 확인
+    for (const [pnu, polygon] of clickModePolygons) {
+        const storedColor = await getParcelColorFromStorage(pnu);
+        if (storedColor === colorToRemove) {
+            const parcelInfo = window.clickParcels?.get(pnu);
+            if (!parcelsToRemove.find(item => item.pnu === pnu)) {
+                parcelsToRemove.push({ pnu, parcelInfo: parcelInfo || { polygon } });
+            }
+        }
+    }
+
+    // 찾은 필지들 제거
+    let removedCount = 0;
+    for (const { pnu, parcelInfo } of parcelsToRemove) {
+        try {
+            await deleteClickModeParcel(pnu, parcelInfo?.polygon);
+            removedCount++;
+        } catch (error) {
+            console.error('❌ 필지 제거 실패:', pnu, error);
+        }
+    }
+
+    console.log(`✅ 색상 변경: ${colorToRemove} 색상의 필지 ${removedCount}개 제거 완료`);
+}
+
+/**
  * 💾 저장소에서 필지 색상 조회
  */
 async function getParcelColorFromStorage(pnu) {
@@ -721,29 +900,23 @@ async function loadSavedClickModeParcels() {
             if (pnu && !pnuSet.has(pnu)) {
                 pnuSet.add(pnu);
 
+                // clickParcelData의 항목은 mode와 source를 클릭 모드로 설정
+                parcel.mode = parcel.mode || 'click';
+                parcel.source = parcel.source || 'click';
+
                 // geometry에서 좌표 추출
                 if (!parcel.lat || !parcel.lng) {
                     if (parcel.geometry && parcel.geometry.coordinates) {
-                        // GeoJSON Polygon 구조: coordinates[0]은 외곽 링
-                        const outerRing = parcel.geometry.coordinates[0];
-                        if (outerRing && outerRing.length > 0) {
-                            let totalLat = 0, totalLng = 0;
-                            let validCoordCount = 0;
+                        // getGeometryCenter 함수 사용하여 중심점 계산
+                        const [centerLng, centerLat] = getGeometryCenter(parcel.geometry);
 
-                            // 각 좌표 쌍 [lng, lat] 처리
-                            for (const coordPair of outerRing) {
-                                if (Array.isArray(coordPair) && coordPair.length >= 2) {
-                                    totalLng += coordPair[0];
-                                    totalLat += coordPair[1];
-                                    validCoordCount++;
-                                }
-                            }
-
-                            if (validCoordCount > 0) {
-                                parcel.lng = totalLng / validCoordCount;
-                                parcel.lat = totalLat / validCoordCount;
-                                console.log(`📍 좌표 추출 성공: ${parcel.pnu} - lat:${parcel.lat}, lng:${parcel.lng}`);
-                            }
+                        // 좌표가 유효한 경우 (둘 다 0이 아닌 경우)
+                        if (centerLng !== 0 && centerLat !== 0) {
+                            parcel.lng = centerLng;
+                            parcel.lat = centerLat;
+                            console.log(`📍 좌표 추출 성공: ${parcel.pnu} - lat:${parcel.lat}, lng:${parcel.lng}`);
+                        } else {
+                            console.warn(`⚠️ 좌표 추출 실패: ${parcel.pnu} - centerLng:${centerLng}, centerLat:${centerLat}`);
                         }
                     }
                 }
@@ -800,9 +973,19 @@ async function loadSavedClickModeParcels() {
                         console.log(`🎨 필지 ${pnu}의 저장된 색상 복원: ${savedColor}`);
                     }
 
+                    // drawClickModeParcelPolygon이 properties.PNU를 기대하므로 데이터 구조 조정
+                    const structuredData = {
+                        ...parcelData,
+                        properties: parcelData.properties || {
+                            PNU: pnu,
+                            JIBUN: parcelData.parcelNumber || parcelData.jibun,
+                            ...parcelData
+                        }
+                    };
+
                     // 폴리곤 그리기 (색상 정보가 포함된 parcelData 전달)
                     console.log(`🎯 drawClickModeParcelPolygon 호출: ${pnu}, isRestored=true`);
-                    const polygon = await drawClickModeParcelPolygon(parcelData, true);
+                    const polygon = await drawClickModeParcelPolygon(structuredData, true);
 
                     if (polygon) {
                         console.log(`✅ 폴리곤 생성 성공: ${pnu}`);
@@ -834,24 +1017,13 @@ async function loadSavedClickModeParcels() {
                             // 좌표가 없으면 geometry에서 다시 추출 시도
                             if (!parcelData.lat || !parcelData.lng) {
                                 if (parcelData.geometry && parcelData.geometry.coordinates) {
-                                    const outerRing = parcelData.geometry.coordinates[0];
-                                    if (outerRing && outerRing.length > 0) {
-                                        let totalLat = 0, totalLng = 0;
-                                        let validCoordCount = 0;
+                                    const [centerLng, centerLat] = getGeometryCenter(parcelData.geometry);
 
-                                        for (const coordPair of outerRing) {
-                                            if (Array.isArray(coordPair) && coordPair.length >= 2) {
-                                                totalLng += coordPair[0];
-                                                totalLat += coordPair[1];
-                                                validCoordCount++;
-                                            }
-                                        }
-
-                                        if (validCoordCount > 0) {
-                                            parcelData.lng = totalLng / validCoordCount;
-                                            parcelData.lat = totalLat / validCoordCount;
-                                            console.log(`📍 마커용 좌표 추출: ${pnu} - lat:${parcelData.lat}, lng:${parcelData.lng}`);
-                                        }
+                                    // 좌표가 유효한 경우 (둘 다 0이 아닌 경우)
+                                    if (centerLng !== 0 && centerLat !== 0) {
+                                        parcelData.lng = centerLng;
+                                        parcelData.lat = centerLat;
+                                        console.log(`📍 마커용 좌표 추출: ${pnu} - lat:${parcelData.lat}, lng:${parcelData.lng}`);
                                     }
                                 }
                             }
@@ -891,5 +1063,6 @@ window.clickModePolygons = clickModePolygons;
 window.clickModeParcelData = clickModeParcelData;
 window.loadSavedClickModeParcels = loadSavedClickModeParcels;
 window.handleClickModeLeftClick = handleClickModeLeftClick;  // 테스트용 노출
+window.handleColorChange = handleColorChange;  // 색상 팔레트에서 호출용
 
 console.log('🎯 mode-click-handler.js 로드 완료');

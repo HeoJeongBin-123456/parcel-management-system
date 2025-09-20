@@ -130,10 +130,24 @@ async function drawSearchModeParcelPolygon(parcelData) {
             strokeOpacity: 0.8
         });
 
-        // 클릭 이벤트 (정보 편집 허용)
+        // 왼쪽 클릭 이벤트 (정보 편집 허용)
         naver.maps.Event.addListener(polygon, 'click', async function(e) {
             e.cancelBubble = true;
             await displaySearchParcelInfoOnly(parcelData);
+        });
+
+        // 오른쪽 클릭 이벤트 (삭제)
+        naver.maps.Event.addListener(polygon, 'rightclick', async function(e) {
+            e.cancelBubble = true;
+            e.originalEvent?.preventDefault();
+            const coord = e.coord;
+            console.log('🗑️ 검색 폴리곤 오른쪽 클릭 (삭제):', pnu);
+
+            // 삭제 확인
+            const confirmDelete = confirm('이 검색 필지를 삭제하시겠습니까?');
+            if (confirmDelete) {
+                await removeSearchParcel(pnu);
+            }
         });
 
         // 저장
@@ -272,6 +286,12 @@ async function saveSearchModeParcelData(parcelData) {
 
         // 색상 정보 저장 (검색은 항상 보라색)
         ParcelColorStorage.setHex(pnu, SEARCH_MODE_COLOR);
+
+        // 삭제 목록에서 제거 (검색 추가 = 활성화)
+        if (window.removeFromDeletedParcels) {
+            window.removeFromDeletedParcels(pnu);
+            console.log(`🔄 검색 모드: 삭제 목록에서 제거: ${pnu}`);
+        }
 
         console.log(`💾 검색 모드 데이터 저장: ${pnu}`);
 
@@ -474,6 +494,102 @@ async function loadSavedParcelInfo(pnu) {
 }
 
 /**
+ * 🗑️ 검색 필지 삭제 (PNU로 직접 삭제)
+ */
+async function removeSearchParcel(targetPNU) {
+    try {
+        console.log(`🗑️ 검색 필지 삭제 시작: ${targetPNU}`);
+
+        // 해당 PNU의 폴리곤 찾기 (searchModePolygons 우선, window.searchParcels도 확인)
+        let targetPolygon = searchModePolygons.get(targetPNU);
+        let foundInSearchModePolygons = !!targetPolygon;
+
+        // searchModePolygons에서 찾지 못한 경우, window.searchParcels에서 찾기
+        if (!targetPolygon && window.searchParcels) {
+            const searchParcel = window.searchParcels.get(targetPNU);
+            if (searchParcel && searchParcel.polygon) {
+                targetPolygon = searchParcel.polygon;
+                console.log(`🔍 window.searchParcels에서 폴리곤 발견: ${targetPNU}`);
+            }
+        }
+
+        if (targetPolygon) {
+            // 폴리곤 제거
+            targetPolygon.setMap(null);
+            console.log(`🗑️ 지도에서 폴리곤 제거: ${targetPNU}`);
+
+            // searchModePolygons에서 제거 (있는 경우만)
+            if (foundInSearchModePolygons) {
+                searchModePolygons.delete(targetPNU);
+                searchModeParcelData.delete(targetPNU);
+                console.log(`🗑️ searchModePolygons에서 제거: ${targetPNU}`);
+            }
+
+            // window.searchParcels에서도 제거
+            if (window.searchParcels && window.searchParcels.has(targetPNU)) {
+                window.searchParcels.delete(targetPNU);
+                console.log(`🗑️ window.searchParcels에서 제거: ${targetPNU}`);
+
+                // localStorage의 기존 searchParcels 데이터를 읽어와서 삭제할 항목만 제거
+                const existingSearchParcels = JSON.parse(localStorage.getItem('searchParcels') || '[]');
+                console.log(`📦 localStorage에서 ${existingSearchParcels.length}개 검색 필지 로드`);
+
+                // 삭제할 PNU와 일치하는 항목만 제거 (전체 데이터 보존)
+                const updatedSearchParcels = existingSearchParcels.filter(item =>
+                    item.pnu !== targetPNU
+                );
+
+                // 수정된 전체 데이터를 다시 저장
+                localStorage.setItem('searchParcels', JSON.stringify(updatedSearchParcels));
+                console.log(`💾 localStorage searchParcels 업데이트: ${existingSearchParcels.length} → ${updatedSearchParcels.length}개 (1개 삭제)`);
+            }
+        } else {
+            console.warn(`⚠️ 폴리곤을 찾을 수 없음: ${targetPNU}`);
+        }
+
+        // clickParcels에서도 제거
+        if (window.clickParcels && window.clickParcels.has(targetPNU)) {
+            window.clickParcels.delete(targetPNU);
+        }
+
+        // Supabase에서 삭제
+        if (window.SupabaseManager) {
+            await window.SupabaseManager.deleteParcel(targetPNU);
+        }
+
+        // LocalStorage에서 삭제
+        const savedData = JSON.parse(localStorage.getItem('parcelData') || '[]');
+        const filteredData = savedData.filter(item => item.pnu !== targetPNU);
+        localStorage.setItem('parcelData', JSON.stringify(filteredData));
+
+        // 색상 정보 삭제
+        ParcelColorStorage.remove(targetPNU);
+
+        // 마커 삭제
+        if (window.MemoMarkerManager && window.MemoMarkerManager.markers) {
+            const markerInfo = window.MemoMarkerManager.markers.get(targetPNU);
+            if (markerInfo && markerInfo.marker) {
+                markerInfo.marker.setMap(null);
+                window.MemoMarkerManager.markers.delete(targetPNU);
+            }
+        }
+
+        // 삭제 목록에서 제거 (재색칠 = 활성화)
+        if (window.removeFromDeletedParcels) {
+            window.removeFromDeletedParcels(targetPNU);
+            console.log(`🔄 검색 모드: 삭제 목록에서 제거: ${targetPNU}`);
+        }
+
+        console.log(`✅ 검색 필지 삭제 완료: ${targetPNU}`);
+        return true;
+
+    } catch (error) {
+        console.error('❌ 검색 필지 삭제 실패:', error);
+        return false;
+    }
+}
+
+/**
  * 🗑️ 검색 모드 오른쪽 클릭 처리 (삭제)
  */
 async function handleSearchModeRightClick(lat, lng) {
@@ -573,6 +689,7 @@ window.displaySearchResults = displaySearchResults;
 window.clearSearchModePolygons = clearSearchModePolygons;
 window.executeSearchInSearchMode = executeSearchInSearchMode;
 window.handleSearchModeRightClick = handleSearchModeRightClick;
+window.removeSearchParcel = removeSearchParcel;
 window.searchModePolygons = searchModePolygons;
 window.searchModeParcelData = searchModeParcelData;
 window.SEARCH_MODE_COLOR = SEARCH_MODE_COLOR;
