@@ -383,9 +383,7 @@ async function saveClickModeParcelData(parcelData) {
         localStorage.setItem('parcelData', JSON.stringify(savedData));
 
         // 색상 정보 저장
-        const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
-        parcelColors[pnu] = parcelData.color;
-        localStorage.setItem('parcelColors', JSON.stringify(parcelColors));
+        ParcelColorStorage.setHex(pnu, parcelData.color);
 
         console.log(`💾 클릭 모드 데이터 저장: ${pnu}`);
 
@@ -677,8 +675,8 @@ function getCurrentSelectedColor() {
  */
 async function getParcelColorFromStorage(pnu) {
     try {
-        const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
-        return parcelColors[pnu] || null;
+        const hex = ParcelColorStorage.getHex(pnu);
+        return hex || null;
     } catch (error) {
         console.error('❌ 필지 색상 조회 실패:', error);
         return null;
@@ -769,7 +767,7 @@ async function loadSavedClickModeParcels() {
             }
         }
 
-        const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
+        const parcelColors = ParcelColorStorage.getAll();
 
         console.log(`📦 LocalStorage에서 ${savedParcels.length}개 필지 로드 (clickParcelData: ${clickParcels.length}, parcelData: ${normalParcels.length})`);
 
@@ -793,7 +791,10 @@ async function loadSavedClickModeParcels() {
 
                 if (pnu && parcelData.geometry) {
                     // 저장된 색상 정보를 parcelData에 추가
-                    const savedColor = parcelColors[pnu] || parcelData.color;
+                    const savedColorIndex = parcelColors.get(pnu);
+                    const savedColor = typeof savedColorIndex === 'number'
+                        ? ParcelColorStorage.palette[savedColorIndex]?.hex || parcelData.color
+                        : parcelData.color;
                     if (savedColor) {
                         parcelData.color = savedColor;
                         console.log(`🎨 필지 ${pnu}의 저장된 색상 복원: ${savedColor}`);

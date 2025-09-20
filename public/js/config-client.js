@@ -163,17 +163,18 @@ window.cleanupSearchParcelsFromClickMap = function() {
 
     // 3. 색상 정보에서도 보라색 제거
     try {
-        const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
+        const parcelColorMap = ParcelColorStorage.getAll();
         let colorRemovedCount = 0;
-        Object.keys(parcelColors).forEach(pnu => {
-            if (parcelColors[pnu] === '#9370DB') {
-                delete parcelColors[pnu];
+        parcelColorMap.forEach((index, pnu) => {
+            const colorHex = ParcelColorStorage.palette[index]?.hex;
+            if (colorHex && colorHex.toLowerCase() === '#9370db') {
+                parcelColorMap.delete(pnu);
                 colorRemovedCount++;
             }
         });
 
         if (colorRemovedCount > 0) {
-            localStorage.setItem('parcelColors', JSON.stringify(parcelColors));
+            ParcelColorStorage.setAll(parcelColorMap);
             console.log(`🧹 색상 정보에서 ${colorRemovedCount}개 보라색 제거`);
         }
     } catch (error) {

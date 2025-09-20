@@ -246,9 +246,7 @@ function highlightParcel(parcelData) {
                             localStorage.setItem('parcelData', JSON.stringify(updatedData));
 
                             // 3. 색상 정보 삭제
-                            const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
-                            delete parcelColors[clickedPNU];
-                            localStorage.setItem('parcelColors', JSON.stringify(parcelColors));
+                            ParcelColorStorage.remove(clickedPNU);
 
                             // 4. 마커 상태 삭제
                             const markerStates = JSON.parse(localStorage.getItem('markerStates') || '{}');

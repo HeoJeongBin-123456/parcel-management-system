@@ -2,27 +2,171 @@
 
 // 폴리곤 중심점 계산 함수 (메모 마커용)
 function calculatePolygonCenter(coordinates) {
-    if (!coordinates || coordinates.length === 0) {
+    if (!coordinates) {
         return [0, 0];
     }
-    
+
     let totalX = 0;
     let totalY = 0;
     let count = 0;
-    
-    for (const coord of coordinates) {
-        if (coord && coord.length >= 2) {
-            totalX += coord[0];
-            totalY += coord[1];
+
+    const visit = (node) => {
+        if (!node) {
+            return;
+        }
+
+        if (Array.isArray(node[0])) {
+            node.forEach(visit);
+            return;
+        }
+
+        if (node.length >= 2) {
+            totalX += node[0];
+            totalY += node[1];
             count++;
         }
-    }
-    
+    };
+
+    visit(coordinates);
+
     if (count === 0) {
         return [0, 0];
     }
-    
+
     return [totalX / count, totalY / count];
+}
+
+function geometryToPaths(geometry) {
+    if (!geometry) {
+        return [];
+    }
+
+    const toLatLngPath = (ring) => {
+        if (!Array.isArray(ring)) {
+            return [];
+        }
+
+        return ring
+            .filter(coord => Array.isArray(coord) && coord.length >= 2)
+            .map(coord => new naver.maps.LatLng(coord[1], coord[0]));
+    };
+
+    if (geometry.type === 'Polygon') {
+        return geometry.coordinates
+            .map(toLatLngPath)
+            .filter(path => path.length > 0);
+    }
+
+    if (geometry.type === 'MultiPolygon') {
+        const paths = [];
+        geometry.coordinates.forEach(polygon => {
+            polygon.forEach(ring => {
+                const path = toLatLngPath(ring);
+                if (path.length > 0) {
+                    paths.push(path);
+                }
+            });
+        });
+        return paths;
+    }
+
+    return [];
+}
+
+function getGeometryCenter(geometry) {
+    if (!geometry) {
+        return [0, 0];
+    }
+
+    if (geometry.type === 'Point' && Array.isArray(geometry.coordinates) && geometry.coordinates.length >= 2) {
+        return [geometry.coordinates[0], geometry.coordinates[1]];
+    }
+
+    if (geometry.coordinates) {
+        return calculatePolygonCenter(geometry.coordinates);
+    }
+
+    return [0, 0];
+}
+
+function pickMeaningfulValue(candidates = []) {
+    for (const candidate of candidates) {
+        if (candidate === undefined || candidate === null) {
+            continue;
+        }
+
+        const stringValue = typeof candidate === 'string' ? candidate : String(candidate);
+        const trimmed = stringValue.trim();
+
+        if (trimmed.length === 0) {
+            continue;
+        }
+
+        const normalized = trimmed.toLowerCase();
+        if (normalized === 'undefined' || normalized === 'null') {
+            continue;
+        }
+
+        return trimmed;
+    }
+
+    return '';
+}
+
+function resolveParcelNumber({
+    parcel,
+    parcelData,
+    searchParcelData,
+    savedInfo,
+    preferredValue
+} = {}) {
+    const parcelProps = parcel?.properties || {};
+    const storedProps = parcelData?.data?.properties || {};
+    const searchProps = searchParcelData?.data?.properties || {};
+    const savedProps = savedInfo || {};
+
+    const pnuCandidates = [
+        parcelProps.PNU,
+        parcelProps.pnu,
+        storedProps.PNU,
+        storedProps.pnu,
+        savedProps.PNU,
+        savedProps.pnu,
+        searchProps.PNU,
+        searchProps.pnu
+    ];
+
+    const candidates = [
+        preferredValue,
+        formatJibun(parcelProps),
+        parcelProps.parcelNumber,
+        parcelProps.PARCEL_NUMBER,
+        parcelProps.JIBUN,
+        parcelProps.jibun,
+        parcelProps.ADDR,
+        parcelProps.addr,
+        savedProps.parcelNumber,
+        savedProps.jibun,
+        savedProps.addr,
+        savedProps.ADDR,
+        storedProps.parcelNumber,
+        storedProps.PARCEL_NUMBER,
+        storedProps.JIBUN,
+        storedProps.jibun,
+        storedProps.ADDR,
+        storedProps.addr,
+        formatJibun(storedProps),
+        searchProps.parcelNumber,
+        searchProps.PARCEL_NUMBER,
+        searchProps.JIBUN,
+        searchProps.jibun,
+        searchProps.ADDR,
+        searchProps.addr,
+        formatJibun(searchProps),
+        ...pnuCandidates
+    ];
+
+    return pickMeaningfulValue(candidates);
 }
 
 // 📍 필지 정보 조회 메인 함수 (모드별 핸들러로 라우팅)
@@ -193,15 +337,12 @@ async function drawParcelPolygon(parcel, isSelected = false) {
     const jibun = formatJibun(properties);
     
     if (geometry.type === 'Polygon' || geometry.type === 'MultiPolygon') {
-        const paths = [];
-        const coordinates = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates;
-        
-        coordinates.forEach(polygon => {
-            polygon[0].forEach(coord => {
-                paths.push(new naver.maps.LatLng(coord[1], coord[0]));
-            });
-        });
-        
+        const paths = geometryToPaths(geometry);
+        if (paths.length === 0) {
+            console.warn('폴리곤 좌표 데이터 없음:', pnu);
+            return null;
+        }
+
         // 저장된 필지 정보 확인 (PNU와 지번 둘 다 확인)
         let savedParcel = await getSavedParcelData(pnu);
         if (!savedParcel && jibun) {
@@ -213,10 +354,10 @@ async function drawParcelPolygon(parcel, isSelected = false) {
         let fillOpacity = 0;
 
         // 1. parcelColors에서 색상 확인 (우선순위 높음)
-        const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
-        if (parcelColors[pnu] && parcelColors[pnu].color) {
-            fillColor = parcelColors[pnu].color;
-            fillOpacity = fillColor !== 'transparent' ? 0.5 : 0;
+        const storedColorHex = ParcelColorStorage.getHex(pnu);
+        if (storedColorHex) {
+            fillColor = storedColorHex;
+            fillOpacity = 0.5;
             console.log('🎨 parcelColors에서 색상 복원:', pnu, fillColor);
         }
         // 2. savedParcel에서 색상 확인 (대체 옵션)
@@ -228,7 +369,7 @@ async function drawParcelPolygon(parcel, isSelected = false) {
         
         const polygon = new naver.maps.Polygon({
             map: map,
-            paths: paths,
+            paths: paths.length === 1 ? paths[0] : paths,
             fillColor: fillColor,
             fillOpacity: fillOpacity,
             strokeColor: isSelected ? '#FF0000' : '#0000FF',
@@ -295,15 +436,31 @@ async function toggleParcelSelection(parcel, polygon) {
     if (isSearchParcel) {
     // console.log('🟣 검색 필지(보라색) 클릭 - 색상 복사 방지');
         // 폼에 정보만 표시하고 색상은 변경하지 않음
-        document.getElementById('parcelNumber').value = jibun;
-        window.currentSelectedPNU = pnu;
-        
-        // 저장된 정보가 있으면 로드
-        const savedData = JSON.parse(await window.migratedGetItem(CONFIG.STORAGE_KEY) || '[]');
-        const savedInfo = savedData.find(item => 
-            (item.pnu && item.pnu === pnu) || 
+        const parcelInput = document.getElementById('parcelNumber');
+        const savedDataJson = await window.migratedGetItem(CONFIG.STORAGE_KEY);
+        let savedData = [];
+        try {
+            const normalizedJson = (!savedDataJson || savedDataJson === 'undefined' || savedDataJson === 'null')
+                ? '[]'
+                : savedDataJson;
+            savedData = JSON.parse(normalizedJson);
+        } catch (error) {
+            console.warn('⚠️ 저장 데이터 파싱 실패:', error);
+            savedData = [];
+        }
+        const savedInfo = savedData.find(item =>
+            (item.pnu && item.pnu === pnu) ||
             item.parcelNumber === jibun
         );
+
+        parcelInput.value = resolveParcelNumber({
+            parcel,
+            parcelData,
+            searchParcelData,
+            savedInfo,
+            preferredValue: jibun
+        });
+        window.currentSelectedPNU = pnu;
         
         if (savedInfo) {
             document.getElementById('ownerName').value = savedInfo.ownerName || '';
@@ -341,7 +498,13 @@ async function toggleParcelSelection(parcel, polygon) {
         
         // 폼에 정보 로드
         window.currentSelectedPNU = pnu;
-        document.getElementById('parcelNumber').value = savedInfo.parcelNumber || '';
+        document.getElementById('parcelNumber').value = resolveParcelNumber({
+            parcel,
+            parcelData,
+            searchParcelData,
+            savedInfo,
+            preferredValue: jibun
+        });
         document.getElementById('ownerName').value = savedInfo.ownerName || '';
         document.getElementById('ownerAddress').value = savedInfo.ownerAddress || '';
         document.getElementById('ownerContact').value = savedInfo.ownerContact || '';
@@ -421,9 +584,18 @@ function selectParcel(parcel, polygon) {
     
     // 지번 포맷팅 (utils.js 함수 사용)
     const jibun = formatJibun(properties);
+    const pnu = properties.PNU || properties.pnu;
+    const parcelData = window.clickParcels ? window.clickParcels.get(pnu) : undefined;
+    const searchParcelData = window.searchParcels ? window.searchParcels.get(pnu) : undefined;
+    const resolvedParcelNumber = resolveParcelNumber({
+        parcel,
+        parcelData,
+        searchParcelData,
+        preferredValue: jibun
+    });
     
     // 지번만 자동 입력, 나머지는 공란
-    document.getElementById('parcelNumber').value = jibun;
+    document.getElementById('parcelNumber').value = resolvedParcelNumber;
     document.getElementById('ownerName').value = '';
     document.getElementById('ownerAddress').value = '';
     document.getElementById('ownerContact').value = '';
@@ -444,18 +616,7 @@ function createPolygonFromParcel(parcel) {
         const pnu = parcel.properties.PNU || parcel.properties.pnu;
 
         // 좌표 데이터 처리
-        let paths = [];
-        if (parcel.geometry) {
-            if (parcel.geometry.type === 'Polygon') {
-                paths = parcel.geometry.coordinates[0].map(coord =>
-                    new naver.maps.LatLng(coord[1], coord[0])
-                );
-            } else if (parcel.geometry.type === 'MultiPolygon') {
-                paths = parcel.geometry.coordinates[0][0].map(coord =>
-                    new naver.maps.LatLng(coord[1], coord[0])
-                );
-            }
-        }
+        const paths = geometryToPaths(parcel.geometry);
 
         if (paths.length === 0) {
             console.warn('폴리곤 좌표 데이터 없음:', pnu);
@@ -465,7 +626,7 @@ function createPolygonFromParcel(parcel) {
         // 폴리곤 생성
         const polygon = new naver.maps.Polygon({
             map: map,
-            paths: paths,
+            paths: paths.length === 1 ? paths[0] : paths,
             fillColor: 'transparent',
             fillOpacity: 0,
             strokeColor: '#0000FF',
@@ -584,6 +745,21 @@ async function applyColorToParcel(parcel, color) {
         }
     }
 
+    if (!expectedColor) {
+        if (typeof color === 'string' && color.startsWith('#')) {
+            expectedColor = color;
+        } else {
+            expectedColor = '#FF0000';
+        }
+    }
+
+    if (colorIndex === null && window.ColorPaletteManager && expectedColor) {
+        const matched = window.ColorPaletteManager.colors.find(item => item.hex === expectedColor);
+        if (matched) {
+            colorIndex = matched.index;
+        }
+    }
+
     // 검색 필지인지 확인
     const searchParcelData = window.searchParcels && window.searchParcels.get(pnu);
     if (searchParcelData) {
@@ -630,12 +806,12 @@ async function applyColorToParcel(parcel, color) {
         console.log('🔄 삭제된 필지에 색상 재적용 - 폴리곤 재생성:', pnu);
 
         // 폴리곤 재생성
-        const polygon = createPolygonFromParcel(parcel);
-        if (polygon) {
-            parcelData = {
-                polygon: polygon,
-                color: 'transparent',
-                parcel: parcel
+            const polygon = createPolygonFromParcel(parcel);
+            if (polygon) {
+                parcelData = {
+                    polygon: polygon,
+                    color: 'transparent',
+                    parcel: parcel
             };
             window.clickParcels.set(pnu, parcelData);
             console.log('✅ 필지 폴리곤 재생성 완료:', pnu);
@@ -647,7 +823,7 @@ async function applyColorToParcel(parcel, color) {
 
     if (parcelData) {
         // 항상 새로운 색상 적용 (토글 없음)
-        const newColor = color;
+        const newColor = expectedColor;
         const isRemoving = false; // 색상 제거 기능 비활성화
 
         // 1. UI 즉시 업데이트
@@ -736,39 +912,10 @@ async function applyColorToParcel(parcel, color) {
             const jibun = formatJibun(parcel.properties);
 
             // 중심 좌표 계산
-            let centerLat, centerLng;
+            let centerLat;
+            let centerLng;
             if (parcel.geometry) {
-                if (parcel.geometry.type === 'Point') {
-                    [centerLng, centerLat] = parcel.geometry.coordinates;
-                } else if (parcel.geometry.type === 'Polygon' && parcel.geometry.coordinates[0]) {
-                    const coords = parcel.geometry.coordinates[0];
-                    let totalLat = 0, totalLng = 0, count = 0;
-                    for (const coord of coords) {
-                        if (coord && coord.length >= 2) {
-                            totalLng += coord[0];
-                            totalLat += coord[1];
-                            count++;
-                        }
-                    }
-                    if (count > 0) {
-                        centerLng = totalLng / count;
-                        centerLat = totalLat / count;
-                    }
-                } else if (parcel.geometry.type === 'MultiPolygon' && parcel.geometry.coordinates[0] && parcel.geometry.coordinates[0][0]) {
-                    const coords = parcel.geometry.coordinates[0][0];
-                    let totalLat = 0, totalLng = 0, count = 0;
-                    for (const coord of coords) {
-                        if (coord && coord.length >= 2) {
-                            totalLng += coord[0];
-                            totalLat += coord[1];
-                            count++;
-                        }
-                    }
-                    if (count > 0) {
-                        centerLng = totalLng / count;
-                        centerLat = totalLat / count;
-                    }
-                }
+                [centerLng, centerLat] = getGeometryCenter(parcel.geometry);
             }
 
             const newParcelData = {
@@ -813,43 +960,24 @@ async function applyColorToParcel(parcel, color) {
         }
 
         // 3-1. parcelColors에도 저장 (색상 전용 저장소)
-        const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
         if (isRemoving) {
-            // 색상 제거 시 transparent로 저장 (완전 삭제가 아님)
-            parcelColors[pnu] = 'transparent';
-            localStorage.setItem('parcelColors', JSON.stringify(parcelColors));
+            ParcelColorStorage.remove(pnu);
             console.log('✅ parcelColors에서 색상만 제거:', pnu);
         } else {
             // ColorPaletteManager를 사용하여 색상 인덱스 가져오기
             let colorIndex = null;
             if (window.ColorPaletteManager) {
-                const colors = [
-                    { index: 0, hex: '#FF0000' },
-                    { index: 1, hex: '#FFA500' },
-                    { index: 2, hex: '#FFFF00' },
-                    { index: 3, hex: '#90EE90' },
-                    { index: 4, hex: '#0000FF' },
-                    { index: 5, hex: '#000000' },
-                    { index: 6, hex: '#FFFFFF' },
-                    { index: 7, hex: '#87CEEB' }
-                ];
-                const found = colors.find(c => c.hex === newColor);
+                const found = window.ColorPaletteManager.colors.find(c => c.hex === newColor);
                 colorIndex = found ? found.index : null;
             }
 
             // 색상 인덱스가 있으면 인덱스 저장, 없으면 객체로 저장
             if (colorIndex !== null) {
-                parcelColors[pnu] = colorIndex;
+                ParcelColorStorage.setIndex(pnu, colorIndex);
             } else {
-                parcelColors[pnu] = {
-                    parcel_id: pnu,
-                    color: newColor,
-                    is_colored: true,
-                    updated_at: new Date().toISOString()
-                };
+                ParcelColorStorage.setHex(pnu, newColor);
             }
         }
-        localStorage.setItem('parcelColors', JSON.stringify(parcelColors));
 
         // 4. 마커 제거 처리 (색상 제거 시에만)
         if (isRemoving) {
@@ -1017,25 +1145,11 @@ async function saveParcelData() {
         });
         
         if (geometry && geometry.coordinates) {
-            let centerLat, centerLng;
-            
             console.log('🎯 좌표 추출 시작 - geometry type:', geometry.type);
-            
-            if (geometry.type === 'Point') {
-                [centerLng, centerLat] = geometry.coordinates;
-                console.log('📍 Point 좌표:', { centerLng, centerLat });
-            } else if (geometry.type === 'Polygon') {
-                console.log('🔺 Polygon 좌표 배열:', geometry.coordinates[0]);
-                const center = calculatePolygonCenter(geometry.coordinates[0]);
-                [centerLng, centerLat] = center;
-                console.log('📍 Polygon 중심점:', { centerLng, centerLat });
-            } else if (geometry.type === 'MultiPolygon') {
-                console.log('🔻 MultiPolygon 좌표 배열:', geometry.coordinates[0][0]);
-                const center = calculatePolygonCenter(geometry.coordinates[0][0]);
-                [centerLng, centerLat] = center;
-                console.log('📍 MultiPolygon 중심점:', { centerLng, centerLat });
-            }
-            
+
+            const [centerLng, centerLat] = getGeometryCenter(geometry);
+            console.log('📍 계산된 중심점:', { centerLng, centerLat });
+
             if (centerLat && centerLng) {
                 formData.lat = parseFloat(centerLat);
                 formData.lng = parseFloat(centerLng);
@@ -1339,19 +1453,8 @@ async function saveClickParcelData() {
             console.log('🗺️ [DEBUG] geometry 타입:', geometry.type);
             console.log('🗺️ [DEBUG] geometry.coordinates 구조:', geometry.coordinates);
 
-            let centerLat, centerLng;
-
-            if (geometry.type === 'Point') {
-                [centerLng, centerLat] = geometry.coordinates;
-            } else if (geometry.type === 'Polygon') {
-                const center = calculatePolygonCenter(geometry.coordinates[0]);
-                [centerLng, centerLat] = center;
-                console.log('🗺️ [DEBUG] Polygon 중심점 계산:', { centerLng, centerLat });
-            } else if (geometry.type === 'MultiPolygon') {
-                const center = calculatePolygonCenter(geometry.coordinates[0][0]);
-                [centerLng, centerLat] = center;
-                console.log('🗺️ [DEBUG] MultiPolygon 중심점 계산:', { centerLng, centerLat });
-            }
+            const [centerLng, centerLat] = getGeometryCenter(geometry);
+            console.log('🗺️ [DEBUG] 중심점 계산:', { centerLng, centerLat });
 
             if (centerLat && centerLng) {
                 formData.lat = parseFloat(centerLat);
@@ -1558,17 +1661,7 @@ async function saveSearchParcelData() {
 
         // 📍 geometry에서 중심 좌표 추출 (메모 마커용)
         if (geometry && geometry.coordinates) {
-            let centerLat, centerLng;
-
-            if (geometry.type === 'Point') {
-                [centerLng, centerLat] = geometry.coordinates;
-            } else if (geometry.type === 'Polygon') {
-                const center = calculatePolygonCenter(geometry.coordinates[0]);
-                [centerLng, centerLat] = center;
-            } else if (geometry.type === 'MultiPolygon') {
-                const center = calculatePolygonCenter(geometry.coordinates[0][0]);
-                [centerLng, centerLat] = center;
-            }
+            const [centerLng, centerLat] = getGeometryCenter(geometry);
 
             if (centerLat && centerLng) {
                 formData.lat = parseFloat(centerLat);

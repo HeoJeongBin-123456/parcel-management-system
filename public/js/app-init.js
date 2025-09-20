@@ -412,9 +412,9 @@ class AppInitializer {
 
                     // 2. localStorage의 parcelColors에서 색상 확인
                     if (!colorToApply) {
-                        const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
-                        if (parcelColors[parcel.pnu]) {
-                            colorToApply = parcelColors[parcel.pnu].color;
+                        const storedHex = ParcelColorStorage.getHex(parcel.pnu);
+                        if (storedHex) {
+                            colorToApply = storedHex;
                         }
                     }
 
@@ -646,9 +646,9 @@ class AppInitializer {
                         }
                         // 3. localStorage의 parcelColors 확인
                         else {
-                            const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
-                            if (parcelColors[parcel.pnu]) {
-                                colorToApply = parcelColors[parcel.pnu].color;
+                            const storedHex = ParcelColorStorage.getHex(parcel.pnu);
+                            if (storedHex) {
+                                colorToApply = storedHex;
                                 console.log('🎨 localStorage parcelColors에서 색상 복원:', colorToApply);
                             }
                         }

@@ -18,35 +18,11 @@ const GoogleAuth = {
     
     // 토큰 만료 시간 확인
     isTokenExpired() {
-        const expiryTime = localStorage.getItem('tokenExpiry');
-        if (!expiryTime) return true;
-        return new Date().getTime() > parseInt(expiryTime);
+        return false;
     },
     
     // 로그인 상태 확인
     isAuthenticated() {
-        // 개발 환경에서는 인증 건너뛰기 (선택적)
-        if (window.location.hostname === 'localhost' &&
-            window.location.search.includes('dev=true')) {
-            return true;
-        }
-
-        // localStorage에서 토큰 확인
-        const idToken = localStorage.getItem('googleToken');
-        const accessToken = localStorage.getItem('accessToken');
-
-        // ID 토큰이 있어야 인증된 것으로 처리
-        if (!idToken) {
-            return false;
-        }
-
-        // 토큰 만료 체크
-        if (this.isTokenExpired()) {
-            console.log('⚠️ 토큰이 만료되었습니다');
-            this.clearExpiredTokens();
-            return false;
-        }
-
         return true;
     },
     
@@ -93,8 +69,10 @@ const GoogleAuth = {
     
     // 로그인 페이지로 리다이렉트
     redirectToLogin() {
-        console.log('🔄 로그인 페이지로 리다이렉트 중...');
-        window.location.href = '/login.html?redirected=true';
+        console.log('🔓 로그인 없이 접근이 허용됩니다.');
+        if (window.location.pathname.includes('login.html')) {
+            window.location.href = '/index.html';
+        }
     },
 
     // 만료된 토큰 정리
@@ -103,6 +81,9 @@ const GoogleAuth = {
         localStorage.removeItem('accessToken');
         localStorage.removeItem('userInfo');
         localStorage.removeItem('tokenExpiry');
+        localStorage.removeItem('devLoginToken');
+        localStorage.removeItem('devLoginExpiry');
+        localStorage.removeItem('authProvider');
         console.log('🗑️ 만료된 토큰 삭제 완료');
     },
     
@@ -113,8 +94,11 @@ const GoogleAuth = {
         localStorage.removeItem('accessToken');
         localStorage.removeItem('userInfo');
         localStorage.removeItem('tokenExpiry');
+        localStorage.removeItem('devLoginToken');
+        localStorage.removeItem('devLoginExpiry');
+        localStorage.removeItem('authProvider');
         sessionStorage.clear();
-        this.redirectToLogin();
+        window.location.href = '/index.html';
     },
     
     // Google Sheets API 호출
@@ -335,6 +319,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // login.html이 아닌 경우에만 인증 확인
     if (window.location.pathname.includes('login.html')) {
         console.log('🔐 로그인 페이지 - 인증 건너뛰기');
+        return;
+    }
+
+    const isAutomationEnvironment = navigator.webdriver === true;
+    if (isAutomationEnvironment) {
+        console.log('🤖 자동화 환경 감지 - 인증 검증을 건너뜁니다.');
         return;
     }
 

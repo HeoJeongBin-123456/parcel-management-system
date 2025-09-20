@@ -3,9 +3,9 @@ import { test, expect } from '@playwright/test';
 test.describe('Color Management API Contract Tests', () => {
     let baseUrl = 'http://localhost:3000';
 
-    test.beforeEach(async ({ page }) => {
-        await page.goto(baseUrl);
-        await page.waitForLoadState('networkidle');
+    test.beforeEach(async ({ page, request }) => {
+        await request.post(`${baseUrl}/api/colors/reset`);
+        await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
     });
 
     test('GET /api/colors/palette - should return color palette', async ({ request }) => {
@@ -179,25 +179,51 @@ test.describe('Color Management API Contract Tests', () => {
     });
 
     test('Color persistence in localStorage', async ({ page }) => {
-        const testColors = new Map([
+        const testColorEntries = [
             ['PNU001', 0],
             ['PNU002', 3],
             ['PNU003', 7]
-        ]);
+        ];
 
         // Save colors to localStorage
-        await page.evaluate((colors) => {
-            localStorage.setItem('parcelColors', JSON.stringify(Array.from(colors)));
-        }, testColors);
+        await page.evaluate((entries) => {
+            if (window.ParcelColorStorage && typeof window.ParcelColorStorage.setAll === 'function') {
+                window.ParcelColorStorage.setAll(new Map(entries));
+            } else {
+                localStorage.setItem('parcelColors', JSON.stringify(entries));
+            }
+        }, testColorEntries);
 
         // Reload and verify
         await page.reload();
 
-        const savedColors = await page.evaluate(() => {
+        await page.waitForFunction(() => {
+            if (window.ParcelColorStorage && typeof window.ParcelColorStorage.getAll === 'function') {
+                return window.ParcelColorStorage.getAll().size >= 3;
+            }
+
             const stored = localStorage.getItem('parcelColors');
-            return stored ? new Map(JSON.parse(stored)) : new Map();
+            if (!stored) {
+                return false;
+            }
+            try {
+                const parsed = JSON.parse(stored);
+                return Array.isArray(parsed) && parsed.length >= 3;
+            } catch (error) {
+                return false;
+            }
         });
 
+        const savedColorEntries = await page.evaluate(() => {
+            if (window.ParcelColorStorage && typeof window.ParcelColorStorage.getAll === 'function') {
+                return Array.from(window.ParcelColorStorage.getAll().entries());
+            }
+
+            const stored = localStorage.getItem('parcelColors');
+            return stored ? JSON.parse(stored) : [];
+        });
+
+        const savedColors = new Map(savedColorEntries);
         expect(savedColors.get('PNU001')).toBe(0);
         expect(savedColors.get('PNU002')).toBe(3);
         expect(savedColors.get('PNU003')).toBe(7);

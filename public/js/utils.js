@@ -1,5 +1,183 @@
 // 유틸리티 함수들
 
+const COLOR_PALETTE_DEFINITION = [
+    { index: 0, hex: '#FF0000', name: '빨강' },
+    { index: 1, hex: '#FFA500', name: '주황' },
+    { index: 2, hex: '#FFFF00', name: '노랑' },
+    { index: 3, hex: '#00FF00', name: '초록' },
+    { index: 4, hex: '#0000FF', name: '파랑' },
+    { index: 5, hex: '#000000', name: '검정' },
+    { index: 6, hex: '#FFFFFF', name: '흰색' },
+    { index: 7, hex: '#87CEEB', name: '하늘색' }
+];
+
+(function initializeParcelColorStorage() {
+    if (window.ParcelColorStorage) {
+        return;
+    }
+
+    const STORAGE_KEY = 'parcelColors';
+
+    function normaliseColorValue(value) {
+        if (value === undefined || value === null) {
+            return null;
+        }
+
+        if (typeof value === 'number' && Number.isInteger(value) && value >= 0 && value < COLOR_PALETTE_DEFINITION.length) {
+            return value;
+        }
+
+        if (typeof value === 'string') {
+            const trimmed = value.trim();
+            if (!trimmed || trimmed.toLowerCase() === 'transparent') {
+                return null;
+            }
+            const paletteEntry = COLOR_PALETTE_DEFINITION.find(item => item.hex.toLowerCase() === trimmed.toLowerCase() || String(item.index) === trimmed);
+            if (paletteEntry) {
+                return paletteEntry.index;
+            }
+        }
+
+        if (typeof value === 'object') {
+            if (typeof value.colorIndex === 'number') {
+                return normaliseColorValue(value.colorIndex);
+            }
+            if (typeof value.index === 'number') {
+                return normaliseColorValue(value.index);
+            }
+            if (typeof value.color === 'string') {
+                return normaliseColorValue(value.color);
+            }
+            if (typeof value.hex === 'string') {
+                return normaliseColorValue(value.hex);
+            }
+        }
+
+        return null;
+    }
+
+    function parseStoredColors(raw) {
+        if (!raw || raw === 'null' || raw === 'undefined') {
+            return new Map();
+        }
+
+        try {
+            const data = JSON.parse(raw);
+            const map = new Map();
+
+            if (Array.isArray(data)) {
+                data.forEach(entry => {
+                    if (Array.isArray(entry) && entry.length >= 2) {
+                        const [key, value] = entry;
+                        const normalised = normaliseColorValue(value);
+                        if (normalised !== null) {
+                            map.set(String(key), normalised);
+                        }
+                    }
+                });
+                return map;
+            }
+
+            if (typeof data === 'object' && data !== null) {
+                Object.entries(data).forEach(([key, value]) => {
+                    const normalised = normaliseColorValue(value);
+                    if (normalised !== null) {
+                        map.set(String(key), normalised);
+                    }
+                });
+                return map;
+            }
+        } catch (error) {
+            console.warn('parcelColors 파싱 실패:', error);
+        }
+
+        return new Map();
+    }
+
+    function serializeColors(map) {
+        if (!(map instanceof Map)) {
+            return '[]';
+        }
+        return JSON.stringify(Array.from(map.entries()));
+    }
+
+    function persist(map) {
+        try {
+            localStorage.setItem(STORAGE_KEY, serializeColors(map));
+        } catch (error) {
+            console.error('parcelColors 저장 실패:', error);
+        }
+    }
+
+    window.ParcelColorStorage = {
+        palette: COLOR_PALETTE_DEFINITION,
+        getAll() {
+            return parseStoredColors(localStorage.getItem(STORAGE_KEY));
+        },
+        setAll(map) {
+            if (!(map instanceof Map)) {
+                map = new Map(map);
+            }
+            persist(map);
+        },
+        getIndex(pnu) {
+            const map = this.getAll();
+            return map.get(pnu) ?? null;
+        },
+        setIndex(pnu, colorIndex) {
+            const map = this.getAll();
+            const normalised = normaliseColorValue(colorIndex);
+            if (normalised === null) {
+                map.delete(pnu);
+            } else {
+                map.set(pnu, normalised);
+            }
+            persist(map);
+        },
+        setHex(pnu, hex) {
+            if (!hex) {
+                this.remove(pnu);
+                return;
+            }
+            const paletteEntry = COLOR_PALETTE_DEFINITION.find(item => item.hex.toLowerCase() === hex.toLowerCase());
+            if (paletteEntry) {
+                this.setIndex(pnu, paletteEntry.index);
+            } else {
+                this.remove(pnu);
+            }
+        },
+        getHex(pnu) {
+            const index = this.getIndex(pnu);
+            if (typeof index === 'number' && COLOR_PALETTE_DEFINITION[index]) {
+                return COLOR_PALETTE_DEFINITION[index].hex;
+            }
+            return null;
+        },
+        remove(pnu) {
+            const map = this.getAll();
+            map.delete(pnu);
+            persist(map);
+        },
+        clear() {
+            persist(new Map());
+        },
+        toLegacyObject() {
+            const legacy = {};
+            const map = this.getAll();
+            map.forEach((index, key) => {
+                const paletteEntry = COLOR_PALETTE_DEFINITION[index];
+                if (paletteEntry) {
+                    legacy[key] = {
+                        color: paletteEntry.hex,
+                        colorIndex: index
+                    };
+                }
+            });
+            return legacy;
+        }
+    };
+})();
+
 // 페이지 초기화
 document.addEventListener('DOMContentLoaded', async function() {
     // console.log('초기화 시작');
@@ -27,10 +205,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                 if (savedColor) {
                     // savedColor가 색상 인덱스(숫자)인 경우 hex 값으로 변환
                     if (!isNaN(parseInt(savedColor)) && savedColor.length === 1) {
-                        const colors = [
-                            '#FF0000', '#FFA500', '#FFFF00', '#90EE90',
-                            '#0000FF', '#000000', '#FFFFFF', '#87CEEB'
-                        ];
+                        const colors = COLOR_PALETTE_DEFINITION.map(item => item.hex);
                         const hexColor = colors[parseInt(savedColor)] || savedColor;
                         currentColor = hexColor;
                         window.currentColor = hexColor;
@@ -40,16 +215,13 @@ document.addEventListener('DOMContentLoaded', async function() {
                     }
                     document.getElementById('currentColor').style.background = currentColor;
 
-                    // 해당 색상 팔레트 아이템 활성화
-                    document.querySelectorAll('.color-item').forEach(c => c.classList.remove('active'));
                     const targetItem = document.querySelector(`.color-item[data-hex="${savedColor}"]`);
-                    if (targetItem) {
+                    const colorIndex = targetItem ? targetItem.dataset.color : null;
+                    if (window.ColorPaletteManager && !isNaN(parseInt(colorIndex))) {
+                        window.ColorPaletteManager.selectColor(parseInt(colorIndex));
+                    } else if (targetItem) {
+                        document.querySelectorAll('.color-item').forEach(c => c.classList.remove('active'));
                         targetItem.classList.add('active');
-                        // ColorPaletteManager 동기화
-                        const colorIndex = targetItem.dataset.color;
-                        if (window.ColorPaletteManager && !isNaN(parseInt(colorIndex))) {
-                            window.ColorPaletteManager.selectColor(parseInt(colorIndex));
-                        }
                     }
                 }
 
@@ -112,29 +284,29 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
 
         // 기본 색상 설정 (빨간색)
-        document.querySelector('.color-item[data-color="0"]')?.click();
+        if (window.ColorPaletteManager) {
+            window.ColorPaletteManager.selectColor(0);
+        } else {
+            document.querySelector('.color-item[data-color="0"]')?.click();
+        }
     }
 
     // 색상 팔레트 이벤트 설정
     document.querySelectorAll('.color-item').forEach(item => {
         item.addEventListener('click', async function() {
-            // data-hex에서 실제 색상 값 가져오기
-            const hexColor = this.dataset.hex || this.style.background;
-            const colorIndex = this.dataset.color;
-
-            // 전역 currentColor 변수 업데이트 (순서 중요: 전역 변수 먼저)
-            currentColor = hexColor;  // 전역 변수 먼저 업데이트
-            window.currentColor = hexColor;  // window 객체도 업데이트
-
-            // ColorPaletteManager 사용
-            if (window.ColorPaletteManager && !isNaN(parseInt(colorIndex))) {
-                window.ColorPaletteManager.selectColor(parseInt(colorIndex));
+            // ColorPaletteManager가 초기화된 경우 해당 매니저가 전체 흐름을 관리하도록 위임
+            if (window.ColorPaletteManager) {
+                return;
             }
 
+            const hexColor = this.dataset.hex || this.style.background;
+            currentColor = hexColor;
+            window.currentColor = hexColor;
+
+            const colorIndex = this.dataset.color;
             document.getElementById('currentColor').style.background = hexColor;
             console.log('🎨 색상 선택:', hexColor, '(인덱스:', colorIndex, ')');
 
-            // 🎨 Supabase에 색상 저장
             if (window.SupabaseManager) {
                 try {
                     await window.SupabaseManager.saveCurrentColor(currentColor);
@@ -144,11 +316,49 @@ document.addEventListener('DOMContentLoaded', async function() {
                 }
             }
 
-            // 활성 색상 표시
             document.querySelectorAll('.color-item').forEach(c => c.classList.remove('active'));
             this.classList.add('active');
         });
     });
+
+    function registerColorPaletteBridge() {
+        if (!window.ColorPaletteManager || window.ColorPaletteManager.__utilsBridgeBound) {
+            return;
+        }
+
+        window.ColorPaletteManager.__utilsBridgeBound = true;
+        window.ColorPaletteManager.onColorSelection(async (index, color) => {
+            const hexColor = color ? color.hex : null;
+
+            if (hexColor) {
+                currentColor = hexColor;
+                window.currentColor = hexColor;
+                const chip = document.getElementById('currentColor');
+                if (chip) {
+                    chip.style.background = hexColor;
+                }
+            } else {
+                currentColor = null;
+                window.currentColor = null;
+                const chip = document.getElementById('currentColor');
+                if (chip) {
+                    chip.style.background = 'transparent';
+                }
+            }
+
+            if (window.SupabaseManager && hexColor) {
+                try {
+                    await window.SupabaseManager.saveCurrentColor(hexColor || '');
+                    console.log('✅ 색상 저장 완료:', hexColor);
+                } catch (error) {
+                    console.error('❌ 색상 저장 실패:', error);
+                }
+            }
+        });
+    }
+
+    registerColorPaletteBridge();
+    window.addEventListener('color-palette-ready', registerColorPaletteBridge);
 
     // 페이지 로드시 저장된 색상 및 상태 복원 (SupabaseManager 로드 후 실행)
     setTimeout(loadSavedColorAndState, 1000);
@@ -692,12 +902,8 @@ function removeParcelFromAllStorage(pnu) {
 
     // parcelColors에서도 제거
     try {
-        const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
-        if (parcelColors[pnu]) {
-            delete parcelColors[pnu];
-            localStorage.setItem('parcelColors', JSON.stringify(parcelColors));
-            console.log('✅ parcelColors에서 제거');
-        }
+        ParcelColorStorage.remove(pnu);
+        console.log('✅ parcelColors에서 제거');
     } catch (error) {
         console.error('❌ parcelColors 처리 실패:', error);
     }

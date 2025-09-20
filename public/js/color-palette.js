@@ -38,19 +38,14 @@ class ColorPaletteManager {
 
         // 기존 색상 아이템들에 이벤트 리스너 추가
         colorItems.forEach((item, index) => {
-            // 클릭 이벤트
             item.addEventListener('click', () => {
-                this.selectColor(index);
-
-                // 선택 상태 UI 업데이트
-                colorItems.forEach(el => el.classList.remove('active', 'selected'));
-                item.classList.add('active', 'selected');
-
-                // 현재 색상 표시 업데이트
-                const currentColorDiv = document.getElementById('currentColor');
-                if (currentColorDiv) {
-                    currentColorDiv.style.background = this.colors[index].hex;
+                const alreadySelected = this.currentSelection === index;
+                if (alreadySelected) {
+                    this.deselectColor();
+                    return;
                 }
+
+                this.selectColor(index);
             });
 
             // 사용 카운트 뱃지 제거 (숫자 표시 안함)
@@ -102,6 +97,12 @@ class ColorPaletteManager {
             this.currentSelection = null;
             this.updatePaletteUI();
             this.notifyColorSelection(null, null);
+            window.currentColor = null;
+
+            const currentColorDiv = document.getElementById('currentColor');
+            if (currentColorDiv) {
+                currentColorDiv.style.background = 'transparent';
+            }
             console.log('[ColorPalette] Color deselected');
         }
     }
@@ -213,17 +214,16 @@ class ColorPaletteManager {
         // 색상 사용 카운트 증가
         this.updateUsageCount(colorIndex, 1);
 
-        // LocalStorage에 색상 정보 저장
-        const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
-        const previousColorIndex = parcelColors[pnu];
+        const parcelColors = ParcelColorStorage.getAll();
+        const previousColorIndex = parcelColors.get(pnu);
 
         // 이전 색상이 있었다면 카운트 감소
-        if (previousColorIndex !== undefined && previousColorIndex !== colorIndex) {
+        if (typeof previousColorIndex === 'number' && previousColorIndex !== colorIndex) {
             this.updateUsageCount(previousColorIndex, -1);
         }
 
-        parcelColors[pnu] = colorIndex;
-        localStorage.setItem('parcelColors', JSON.stringify(parcelColors));
+        parcelColors.set(pnu, colorIndex);
+        ParcelColorStorage.setAll(parcelColors);
 
         console.log(`[ColorPalette] Applied color ${color.name} to parcel ${pnu}`);
         return true;
@@ -233,16 +233,16 @@ class ColorPaletteManager {
      * 필지 색상 제거
      */
     removeColorFromParcel(pnu) {
-        const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
-        const colorIndex = parcelColors[pnu];
+        const parcelColors = ParcelColorStorage.getAll();
+        const colorIndex = parcelColors.get(pnu);
 
-        if (colorIndex !== undefined) {
+        if (typeof colorIndex === 'number') {
             // 색상 사용 카운트 감소
             this.updateUsageCount(colorIndex, -1);
 
             // LocalStorage에서 제거
-            delete parcelColors[pnu];
-            localStorage.setItem('parcelColors', JSON.stringify(parcelColors));
+            parcelColors.delete(pnu);
+            ParcelColorStorage.setAll(parcelColors);
 
             console.log(`[ColorPalette] Removed color from parcel ${pnu}`);
             return true;
@@ -255,10 +255,9 @@ class ColorPaletteManager {
      * 필지의 현재 색상 가져오기
      */
     getParcelColor(pnu) {
-        const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
-        const colorIndex = parcelColors[pnu];
+        const colorIndex = ParcelColorStorage.getIndex(pnu);
 
-        if (colorIndex !== undefined && colorIndex >= 0 && colorIndex < this.colors.length) {
+        if (typeof colorIndex === 'number' && colorIndex >= 0 && colorIndex < this.colors.length) {
             return this.colors[colorIndex];
         }
 
@@ -269,12 +268,12 @@ class ColorPaletteManager {
      * 모든 색상 정보 로드
      */
     loadColorData() {
-        const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
+        const parcelColors = ParcelColorStorage.getAll();
 
         // 사용 카운트 재계산
         this.resetUsageCounts();
-        Object.values(parcelColors).forEach(colorIndex => {
-            if (colorIndex >= 0 && colorIndex < this.colors.length) {
+        parcelColors.forEach(colorIndex => {
+            if (typeof colorIndex === 'number' && colorIndex >= 0 && colorIndex < this.colors.length) {
                 this.colors[colorIndex].usageCount++;
             }
         });
@@ -287,10 +286,9 @@ class ColorPaletteManager {
      * 색상별 필지 목록 가져오기
      */
     getParcelsByColor(colorIndex) {
-        const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
         const parcels = [];
 
-        Object.entries(parcelColors).forEach(([pnu, index]) => {
+        ParcelColorStorage.getAll().forEach((index, pnu) => {
             if (index === colorIndex) {
                 parcels.push(pnu);
             }
@@ -314,13 +312,18 @@ class ColorPaletteManager {
             const key = e.key;
             if (key >= '1' && key <= '8') {
                 const index = parseInt(key) - 1;
-                this.selectColor(index);
+                if (this.currentSelection === index) {
+                    this.deselectColor();
+                } else {
+                    this.selectColor(index);
+                }
             } else if (key === '0' || key === 'Escape') {
                 this.deselectColor();
             }
         });
 
         console.log('[ColorPalette] Initialized');
+        window.dispatchEvent(new Event('color-palette-ready'));
     }
 }
 

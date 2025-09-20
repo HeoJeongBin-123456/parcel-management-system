@@ -271,9 +271,7 @@ async function saveSearchModeParcelData(parcelData) {
         localStorage.setItem('parcelData', JSON.stringify(savedData));
 
         // 색상 정보 저장 (검색은 항상 보라색)
-        const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
-        parcelColors[pnu] = SEARCH_MODE_COLOR;
-        localStorage.setItem('parcelColors', JSON.stringify(parcelColors));
+        ParcelColorStorage.setHex(pnu, SEARCH_MODE_COLOR);
 
         console.log(`💾 검색 모드 데이터 저장: ${pnu}`);
 
@@ -548,9 +546,7 @@ async function handleSearchModeRightClick(lat, lng) {
                 localStorage.setItem('parcelData', JSON.stringify(filteredData));
 
                 // 색상 정보 삭제
-                const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
-                delete parcelColors[targetPNU];
-                localStorage.setItem('parcelColors', JSON.stringify(parcelColors));
+                ParcelColorStorage.remove(targetPNU);
 
                 // 마커 삭제
                 if (window.MemoMarkerManager && window.MemoMarkerManager.markers) {
