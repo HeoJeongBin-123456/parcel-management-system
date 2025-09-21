@@ -781,6 +781,7 @@ async function deleteCurrentParcel() {
                 await window.SupabaseManager.deleteParcel(supabasePrimary, {
                     candidates: Array.from(supabaseCandidates),
                     parcelNumber,
+                    parcelName: parcelNumber,
                     parcel: window.selectedParcel || window.currentSelectedParcel || null,
                     id: window.selectedParcel?.id || window.currentSelectedParcel?.id || null,
                     pnuCode: window.selectedParcel?.pnu_code || window.currentSelectedParcel?.pnu_code || null

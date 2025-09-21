@@ -1108,6 +1108,7 @@ class SupabaseManager {
             addCandidate(options.id);
             addCandidate(options.pnuCode);
             addCandidate(options.parcelNumber);
+            addCandidate(options.parcelName);
 
             if (Array.isArray(options.candidates)) {
                 options.candidates.forEach(addCandidate);
@@ -1127,7 +1128,7 @@ class SupabaseManager {
 
             const candidateList = Array.from(candidateSet);
             const deletedRows = [];
-            const targetColumns = ['pnu', 'id', 'pnu_code'];
+            const targetColumns = ['pnu', 'id', 'pnu_code', 'parcel_name'];
 
             for (const column of targetColumns) {
                 try {
