@@ -169,7 +169,10 @@ class ParcelManager {
         this.render();
 
         if (resolvedPnu && window.removeParcelFromAllStorage) {
-            window.removeParcelFromAllStorage(resolvedPnu);
+            window.removeParcelFromAllStorage(resolvedPnu, {
+                candidates: Array.from(supabaseCandidates),
+                parcel: targetParcel
+            });
         }
 
         if (resolvedPnu && window.addToDeletedParcels) {

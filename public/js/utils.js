@@ -895,19 +895,99 @@ function isParcelDeleted(pnu) {
 /**
  * 모든 localStorage 키에서 필지 완전 삭제
  */
-function removeParcelFromAllStorage(pnu) {
+function removeParcelFromAllStorage(primaryPnu, options = {}) {
+    const candidateSet = new Set();
+    const pushCandidate = (value) => {
+        if (!value && value !== 0) {
+            return;
+        }
+        const stringValue = String(value).trim();
+        if (stringValue.length === 0 || stringValue === 'null' || stringValue === 'undefined') {
+            return;
+        }
+        candidateSet.add(stringValue);
+    };
+
+    pushCandidate(primaryPnu);
+
+    if (Array.isArray(options.candidates)) {
+        options.candidates.forEach(pushCandidate);
+    }
+
+    const parcel = options.parcel || null;
+    if (parcel) {
+        pushCandidate(parcel.pnu);
+        pushCandidate(parcel.pnu_code);
+        pushCandidate(parcel.pnuCode);
+        pushCandidate(parcel.id);
+        pushCandidate(parcel.parcelNumber);
+        pushCandidate(parcel.parcel_name);
+        if (parcel.savedInfo) {
+            pushCandidate(parcel.savedInfo.pnu);
+            pushCandidate(parcel.savedInfo.id);
+            pushCandidate(parcel.savedInfo.parcelNumber);
+        }
+    }
+
+    if (candidateSet.size === 0) {
+        console.warn('⚠️ removeParcelFromAllStorage: 삭제할 식별자가 없습니다.');
+        return 0;
+    }
+
+    const matchesItem = (item) => {
+        if (!item || typeof item !== 'object') {
+            return false;
+        }
+
+        const itemCandidates = [];
+        const addItemCandidate = (value) => {
+            if (!value && value !== 0) {
+                return;
+            }
+            const stringValue = String(value).trim();
+            if (stringValue.length === 0 || stringValue === 'null' || stringValue === 'undefined') {
+                return;
+            }
+            itemCandidates.push(stringValue);
+        };
+
+        addItemCandidate(item.pnu);
+        addItemCandidate(item.pnu_code);
+        addItemCandidate(item.pnuCode);
+        addItemCandidate(item.id);
+        addItemCandidate(item.parcelNumber);
+        addItemCandidate(item.parcel_name);
+        if (item.properties) {
+            addItemCandidate(item.properties.PNU);
+            addItemCandidate(item.properties.pnu);
+            addItemCandidate(item.properties.pnuCode);
+        }
+        if (item.savedInfo) {
+            addItemCandidate(item.savedInfo.pnu);
+            addItemCandidate(item.savedInfo.id);
+            addItemCandidate(item.savedInfo.parcelNumber);
+        }
+
+        return itemCandidates.some(candidate => candidateSet.has(candidate));
+    };
+
     const storageKeys = ['parcelData', 'clickParcelData', 'parcels', 'parcels_current_session', 'parcelData_backup'];
     let totalRemoved = 0;
 
     for (const key of storageKeys) {
         try {
-            const data = JSON.parse(localStorage.getItem(key) || '[]');
+            const raw = localStorage.getItem(key);
+            if (!raw || raw === 'null') {
+                continue;
+            }
+
+            const data = JSON.parse(raw);
+            if (!Array.isArray(data)) {
+                continue;
+            }
+
             const originalLength = data.length;
-            const filtered = data.filter(item => {
-                const itemPNU = item.pnu || item.id ||
-                    (item.properties && (item.properties.PNU || item.properties.pnu));
-                return itemPNU !== pnu;
-            });
+            const filtered = data.filter(item => !matchesItem(item));
 
             if (filtered.length < originalLength) {
                 localStorage.setItem(key, JSON.stringify(filtered));
@@ -919,27 +999,55 @@ function removeParcelFromAllStorage(pnu) {
         }
     }
 
-    // parcelColors에서도 제거
     try {
-        ParcelColorStorage.remove(pnu);
-        console.log('✅ parcelColors에서 제거');
+        const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
+        let colorRemoved = 0;
+        Object.keys(parcelColors).forEach((key) => {
+            const trimmedKey = String(key).trim();
+            if (candidateSet.has(trimmedKey)) {
+                delete parcelColors[key];
+                colorRemoved += 1;
+            }
+        });
+        if (colorRemoved > 0) {
+            localStorage.setItem('parcelColors', JSON.stringify(parcelColors));
+            console.log(`✅ parcelColors에서 ${colorRemoved}개 항목 제거`);
+        }
     } catch (error) {
         console.error('❌ parcelColors 처리 실패:', error);
     }
 
-    // markerStates에서도 제거
     try {
         const markerStates = JSON.parse(localStorage.getItem('markerStates') || '{}');
-        if (markerStates[pnu]) {
-            delete markerStates[pnu];
+        let markerRemoved = 0;
+        Object.keys(markerStates).forEach((key) => {
+            const trimmedKey = String(key).trim();
+            if (candidateSet.has(trimmedKey)) {
+                delete markerStates[key];
+                markerRemoved += 1;
+            }
+        });
+        if (markerRemoved > 0) {
             localStorage.setItem('markerStates', JSON.stringify(markerStates));
-            console.log('✅ markerStates에서 제거');
+            console.log(`✅ markerStates에서 ${markerRemoved}개 항목 제거`);
         }
     } catch (error) {
         console.error('❌ markerStates 처리 실패:', error);
     }
 
-    console.log(`🗑️ 총 ${totalRemoved}개 항목이 모든 저장소에서 제거됨`);
+    // migratedSetItem을 통해 Supabase 동기화 시도 (가능한 경우)
+    try {
+        const storageKey = window.CONFIG && window.CONFIG.STORAGE_KEY ? window.CONFIG.STORAGE_KEY : 'parcelData';
+        const syncedData = JSON.parse(localStorage.getItem(storageKey) || '[]');
+        if (window.migratedSetItem && typeof window.migratedSetItem === 'function') {
+            window.migratedSetItem(storageKey, JSON.stringify(syncedData));
+            console.log('☁️ migratedSetItem을 통해 Supabase 동기화 시도');
+        }
+    } catch (error) {
+        console.error('❌ migratedSetItem 동기화 실패:', error);
+    }
+
+    console.log(`🗑️ 총 ${totalRemoved}개 항목이 모든 저장소에서 제거됨 (식별자: ${Array.from(candidateSet).join(', ')})`);
     return totalRemoved;
 }
 
