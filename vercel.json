@@ -3,10 +3,7 @@
   "functions": {
     "server.js": {
       "runtime": "nodejs18.x",
-      "includeFiles": [
-        "public/**/*",
-        "data/**/*"
-      ]
+      "includeFiles": "public/**/*\ndata/**/*"
     }
   },
   "routes": [
