@@ -116,11 +116,100 @@ class ParcelManager {
     }
     
     removeParcel(id) {
+        const targetParcel = this.parcels.find(p => p.id === id);
+
+        if (!targetParcel) {
+            console.warn('⚠️ 삭제할 필지를 찾을 수 없습니다:', id);
+            return;
+        }
+
+        const confirmMessage = `필지 "${targetParcel.parcelNumber || targetParcel.parcel_name || id}"을 삭제하시겠습니까?\n\n` +
+            '색상, 메모, 소유자 정보가 모두 제거되며 새로고침 후에도 복원되지 않습니다.';
+        if (!confirm(confirmMessage)) {
+            return;
+        }
+
+        const resolvePnu = () => {
+            if (window.supabaseAdapter && typeof window.supabaseAdapter.resolvePnu === 'function') {
+                return window.supabaseAdapter.resolvePnu(targetParcel);
+            }
+            return targetParcel.pnu || targetParcel.pnu_code || targetParcel.pnuCode || targetParcel.id || null;
+        };
+
+        const resolvedPnu = resolvePnu();
+        const supabaseCandidates = new Set();
+        const pushCandidate = (value) => {
+            if (!value && value !== 0) {
+                return;
+            }
+            const stringValue = String(value).trim();
+            if (stringValue.length === 0 || stringValue === 'null' || stringValue === 'undefined') {
+                return;
+            }
+            supabaseCandidates.add(stringValue);
+        };
+
+        pushCandidate(resolvedPnu);
+        pushCandidate(targetParcel.id);
+        pushCandidate(targetParcel.pnu);
+        pushCandidate(targetParcel.pnu_code);
+        pushCandidate(targetParcel.pnuCode);
+        pushCandidate(targetParcel.parcelNumber);
+        pushCandidate(targetParcel.parcel_name);
+        if (targetParcel.savedInfo) {
+            pushCandidate(targetParcel.savedInfo.pnu);
+            pushCandidate(targetParcel.savedInfo.id);
+            pushCandidate(targetParcel.savedInfo.parcelNumber);
+        }
+
         this.parcels = this.parcels.filter(p => p.id !== id);
         this.selectedParcels.delete(id);
         this.saveParcels();
         this.applyFilters();
         this.render();
+
+        if (resolvedPnu && window.removeParcelFromAllStorage) {
+            window.removeParcelFromAllStorage(resolvedPnu);
+        }
+
+        if (resolvedPnu && window.addToDeletedParcels) {
+            window.addToDeletedParcels(resolvedPnu);
+        }
+
+        if (window.MemoMarkerManager && typeof window.MemoMarkerManager.removeMemoMarker === 'function' && resolvedPnu) {
+            try {
+                window.MemoMarkerManager.removeMemoMarker(resolvedPnu);
+            } catch (error) {
+                console.warn('⚠️ MemoMarker 제거 중 오류:', error);
+            }
+        }
+
+        if (window.clickParcels && typeof window.clickParcels.delete === 'function') {
+            window.clickParcels.delete(resolvedPnu || targetParcel.id);
+        }
+        if (window.searchParcels && typeof window.searchParcels.delete === 'function') {
+            window.searchParcels.delete(resolvedPnu || targetParcel.id);
+        }
+
+        if (window.SupabaseManager && typeof window.SupabaseManager.deleteParcel === 'function' && supabaseCandidates.size > 0) {
+            const primary = resolvedPnu || targetParcel.id;
+            window.SupabaseManager.deleteParcel(primary, {
+                candidates: Array.from(supabaseCandidates),
+                parcelNumber: targetParcel.parcelNumber || targetParcel.parcel_name || null,
+                parcelName: targetParcel.parcelNumber || targetParcel.parcel_name || null,
+                parcel: targetParcel,
+                id: targetParcel.id,
+                pnuCode: targetParcel.pnu_code || targetParcel.pnuCode || null
+            }).catch(error => {
+                console.error('⚠️ Supabase 삭제 실패:', error);
+            });
+        }
+
+        console.log('🗑️ 필지 카드 삭제 완료:', {
+            id,
+            resolvedPnu,
+            candidates: Array.from(supabaseCandidates)
+        });
     }
     
     toggleSelection(id) {
