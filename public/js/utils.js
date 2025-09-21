@@ -744,11 +744,48 @@ async function deleteCurrentParcel() {
             }
         }
 
+        const supabaseCandidates = new Set();
+        const pushCandidate = (value) => {
+            if (!value && value !== 0) {
+                return;
+            }
+            const stringValue = String(value).trim();
+            if (stringValue.length === 0 || stringValue === 'null' || stringValue === 'undefined') {
+                return;
+            }
+            supabaseCandidates.add(stringValue);
+        };
+
+        pushCandidate(currentPNU);
+        pushCandidate(parcelNumber);
+
+        if (window.selectedParcel) {
+            pushCandidate(window.selectedParcel.pnu);
+            pushCandidate(window.selectedParcel.pnu_code);
+            pushCandidate(window.selectedParcel.pnuCode);
+            pushCandidate(window.selectedParcel.id);
+        }
+
+        if (window.currentSelectedParcel && window.currentSelectedParcel !== window.selectedParcel) {
+            pushCandidate(window.currentSelectedParcel.pnu);
+            pushCandidate(window.currentSelectedParcel.pnu_code);
+            pushCandidate(window.currentSelectedParcel.pnuCode);
+            pushCandidate(window.currentSelectedParcel.id);
+        }
+
         // 3. Supabase에서도 완전히 삭제
-        if (window.SupabaseManager && window.SupabaseManager.deleteParcel && currentPNU) {
+        const supabasePrimary = currentPNU || Array.from(supabaseCandidates)[0] || null;
+
+        if (window.SupabaseManager && window.SupabaseManager.deleteParcel && supabaseCandidates.size > 0 && supabasePrimary) {
             try {
-                await window.SupabaseManager.deleteParcel(currentPNU);
-                console.log('✅ Supabase에서 필지 완전 삭제:', currentPNU);
+                await window.SupabaseManager.deleteParcel(supabasePrimary, {
+                    candidates: Array.from(supabaseCandidates),
+                    parcelNumber,
+                    parcel: window.selectedParcel || window.currentSelectedParcel || null,
+                    id: window.selectedParcel?.id || window.currentSelectedParcel?.id || null,
+                    pnuCode: window.selectedParcel?.pnu_code || window.currentSelectedParcel?.pnu_code || null
+                });
+                console.log('✅ Supabase에서 필지 완전 삭제:', supabasePrimary);
             } catch (supabaseError) {
                 console.error('⚠️ Supabase 삭제 실패 (로컬은 성공):', supabaseError);
                 // Supabase 실패해도 계속 진행 (로컬은 이미 업데이트됨)

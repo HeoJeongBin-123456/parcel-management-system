@@ -1084,34 +1084,105 @@ class SupabaseManager {
     }
 
     // 필지 삭제 메서드
-    async deleteParcel(pnu) {
+    async deleteParcel(pnu, options = {}) {
         if (!this.isConnected) {
             console.warn('⚠️ Supabase 미연결 상태');
             return false;
         }
 
         try {
-            // parcels 테이블에서 삭제
-            const { error: parcelError } = await this.supabase
-                .from('parcels')
-                .delete()
-                .eq('pnu', pnu);
+            const candidateSet = new Set();
+            const addCandidate = (value) => {
+                if (!value && value !== 0) {
+                    return;
+                }
+                const stringValue = String(value).trim();
+                if (stringValue.length === 0 || stringValue === 'null' || stringValue === 'undefined') {
+                    return;
+                }
+                candidateSet.add(stringValue);
+            };
 
-            if (parcelError) {
-                console.error('❌ parcels 테이블 삭제 실패:', parcelError);
+            addCandidate(pnu);
+            addCandidate(options.pnu);
+            addCandidate(options.id);
+            addCandidate(options.pnuCode);
+            addCandidate(options.parcelNumber);
+
+            if (Array.isArray(options.candidates)) {
+                options.candidates.forEach(addCandidate);
             }
 
-            // parcel_polygons 테이블에서도 삭제
-            const { error: polygonError } = await this.supabase
-                .from('parcel_polygons')
-                .delete()
-                .eq('pnu', pnu);
-
-            if (polygonError) {
-                console.error('❌ parcel_polygons 테이블 삭제 실패:', polygonError);
+            if (options.parcel && typeof options.parcel === 'object') {
+                addCandidate(options.parcel.pnu);
+                addCandidate(options.parcel.pnu_code);
+                addCandidate(options.parcel.pnuCode);
+                addCandidate(options.parcel.id);
             }
 
-            console.log('✅ Supabase에서 필지 완전 삭제:', pnu);
+            if (candidateSet.size === 0) {
+                console.warn('⚠️ Supabase 삭제를 위한 식별자가 없습니다.');
+                return false;
+            }
+
+            const candidateList = Array.from(candidateSet);
+            const deletedRows = [];
+            const targetColumns = ['pnu', 'id', 'pnu_code'];
+
+            for (const column of targetColumns) {
+                try {
+                    const { data, error } = await this.supabase
+                        .from('parcels')
+                        .delete()
+                        .in(column, candidateList)
+                        .select('id, pnu, pnu_code');
+
+                    if (error) {
+                        if (error.code && error.code !== 'PGRST116') {
+                            console.error(`❌ parcels 테이블 ${column} 기준 삭제 실패:`, error);
+                        }
+                        continue;
+                    }
+
+                    if (Array.isArray(data) && data.length > 0) {
+                        deletedRows.push(...data);
+                    }
+                } catch (innerError) {
+                    console.error(`❌ parcels 테이블 ${column} 삭제 중 예외:`, innerError);
+                }
+            }
+
+            if (deletedRows.length === 0) {
+                console.warn('⚠️ Supabase에서 삭제된 필지가 없습니다.', candidateList);
+                return false;
+            }
+
+            const polygonCandidates = new Set(candidateList);
+            deletedRows.forEach(row => {
+                if (row.pnu) {
+                    polygonCandidates.add(String(row.pnu));
+                }
+                if (row.pnu_code) {
+                    polygonCandidates.add(String(row.pnu_code));
+                }
+                if (row.id) {
+                    polygonCandidates.add(String(row.id));
+                }
+            });
+
+            if (polygonCandidates.size > 0) {
+                const polygonList = Array.from(polygonCandidates);
+                const { error: polygonError } = await this.supabase
+                    .from('parcel_polygons')
+                    .delete()
+                    .in('pnu', polygonList);
+
+                if (polygonError && polygonError.code !== 'PGRST116') {
+                    console.error('❌ parcel_polygons 테이블 삭제 실패:', polygonError);
+                }
+            }
+
+            console.log('✅ Supabase에서 필지 완전 삭제:', candidateList.join(', '));
             return true;
         } catch (error) {
             console.error('❌ 필지 삭제 중 오류:', error);

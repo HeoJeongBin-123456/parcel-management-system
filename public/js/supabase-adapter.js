@@ -106,6 +106,7 @@ class SupabaseAdapter {
             lng = 126.9783882;
         }
 
+        const resolvedPnu = this.resolvePnu(normalizedData);
         const memoPayload = this.createMemoFromLocalData(normalizedData);
 
         const supabaseData = this.supabaseManager.createParcelData(
@@ -122,8 +123,13 @@ class SupabaseAdapter {
         if (normalizedData.id) {
             supabaseData.id = normalizedData.id;
         }
-        if (normalizedData.pnu) {
-            supabaseData.pnu = normalizedData.pnu;
+        if (resolvedPnu) {
+            supabaseData.pnu = resolvedPnu;
+            supabaseData.pnu_code = resolvedPnu;
+            normalizedData.pnu = resolvedPnu;
+            if (!supabaseData.id) {
+                supabaseData.id = resolvedPnu;
+            }
         }
 
         // ✅ geometry 정보 보존 - 폴리곤 복원에 필요
@@ -251,6 +257,8 @@ class SupabaseAdapter {
     convertToLocalStorageFormat(supabaseData) {
         const rawMemo = typeof supabaseData.memo === 'string' ? supabaseData.memo : '';
         const memoLines = rawMemo.split('\n');
+        const resolvedPnu = this.resolvePnu(supabaseData);
+
         const localData = {
             id: supabaseData.id,
             parcelNumber: supabaseData.parcel_name,
@@ -265,7 +273,7 @@ class SupabaseAdapter {
             mode: supabaseData.mode || 'click',
             visitDate: '',
             isSearchParcel: supabaseData.color_type === 'search',
-            pnu: supabaseData.id, // ID를 PNU로 사용
+            pnu: resolvedPnu || supabaseData.id,
             // ✅ Supabase에 저장된 geometry가 있으면 사용, 없으면 Point로 생성
             geometry: supabaseData.geometry || {
                 type: 'Point',
@@ -354,6 +362,55 @@ class SupabaseAdapter {
         localData.memo = (localData.memo || '').trim();
 
         return localData;
+    }
+
+    resolvePnu(data) {
+        if (!data) {
+            return null;
+        }
+
+        const candidates = [];
+
+        const pushCandidate = (value) => {
+            if (!value && value !== 0) {
+                return;
+            }
+            const stringValue = String(value).trim();
+            if (stringValue.length === 0 || stringValue === 'null' || stringValue === 'undefined') {
+                return;
+            }
+            candidates.push(stringValue);
+        };
+
+        pushCandidate(data.pnu);
+        pushCandidate(data.pnu_code);
+        pushCandidate(data.pnuCode);
+        pushCandidate(data.pnuNumber);
+        pushCandidate(data.pnucode);
+        pushCandidate(data.id);
+        pushCandidate(data.parcelNumber);
+        pushCandidate(data.parcel_name);
+
+        if (data.properties) {
+            pushCandidate(data.properties.PNU);
+            pushCandidate(data.properties.pnu);
+            pushCandidate(data.properties.pnuCode);
+        }
+
+        if (data.geometry && data.geometry.properties) {
+            pushCandidate(data.geometry.properties.PNU);
+            pushCandidate(data.geometry.properties.pnu);
+        }
+
+        const ownerInfo = data.owner_info || data.ownerInfo;
+        if (ownerInfo) {
+            const parsed = typeof ownerInfo === 'string' ? this.safeParseJSON(ownerInfo) : ownerInfo;
+            if (parsed && parsed.pnu) {
+                pushCandidate(parsed.pnu);
+            }
+        }
+
+        return candidates.length > 0 ? candidates[0] : null;
     }
 
     safeParseJSON(payload) {
