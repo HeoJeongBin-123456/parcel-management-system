@@ -530,27 +530,34 @@ app.get('/', (req, res) => {
 });
 
 // 서버 시작
-const server = app.listen(PORT, () => {
-    console.log(`
-    ======================================
-    🚀 서버가 시작되었습니다!
-    
-    📍 로컬: http://localhost:${PORT}
-    📍 네트워크: http://127.0.0.1:${PORT}
-    
-    ✅ parcel-management-system
-    ======================================
-    `);
-});
+function startServer() {
+    const server = app.listen(PORT, () => {
+        console.log(`
+        ======================================
+        🚀 서버가 시작되었습니다!
+        
+        📍 로컬: http://localhost:${PORT}
+        📍 네트워크: http://127.0.0.1:${PORT}
+        
+        ✅ parcel-management-system
+        ======================================
+        `);
+    });
 
-// 포트 충돌 시 빠르게 종료하여 상위 프로세스가 재시도하거나 종료하도록 한다.
-server.on('error', (err) => {
-    if (err.code === 'EADDRINUSE') {
-        console.error(`❌ 포트 ${PORT}이 이미 사용 중입니다. 서버를 종료합니다.`);
-        console.error('이미 실행 중인 개발 서버가 있다면 종료 후 다시 시도해주세요.');
-        process.exit(1);
-    } else {
-        console.error('서버 시작 오류:', err);
-        process.exit(1);
-    }
-});
+    server.on('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+            console.error(`❌ 포트 ${PORT}이 이미 사용 중입니다. 서버를 종료합니다.`);
+            console.error('이미 실행 중인 개발 서버가 있다면 종료 후 다시 시도해주세요.');
+            process.exit(1);
+        } else {
+            console.error('서버 시작 오류:', err);
+            process.exit(1);
+        }
+    });
+}
+
+if (require.main === module) {
+    startServer();
+}
+
+module.exports = app;
