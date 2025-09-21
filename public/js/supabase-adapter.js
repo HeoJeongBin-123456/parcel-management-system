@@ -88,74 +88,177 @@ class SupabaseAdapter {
 
     // localStorage 형식 → Supabase 형식 변환
     convertToSupabaseFormat(localData) {
+        const normalizedData = this.normalizeLegacyMemo({ ...localData });
+
         // 좌표 추출 (geometry에서 또는 직접 값에서)
         let lat, lng;
 
-        if (localData.geometry && localData.geometry.coordinates) {
+        if (normalizedData.geometry && normalizedData.geometry.coordinates) {
             // GeoJSON 형식
-            [lng, lat] = localData.geometry.coordinates;
-        } else if (localData.lat && localData.lng) {
+            [lng, lat] = normalizedData.geometry.coordinates;
+        } else if (normalizedData.lat && normalizedData.lng) {
             // 직접 좌표
-            lat = localData.lat;
-            lng = localData.lng;
+            lat = normalizedData.lat;
+            lng = normalizedData.lng;
         } else {
             // 기본값 (서울시청)
             lat = 37.5666103;
             lng = 126.9783882;
         }
 
+        const memoPayload = this.createMemoFromLocalData(normalizedData);
+
         const supabaseData = this.supabaseManager.createParcelData(
             lat,
             lng,
-            localData.parcelNumber || localData.parcel_name || '알수없음',
-            this.createMemoFromLocalData(localData),
+            normalizedData.parcelNumber || normalizedData.parcel_name || '알수없음',
+            memoPayload,
             true, // 저장된 데이터는 모두 색칠된 것으로 간주
-            localData.isSearchParcel ? 'search' : 'click'
+            normalizedData.isSearchParcel ? 'search' : 'click'
         );
 
+        supabaseData.memo = memoPayload;
+
+        if (normalizedData.id) {
+            supabaseData.id = normalizedData.id;
+        }
+        if (normalizedData.pnu) {
+            supabaseData.pnu = normalizedData.pnu;
+        }
+
         // ✅ geometry 정보 보존 - 폴리곤 복원에 필요
-        if (localData.geometry) {
-            supabaseData.geometry = localData.geometry;
+        if (normalizedData.geometry) {
+            supabaseData.geometry = normalizedData.geometry;
         }
 
         // ✅ 색상 인덱스 보존 - 8색 팔레트 시스템
-        if (localData.colorIndex !== undefined) {
-            supabaseData.colorIndex = localData.colorIndex;
-        } else if (localData.isSearchParcel) {
+        if (normalizedData.colorIndex !== undefined) {
+            supabaseData.colorIndex = normalizedData.colorIndex;
+        } else if (normalizedData.isSearchParcel) {
             supabaseData.colorIndex = 8; // 검색 모드는 보라색 (인덱스 8)
         }
 
         // 모드 정보 추가
-        supabaseData.mode = localData.mode || (localData.isSearchParcel ? 'search' : 'click');
+        supabaseData.mode = normalizedData.mode || (normalizedData.isSearchParcel ? 'search' : 'click');
+
+        // 소유자 정보 분리 저장
+        supabaseData.owner_name = normalizedData.ownerName || null;
+        supabaseData.owner_address = normalizedData.ownerAddress || null;
+        supabaseData.owner_contact = normalizedData.ownerContact || null;
+
+        if (normalizedData.ownerName || normalizedData.ownerAddress || normalizedData.ownerContact) {
+            supabaseData.owner_info = {
+                name: normalizedData.ownerName || '',
+                address: normalizedData.ownerAddress || '',
+                contact: normalizedData.ownerContact || '',
+                updated_at: new Date().toISOString()
+            };
+        } else {
+            supabaseData.owner_info = null;
+        }
 
         return supabaseData;
     }
 
-    // localStorage 형식에서 메모 생성
+    // localStorage 형식에서 메모 생성 (소유자 정보는 memo에 포함하지 않음)
     createMemoFromLocalData(localData) {
         const memo = [];
-        
-        if (localData.ownerName) memo.push(`소유자: ${localData.ownerName}`);
-        if (localData.ownerAddress) memo.push(`주소: ${localData.ownerAddress}`);
-        if (localData.ownerContact) memo.push(`연락처: ${localData.ownerContact}`);
-        if (localData.memo) memo.push(`메모: ${localData.memo}`);
-        if (localData.visitCount) memo.push(`방문횟수: ${localData.visitCount}`);
-        if (localData.visitDate) memo.push(`방문일: ${localData.visitDate}`);
-        
+
+        if (localData.memo && localData.memo.trim().length > 0) {
+            memo.push(`메모: ${localData.memo.trim()}`);
+        }
+        if (localData.visitCount) {
+            memo.push(`방문횟수: ${localData.visitCount}`);
+        }
+        if (localData.visitDate) {
+            memo.push(`방문일: ${localData.visitDate}`);
+        }
+
         return memo.join('\n');
+    }
+
+    normalizeLegacyMemo(localData) {
+        if (!localData || typeof localData.memo !== 'string') {
+            return localData;
+        }
+
+        const lines = localData.memo.split('\n');
+        let explicitMemo = null;
+        const remaining = [];
+
+        lines.forEach(rawLine => {
+            const line = rawLine.trim();
+            if (!line) {
+                return;
+            }
+
+            if (line.startsWith('소유자: ')) {
+                if (!localData.ownerName || localData.ownerName.trim().length === 0) {
+                    localData.ownerName = line.replace('소유자: ', '').trim();
+                }
+                return;
+            }
+
+            if (line.startsWith('주소: ')) {
+                if (!localData.ownerAddress || localData.ownerAddress.trim().length === 0) {
+                    localData.ownerAddress = line.replace('주소: ', '').trim();
+                }
+                return;
+            }
+
+            if (line.startsWith('연락처: ')) {
+                if (!localData.ownerContact || localData.ownerContact.trim().length === 0) {
+                    localData.ownerContact = line.replace('연락처: ', '').trim();
+                }
+                return;
+            }
+
+            if (line.startsWith('방문횟수: ')) {
+                const parsed = parseInt(line.replace('방문횟수: ', '').trim(), 10);
+                if (!Number.isNaN(parsed)) {
+                    localData.visitCount = parsed;
+                }
+                return;
+            }
+
+            if (line.startsWith('방문일: ')) {
+                if (!localData.visitDate) {
+                    localData.visitDate = line.replace('방문일: ', '').trim();
+                }
+                return;
+            }
+
+            if (line.startsWith('메모: ')) {
+                if (explicitMemo === null) {
+                    explicitMemo = line.replace('메모: ', '').trim();
+                }
+                return;
+            }
+
+            remaining.push(rawLine);
+        });
+
+        if (explicitMemo !== null) {
+            localData.memo = explicitMemo;
+        } else {
+            localData.memo = remaining.join('\n').trim();
+        }
+
+        return localData;
     }
 
     // Supabase 형식 → localStorage 형식 변환
     convertToLocalStorageFormat(supabaseData) {
-        const memoLines = supabaseData.memo.split('\n');
+        const rawMemo = typeof supabaseData.memo === 'string' ? supabaseData.memo : '';
+        const memoLines = rawMemo.split('\n');
         const localData = {
             id: supabaseData.id,
             parcelNumber: supabaseData.parcel_name,
             lat: supabaseData.lat,
             lng: supabaseData.lng,
-            ownerName: '',
-            ownerAddress: '',
-            ownerContact: '',
+            ownerName: supabaseData.owner_name || '',
+            ownerAddress: supabaseData.owner_address || '',
+            ownerContact: supabaseData.owner_contact || '',
             memo: '',
             visitCount: 0,
             colorIndex: supabaseData.colorIndex || 0,
@@ -171,17 +274,94 @@ class SupabaseAdapter {
             timestamp: supabaseData.created_at
         };
 
-        // 메모 파싱
+        // owner_info JSON 우선 적용
+        if (supabaseData.owner_info) {
+            const ownerInfo = typeof supabaseData.owner_info === 'string'
+                ? this.safeParseJSON(supabaseData.owner_info)
+                : supabaseData.owner_info;
+
+            if (ownerInfo) {
+                if (ownerInfo.name && (!localData.ownerName || localData.ownerName.trim().length === 0)) {
+                    localData.ownerName = ownerInfo.name;
+                }
+                if (ownerInfo.address && (!localData.ownerAddress || localData.ownerAddress.trim().length === 0)) {
+                    localData.ownerAddress = ownerInfo.address;
+                }
+                if (ownerInfo.contact && (!localData.ownerContact || localData.ownerContact.trim().length === 0)) {
+                    localData.ownerContact = ownerInfo.contact;
+                }
+            }
+        }
+
+        const leftoverMemo = [];
+
         memoLines.forEach(line => {
-            if (line.startsWith('소유자: ')) localData.ownerName = line.replace('소유자: ', '');
-            else if (line.startsWith('주소: ')) localData.ownerAddress = line.replace('주소: ', '');
-            else if (line.startsWith('연락처: ')) localData.ownerContact = line.replace('연락처: ', '');
-            else if (line.startsWith('메모: ')) localData.memo = line.replace('메모: ', '');
-            else if (line.startsWith('방문횟수: ')) localData.visitCount = parseInt(line.replace('방문횟수: ', '')) || 0;
-            else if (line.startsWith('방문일: ')) localData.visitDate = line.replace('방문일: ', '');
+            const trimmed = line.trim();
+            if (!trimmed) {
+                return;
+            }
+
+            if (trimmed.startsWith('소유자: ')) {
+                if (!localData.ownerName || localData.ownerName.trim().length === 0) {
+                    localData.ownerName = trimmed.replace('소유자: ', '').trim();
+                }
+                return;
+            }
+
+            if (trimmed.startsWith('주소: ')) {
+                if (!localData.ownerAddress || localData.ownerAddress.trim().length === 0) {
+                    localData.ownerAddress = trimmed.replace('주소: ', '').trim();
+                }
+                return;
+            }
+
+            if (trimmed.startsWith('연락처: ')) {
+                if (!localData.ownerContact || localData.ownerContact.trim().length === 0) {
+                    localData.ownerContact = trimmed.replace('연락처: ', '').trim();
+                }
+                return;
+            }
+
+            if (trimmed.startsWith('메모: ')) {
+                const memoValue = trimmed.replace('메모: ', '').trim();
+                localData.memo = memoValue;
+                return;
+            }
+
+            if (trimmed.startsWith('방문횟수: ')) {
+                const parsed = parseInt(trimmed.replace('방문횟수: ', '').trim(), 10);
+                if (!Number.isNaN(parsed)) {
+                    localData.visitCount = parsed;
+                }
+                return;
+            }
+
+            if (trimmed.startsWith('방문일: ')) {
+                localData.visitDate = trimmed.replace('방문일: ', '').trim();
+                return;
+            }
+
+            leftoverMemo.push(line);
         });
 
+        if (leftoverMemo.length > 0) {
+            const tail = leftoverMemo.join('\n').trim();
+            if (tail.length > 0) {
+                localData.memo = localData.memo ? `${localData.memo}\n${tail}` : tail;
+            }
+        }
+
+        localData.memo = (localData.memo || '').trim();
+
         return localData;
+    }
+
+    safeParseJSON(payload) {
+        try {
+            return JSON.parse(payload);
+        } catch (error) {
+            return null;
+        }
     }
 
     // ========================================
