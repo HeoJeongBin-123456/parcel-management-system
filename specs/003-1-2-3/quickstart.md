@@ -16,7 +16,7 @@
 # .env 파일 생성 또는 수정
 SUPABASE_URL=https://cqfszcbifonxpfasodto.supabase.co
 SUPABASE_ANON_KEY=your_key_here
-VWORLD_API_KEY=12A51C12-8690-3559-9C2B-9F705D0D8AF3
+VWORLD_API_KEY=E5B1657B-9B6F-3A4B-91EF-98512BE931A1
 ```
 
 ### 2. 서버 시작

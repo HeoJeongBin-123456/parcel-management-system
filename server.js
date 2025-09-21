@@ -157,8 +157,8 @@ app.get('/api/vworld', async (req, res) => {
         
         // VWorld API 키들 (고정된 범용 키)
         const apiKeys = [
-            '12A51C12-8690-3559-9C2B-9F705D0D8AF3', // 지정된 고정 키
-            key || '12A51C12-8690-3559-9C2B-9F705D0D8AF3' // fallback
+            'E5B1657B-9B6F-3A4B-91EF-98512BE931A1', // 지정된 고정 키
+            key || 'E5B1657B-9B6F-3A4B-91EF-98512BE931A1' // fallback
         ];
         
         let lastError;
@@ -256,8 +256,8 @@ app.get('/api/vworld-proxy', async (req, res) => {
         
         // VWorld API 키들 (고정된 범용 키)
         const apiKeys = [
-            '12A51C12-8690-3559-9C2B-9F705D0D8AF3', // 지정된 고정 키
-            key || '12A51C12-8690-3559-9C2B-9F705D0D8AF3' // fallback
+            'E5B1657B-9B6F-3A4B-91EF-98512BE931A1', // 지정된 고정 키
+            key || 'E5B1657B-9B6F-3A4B-91EF-98512BE931A1' // fallback
         ];
         
         let lastError;
