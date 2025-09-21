@@ -1,7 +1,7 @@
 // 클라이언트 사이드 설정 (환경변수 사용)
 window.CONFIG = {
     // 이 값들은 빌드 시 환경변수로 대체됨
-    NAVER_CLIENT_ID: 'xzbnwd2h1z', // 네이버 지도는 클라이언트 ID만 필요
+    NAVER_CLIENT_ID: 'x21kpuf1v4', // 네이버 지도는 클라이언트 ID만 필요
     
     // 지도 초기 설정
     MAP_DEFAULT_CENTER: {
