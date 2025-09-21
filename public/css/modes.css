@@ -78,6 +78,17 @@ body.mode-search .map-container {
     flex: 1;
 }
 
+/* 검색 모드에서는 색상 팔레트 비활성화 */
+body.mode-search #colorPanelContent {
+    opacity: 0.35;
+    pointer-events: none;
+}
+
+body.mode-search .color-panel-placeholder {
+    opacity: 1;
+    pointer-events: auto;
+}
+
 /* 손 모드 */
 body.mode-hand {
     --primary-color: #2196F3;

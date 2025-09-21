@@ -83,7 +83,33 @@ function getGeometryCenter(geometry) {
     }
 
     if (geometry.coordinates) {
-        return calculatePolygonCenter(geometry.coordinates);
+        let coordinates = geometry.coordinates;
+
+        if (geometry.type === 'MultiPolygon' && coordinates.length > 0) {
+            coordinates = coordinates[0];
+        }
+
+        if ((geometry.type === 'Polygon' || geometry.type === 'MultiPolygon') && coordinates.length > 0) {
+            coordinates = coordinates[0];
+        }
+
+        let totalX = 0;
+        let totalY = 0;
+        let count = 0;
+
+        for (const coord of coordinates) {
+            if (Array.isArray(coord) && coord.length >= 2) {
+                totalX += coord[0];
+                totalY += coord[1];
+                count += 1;
+            }
+        }
+
+        if (count > 0) {
+            return [totalX / count, totalY / count];
+        }
+
+        return calculatePolygonCenter(coordinates);
     }
 
     return [0, 0];
@@ -169,6 +195,20 @@ function resolveParcelNumber({
     return pickMeaningfulValue(candidates);
 }
 
+function resetParcelFormFields(options = {}) {
+    const { keepParcelNumber = false } = options;
+
+    if (!keepParcelNumber) {
+        document.getElementById('parcelNumber').value = '';
+    }
+    document.getElementById('ownerName').value = '';
+    document.getElementById('ownerAddress').value = '';
+    document.getElementById('ownerContact').value = '';
+    document.getElementById('memo').value = '';
+}
+
+window.resetParcelFormFields = resetParcelFormFields;
+
 // 📍 필지 정보 조회 메인 함수 (모드별 핸들러로 라우팅)
 async function getParcelInfo(lat, lng) {
     const currentMode = window.currentMode || 'click';
@@ -211,11 +251,10 @@ async function loadParcelsInBounds(bounds) {
     
     // console.log('🏘️ VWorld API로 영역 내 실제 필지 데이터 로드 시작');
     
-    const ne = bounds.getNE();
-    const sw = bounds.getSW();
-    
-    // 경계 박스 생성 (서남쪽 경도, 서남쪽 위도, 동북쪽 경도, 동북쪽 위도)
-    const bbox = `${sw.lng()},${sw.lat()},${ne.lng()},${ne.lat()}`;
+    // const ne = bounds.getNE();
+    // const sw = bounds.getSW();
+    // 경계 박스 (디버깅용)
+    // const bbox = `${sw.lng()},${sw.lat()},${ne.lng()},${ne.lat()}`;
     // console.log('🗺️ 검색 영역 (BBOX):', bbox);
     
     // API 키 풀 (메인: 범용키, 백업: 로컬호스트 제한키들)
@@ -429,7 +468,9 @@ async function toggleParcelSelection(parcel, polygon) {
     const parcelData = window.clickParcels.get(pnu);
     const searchParcelData = window.searchParcels && window.searchParcels.get(pnu);
     const jibun = formatJibun(parcel.properties);
-    
+
+    resetParcelFormFields();
+
     // 보라색(검색 필지) 확인 - clickParcels 또는 searchParcels에서 확인
     const isSearchParcel = (parcelData && parcelData.color === '#9370DB') || 
                            (searchParcelData && searchParcelData.color === '#9370DB');
@@ -437,42 +478,15 @@ async function toggleParcelSelection(parcel, polygon) {
     // console.log('🟣 검색 필지(보라색) 클릭 - 색상 복사 방지');
         // 폼에 정보만 표시하고 색상은 변경하지 않음
         const parcelInput = document.getElementById('parcelNumber');
-        const savedDataJson = await window.migratedGetItem(CONFIG.STORAGE_KEY);
-        let savedData = [];
-        try {
-            const normalizedJson = (!savedDataJson || savedDataJson === 'undefined' || savedDataJson === 'null')
-                ? '[]'
-                : savedDataJson;
-            savedData = JSON.parse(normalizedJson);
-        } catch (error) {
-            console.warn('⚠️ 저장 데이터 파싱 실패:', error);
-            savedData = [];
-        }
-        const savedInfo = savedData.find(item =>
-            (item.pnu && item.pnu === pnu) ||
-            item.parcelNumber === jibun
-        );
 
+        resetParcelFormFields({ keepParcelNumber: true });
         parcelInput.value = resolveParcelNumber({
             parcel,
             parcelData,
             searchParcelData,
-            savedInfo,
             preferredValue: jibun
         });
         window.currentSelectedPNU = pnu;
-        
-        if (savedInfo) {
-            document.getElementById('ownerName').value = savedInfo.ownerName || '';
-            document.getElementById('ownerAddress').value = savedInfo.ownerAddress || '';
-            document.getElementById('ownerContact').value = savedInfo.ownerContact || '';
-            document.getElementById('memo').value = savedInfo.memo || '';
-        } else {
-            document.getElementById('ownerName').value = '';
-            document.getElementById('ownerAddress').value = '';
-            document.getElementById('ownerContact').value = '';
-            document.getElementById('memo').value = '';
-        }
         
         return; // 보라색 필지는 여기서 종료
     }
@@ -483,7 +497,18 @@ async function toggleParcelSelection(parcel, polygon) {
         (item.pnu && item.pnu === pnu) || 
         item.parcelNumber === jibun
     );
-    
+
+    // 항상 폼을 초기화하고 지번만 반영
+    resetParcelFormFields({ keepParcelNumber: true });
+    const resolvedParcelNumber = resolveParcelNumber({
+        parcel,
+        parcelData,
+        searchParcelData,
+        savedInfo,
+        preferredValue: jibun
+    });
+    document.getElementById('parcelNumber').value = resolvedParcelNumber;
+
     // 저장된 정보가 있는지와 실제 데이터가 있는지 확인
     const hasActualData = savedInfo && (
         (savedInfo.ownerName && savedInfo.ownerName.trim() !== '') ||
@@ -491,25 +516,27 @@ async function toggleParcelSelection(parcel, polygon) {
         (savedInfo.ownerContact && savedInfo.ownerContact.trim() !== '') ||
         (savedInfo.memo && savedInfo.memo.trim() !== '')
     );
-    
+
+    let ownerNameValue = '';
+    let ownerAddressValue = '';
+    let ownerContactValue = '';
+    let memoValue = '';
+
     // 저장된 실제 정보가 있으면 폼에 로드만 하고 색상은 유지
     if (hasActualData) {
     // console.log('저장된 정보가 있는 필지 클릭 - 정보 로드, 색상 보호');
-        
-        // 폼에 정보 로드
         window.currentSelectedPNU = pnu;
-        document.getElementById('parcelNumber').value = resolveParcelNumber({
-            parcel,
-            parcelData,
-            searchParcelData,
-            savedInfo,
-            preferredValue: jibun
-        });
-        document.getElementById('ownerName').value = savedInfo.ownerName || '';
-        document.getElementById('ownerAddress').value = savedInfo.ownerAddress || '';
-        document.getElementById('ownerContact').value = savedInfo.ownerContact || '';
-        document.getElementById('memo').value = savedInfo.memo || '';
-        
+
+        ownerNameValue = savedInfo.ownerName || '';
+        ownerAddressValue = savedInfo.ownerAddress || '';
+        ownerContactValue = savedInfo.ownerContact || '';
+        memoValue = savedInfo.memo || '';
+
+        document.getElementById('ownerName').value = ownerNameValue;
+        document.getElementById('ownerAddress').value = ownerAddressValue;
+        document.getElementById('ownerContact').value = ownerContactValue;
+        document.getElementById('memo').value = memoValue;
+
         // 색상은 변경하지 않음
         if (savedInfo.color && savedInfo.color !== 'transparent') {
             // 보라색(검색 필지)이 아닐 때만 현재 색상 업데이트
@@ -526,9 +553,37 @@ async function toggleParcelSelection(parcel, polygon) {
                 }
             });
         }
-        
+
+        window.selectedParcel = {
+            pnu,
+            id: pnu,
+            parcelNumber: resolvedParcelNumber,
+            ownerName: ownerNameValue,
+            ownerAddress: ownerAddressValue,
+            ownerContact: ownerContactValue,
+            memo: memoValue,
+            geometry: parcel.geometry,
+            color: savedInfo.color || parcelData?.color || 'transparent',
+            mode: window.currentMode || 'click'
+        };
+        window.currentSelectedParcel = window.selectedParcel;
+
         return; // 색상 변경 없이 종료
     }
+
+    window.selectedParcel = {
+        pnu,
+        id: pnu,
+        parcelNumber: resolvedParcelNumber,
+        ownerName: ownerNameValue,
+        ownerAddress: ownerAddressValue,
+        ownerContact: ownerContactValue,
+        memo: memoValue,
+        geometry: parcel.geometry,
+        color: 'transparent',
+        mode: window.currentMode || 'click'
+    };
+    window.currentSelectedParcel = window.selectedParcel;
     
     // 🎯 ULTRATHINK: 왼쪽 클릭은 항상 색칠만 (토글 기능 제거)
     // 저장된 정보가 없거나 빈 정보만 있는 경우 - 항상 색칠
@@ -547,27 +602,45 @@ async function clearParcel(parcel, polygon) {
     
     if (parcelData) {
         // 폴리곤 색상 및 테두리 완전히 초기화
-        polygon.setOptions({
-            fillColor: 'transparent',
-            fillOpacity: 0,
-            strokeColor: '#0000FF',
-            strokeOpacity: 0.6,
-            strokeWeight: 0.5
-        });
-        parcelData.color = 'transparent';
-        
-        // LocalStorage에서 제거 (pnu와 parcelNumber 둘 다 확인)
-        let savedData = JSON.parse(await window.migratedGetItem(CONFIG.STORAGE_KEY) || '[]');
-        savedData = savedData.filter(item => item.pnu !== pnu && item.parcelNumber !== jibun);
-        await window.migratedSetItem(CONFIG.STORAGE_KEY, JSON.stringify(savedData));
-    // console.log('색상 정보 제거됨:', pnu, jibun);
-        
-        // 폼 초기화
-        document.getElementById('parcelNumber').value = '';
-        document.getElementById('ownerName').value = '';
-        document.getElementById('ownerAddress').value = '';
-        document.getElementById('ownerContact').value = '';
-        document.getElementById('memo').value = '';
+        if (polygon) {
+            polygon.setOptions({
+                fillColor: 'transparent',
+                fillOpacity: 0,
+                strokeColor: '#0000FF',
+                strokeOpacity: 0.6,
+                strokeWeight: 0.5
+            });
+        }
+
+        if (parcelData) {
+            parcelData.color = 'transparent';
+        }
+
+        if (window.ColorPaletteManager && typeof window.ColorPaletteManager.removeColorFromParcel === 'function') {
+            window.ColorPaletteManager.removeColorFromParcel(pnu);
+        }
+
+        // LocalStorage 업데이트 (정보 유지, 색상만 제거)
+        try {
+            const savedData = JSON.parse(await window.migratedGetItem(CONFIG.STORAGE_KEY) || '[]');
+            const targetIndex = savedData.findIndex(item =>
+                (item.pnu && item.pnu === pnu) ||
+                item.parcelNumber === jibun
+            );
+
+            if (targetIndex > -1) {
+                const target = savedData[targetIndex];
+                savedData[targetIndex] = {
+                    ...target,
+                    color: 'transparent',
+                    colorIndex: null,
+                    fillColor: 'transparent'
+                };
+                await window.migratedSetItem(CONFIG.STORAGE_KEY, JSON.stringify(savedData));
+            }
+        } catch (error) {
+            console.error('🚨 색상 제거 중 저장 데이터 업데이트 실패:', error);
+        }
     }
 }
 
@@ -595,11 +668,8 @@ function selectParcel(parcel, polygon) {
     });
     
     // 지번만 자동 입력, 나머지는 공란
+    resetParcelFormFields({ keepParcelNumber: true });
     document.getElementById('parcelNumber').value = resolvedParcelNumber;
-    document.getElementById('ownerName').value = '';
-    document.getElementById('ownerAddress').value = '';
-    document.getElementById('ownerContact').value = '';
-    document.getElementById('memo').value = '';
     
     // 폴리곤 강조
     if (polygon) {
@@ -1355,46 +1425,6 @@ async function saveParcelData() {
 // Phase 2: 모드별로 분리된 저장 함수들
 // =====================================================================
 
-// geometry에서 중심 좌표를 추출하는 헬퍼 함수
-function getGeometryCenter(geometry) {
-    if (!geometry) return [0, 0];
-
-    // Point 타입 처리
-    if (geometry.type === 'Point' && Array.isArray(geometry.coordinates) && geometry.coordinates.length >= 2) {
-        return [geometry.coordinates[0], geometry.coordinates[1]];
-    }
-
-    if (geometry.coordinates) {
-        let coordinates = geometry.coordinates;
-
-        // MultiPolygon 처리: 첫 번째 폴리곤의 첫 번째 링 사용
-        if (geometry.type === 'MultiPolygon' && coordinates.length > 0) {
-            coordinates = coordinates[0]; // 첫 번째 폴리곤 선택
-        }
-
-        // Polygon 처리: 첫 번째 링(외곽) 사용
-        if ((geometry.type === 'Polygon' || geometry.type === 'MultiPolygon') && coordinates.length > 0) {
-            coordinates = coordinates[0]; // 외곽 링 선택
-        }
-
-        // 단순 배열 순회로 중심점 계산
-        let totalX = 0, totalY = 0, count = 0;
-        for (const coord of coordinates) {
-            if (Array.isArray(coord) && coord.length >= 2) {
-                totalX += coord[0];
-                totalY += coord[1];
-                count++;
-            }
-        }
-
-        if (count > 0) {
-            return [totalX / count, totalY / count];
-        }
-    }
-
-    return [0, 0];
-}
-
 // 클릭 필지 저장 함수
 async function saveClickParcelData() {
     let parcelNumber = document.getElementById('parcelNumber').value;
@@ -1426,8 +1456,6 @@ async function saveClickParcelData() {
         // 현재 선택된 필지의 PNU 사용
         let currentPNU = window.currentSelectedPNU;
         let geometry = null;
-        let lat = null;
-        let lng = null;
 
         // properties 정보를 저장할 변수 추가
         let properties = null;
@@ -1985,7 +2013,6 @@ function loadParcelToForm(data) {
 
 // 저장된 필지 불러오기
 async function loadSavedParcels() {
-    const savedData = JSON.parse(await window.migratedGetItem(CONFIG.STORAGE_KEY) || '[]');
     await updateParcelList();
     
     // 현재 화면에 보이는 영역의 필지들에 색상 복원
@@ -2073,13 +2100,14 @@ async function restoreSavedParcelsOnMap() {
     }
     
     // 현재 지도에 표시된 필지들도 확인
-    window.clickParcels.forEach((parcelData, pnu) => {
+    window.clickParcels.forEach((parcelData) => {
         if (!parcelData.color || parcelData.color === 'transparent') {
             const jibun = formatJibun(parcelData.data.properties);
+            const parcelPnu = parcelData.data?.properties?.PNU || parcelData.data?.properties?.pnu;
             
             // 저장된 데이터에서 해당 필지 찾기
             const saved = savedData.find(item => 
-                (item.pnu && item.pnu === pnu) || 
+                (item.pnu && item.pnu === parcelPnu) || 
                 (item.parcelNumber && item.parcelNumber === jibun)
             );
             
@@ -2146,10 +2174,8 @@ async function clearSelectedParcelsColors() {
 // 모든 필지 색상 초기화 (선택 + 검색)
 async function clearAllParcelsColors() {
     // confirm은 utils.js에서 이미 처리됨
-    let clearedCount = 0;
-    
     // 선택 필지 초기화 (저장된 정보가 있어도 강제로 초기화)
-    window.clickParcels.forEach((parcelData, pnu) => {
+    window.clickParcels.forEach((parcelData) => {
         if (parcelData.polygon && parcelData.color !== 'transparent') {
             // 폴리곤 색상 제거
             parcelData.polygon.setOptions({
@@ -2159,7 +2185,6 @@ async function clearAllParcelsColors() {
                 strokeWeight: 0.5
             });
             parcelData.color = 'transparent';
-            clearedCount++;
         }
     });
     
@@ -2171,7 +2196,6 @@ async function clearAllParcelsColors() {
     // 폼 초기화
     document.getElementById('parcelForm').reset();
     
-    // console.log(`전체 초기화: ${clearedCount}개 필지 색상 제거`);
     alert('모든 필지가 초기화되었습니다.');
 }
 
@@ -2280,95 +2304,6 @@ function initializeEventListeners() {
 }
 
 // 🎯 ULTRATHINK: 강화된 Point-in-Polygon 검사 (다중 알고리즘)
-function isPointInPolygon(point, polygon) {
-    try {
-        const path = polygon.getPath();
-        if (!path || path.length < 3) {
-    // console.log(`   ❌ 폴리곤 경로 없음 또는 점 부족 (${path ? path.length : 0})`);
-            return false;
-        }
-        
-        const clickX = point.lng(), clickY = point.lat();
-    // console.log(`   🎯 클릭 좌표: (${clickX.toFixed(6)}, ${clickY.toFixed(6)})`);
-        
-        // 폴리곤 범위 확인 먼저
-        let minX = Infinity, maxX = -Infinity;
-        let minY = Infinity, maxY = -Infinity;
-        
-        for (let i = 0; i < path.length; i++) {
-            const vertex = path.getAt(i);
-            const x = vertex.lng(), y = vertex.lat();
-            minX = Math.min(minX, x);
-            maxX = Math.max(maxX, x);
-            minY = Math.min(minY, y);
-            maxY = Math.max(maxY, y);
-        }
-        
-    // console.log(`   📦 폴리곤 범위: X(${minX.toFixed(6)} ~ ${maxX.toFixed(6)}), Y(${minY.toFixed(6)} ~ ${maxY.toFixed(6)})`);
-        
-        // 클릭 점이 폴리곤 경계 범위 안에 있는지 확인
-        if (clickX < minX || clickX > maxX || clickY < minY || clickY > maxY) {
-    // console.log(`   ❌ 클릭 점이 폴리곤 경계 범위 밖에 있음`);
-            return false;
-        }
-        
-    // console.log(`   ✅ 클릭 점이 폴리곤 경계 범위 안에 있음`);
-        
-        // 1. 개선된 Ray Casting 알고리즘
-        let intersections = 0;
-        for (let i = 0; i < path.length; i++) {
-            const j = (i + 1) % path.length;
-            const xi = path.getAt(i).lng(), yi = path.getAt(i).lat();
-            const xj = path.getAt(j).lng(), yj = path.getAt(j).lat();
-            
-            // 수평 광선과 선분의 교차 검사 (더 정밀한 방법)
-            if (((yi > clickY) !== (yj > clickY)) && 
-                (clickX < (xj - xi) * (clickY - yi) / (yj - yi) + xi)) {
-                intersections++;
-            }
-        }
-        
-        const raycastResult = intersections % 2 === 1;
-    // console.log(`   🏹 Ray Casting: ${intersections}번 교차 → ${raycastResult ? '내부' : '외부'}`);
-        
-        // 2. Winding Number 알고리즘 (더 정확함)
-        let wn = 0;
-        for (let i = 0; i < path.length; i++) {
-            const j = (i + 1) % path.length;
-            const xi = path.getAt(i).lng(), yi = path.getAt(i).lat();
-            const xj = path.getAt(j).lng(), yj = path.getAt(j).lat();
-            
-            if (yi <= clickY) {
-                if (yj > clickY) { // upward crossing
-                    const cross = (xj - xi) * (clickY - yi) - (clickX - xi) * (yj - yi);
-                    if (cross > 0) wn++;
-                }
-            } else {
-                if (yj <= clickY) { // downward crossing
-                    const cross = (xj - xi) * (clickY - yi) - (clickX - xi) * (yj - yi);
-                    if (cross < 0) wn--;
-                }
-            }
-        }
-        
-        const windingResult = wn !== 0;
-    // console.log(`   🌪️ Winding Number: ${wn} → ${windingResult ? '내부' : '외부'}`);
-        
-        // 두 알고리즘 결과 비교
-        if (raycastResult === windingResult) {
-    // console.log(`   ✅ 두 알고리즘 일치: ${raycastResult ? '폴리곤 내부' : '폴리곤 외부'}`);
-            return raycastResult;
-        } else {
-    // console.log(`   ⚠️ 알고리즘 불일치! Ray: ${raycastResult}, Winding: ${windingResult} → Winding 결과 채택`);
-            return windingResult;
-        }
-        
-    } catch (error) {
-        console.error(`   ❌ Point-in-Polygon 검사 오류:`, error);
-        return false;
-    }
-}
-
 // 우클릭한 위치의 필지 삭제 (Point-in-Polygon 방식)
 async function removeParcelAtLocation(lat, lng) {
     try {
@@ -2733,7 +2668,9 @@ function getDistanceToLineSegment(px, py, x1, y1, x2, y2) {
 }
 
 // 기존 필지 데이터 로드 (검색/클릭 구분)
-async function loadExistingParcelData(jibun, type = 'click') {
+async function loadExistingParcelData(jibun, type = 'click', options = {}) {
+    const { overwriteForm = true, keepParcelNumber = true } = options;
+
     try {
         const savedData = JSON.parse(await window.migratedGetItem(CONFIG.STORAGE_KEY) || '[]');
         const existingParcel = savedData.find(item => 
@@ -2742,20 +2679,19 @@ async function loadExistingParcelData(jibun, type = 'click') {
         );
 
         if (existingParcel) {
-            // 폼에 데이터 로드
-            document.getElementById('ownerName').value = existingParcel.ownerName || '';
-            document.getElementById('ownerAddress').value = existingParcel.ownerAddress || '';
-            document.getElementById('ownerContact').value = existingParcel.ownerContact || '';
-            document.getElementById('memo').value = existingParcel.memo || '';
+            if (overwriteForm) {
+                document.getElementById('ownerName').value = existingParcel.ownerName || '';
+                document.getElementById('ownerAddress').value = existingParcel.ownerAddress || '';
+                document.getElementById('ownerContact').value = existingParcel.ownerContact || '';
+                document.getElementById('memo').value = existingParcel.memo || '';
+            }
 
             console.log('📂 기존 데이터 로드:', jibun, type);
             return existingParcel;
         } else {
-            // 새 필지인 경우 폼 초기화
-            document.getElementById('ownerName').value = '';
-            document.getElementById('ownerAddress').value = '';
-            document.getElementById('ownerContact').value = '';
-            document.getElementById('memo').value = '';
+            if (overwriteForm) {
+                resetParcelFormFields({ keepParcelNumber });
+            }
             
             console.log('📄 새 필지:', jibun, type);
             return null;
@@ -2767,6 +2703,20 @@ async function loadExistingParcelData(jibun, type = 'click') {
 }
 
 // 전역 함수로 등록
+window.getParcelInfo = getParcelInfo;
+window.loadParcelsInBounds = loadParcelsInBounds;
+window.clearParcel = clearParcel;
+window.getColorIndex = getColorIndex;
+window.displayParcelInfo = displayParcelInfo;
+window.saveSearchParcelData = saveSearchParcelData;
+window.hasParcelMemo = hasParcelMemo;
+window.hasParcelInfo = hasParcelInfo;
+window.loadParcelInfoToForm = loadParcelInfoToForm;
+window.loadSavedParcels = loadSavedParcels;
+window.clearAllParcelsColors = clearAllParcelsColors;
+window.initializeEventListeners = initializeEventListeners;
+window.getParcelInfoForDeletion = getParcelInfoForDeletion;
+window.getDistanceToPolygonEdge = getDistanceToPolygonEdge;
 window.removeParcelAtLocation = removeParcelAtLocation;
 window.loadExistingParcelData = loadExistingParcelData;
 window.applyColorToParcel = applyColorToParcel;

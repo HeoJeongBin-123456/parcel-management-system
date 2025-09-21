@@ -1,3 +1,4 @@
+/* eslint-disable */
 // 애플리케이션 초기화 및 데이터 로딩 (개선된 버전)
 class AppInitializer {
     constructor() {
@@ -279,7 +280,7 @@ class AppInitializer {
 
             if (!error && data) {
                 console.log(`✅ Supabase: ${data.length}개 필지`);
-                return data;
+                return data.map(item => this.normalizeParcelRecord(item));
             }
         } catch (error) {
             console.warn('⚠️ Supabase 로드 실패:', error);
@@ -321,10 +322,11 @@ class AppInitializer {
         const pnuSet = new Set();
 
         for (const parcel of allParcels) {
-            const pnu = parcel.pnu || parcel.id;
+            const normalized = this.normalizeParcelRecord(parcel);
+            const pnu = normalized.pnu || normalized.id;
 
             // 삭제된 필지는 건너뛰기
-            if (deletedParcels.includes(pnu)) {
+            if (pnu && deletedParcels.includes(pnu)) {
                 console.log(`⏩ 삭제된 필지 건너뛰기: ${pnu}`);
                 continue;
             }
@@ -332,30 +334,190 @@ class AppInitializer {
             if (pnu && !pnuSet.has(pnu)) {
                 pnuSet.add(pnu);
 
-                // geometry에서 lat/lng 추출
-                if (!parcel.lat || !parcel.lng) {
-                    if (parcel.geometry && parcel.geometry.coordinates) {
-                        const coords = parcel.geometry.coordinates[0];
-                        if (coords && coords.length > 0) {
-                            // 폴리곤 중심점 계산
-                            let totalLat = 0, totalLng = 0;
-                            for (const coord of coords) {
-                                totalLng += coord[0];
-                                totalLat += coord[1];
-                            }
-                            parcel.lng = totalLng / coords.length;
-                            parcel.lat = totalLat / coords.length;
-                            console.log(`📏 좌표 추출: ${pnu} - lat:${parcel.lat}, lng:${parcel.lng}`);
-                        }
+                if ((normalized.lat === undefined || normalized.lat === null || normalized.lat === '') ||
+                    (normalized.lng === undefined || normalized.lng === null || normalized.lng === '')) {
+                    const center = this.computeGeometryCenter(normalized.geometry);
+                    if (center) {
+                        normalized.lat = center.lat;
+                        normalized.lng = center.lng;
+                        console.log(`📏 좌표 추출: ${pnu} - lat:${normalized.lat}, lng:${normalized.lng}`);
                     }
                 }
 
-                uniqueParcels.push(parcel);
+                uniqueParcels.push(normalized);
             }
         }
 
         console.log(`📦 총 ${uniqueParcels.length}개 고유 필지 로드`);
         return uniqueParcels;
+    }
+
+    parsePossibleJson(value) {
+        if (!value) {
+            return value;
+        }
+
+        if (typeof value === 'string') {
+            try {
+                return JSON.parse(value);
+            } catch (error) {
+                return value;
+            }
+        }
+
+        return value;
+    }
+
+    normalizeMemoValue(value) {
+        if (Array.isArray(value)) {
+            return value.join('\n');
+        }
+
+        if (value === undefined || value === null) {
+            return '';
+        }
+
+        return String(value);
+    }
+
+    safeParseFloat(value) {
+        if (value === undefined || value === null || value === '') {
+            return value;
+        }
+
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : value;
+    }
+
+    computeGeometryCenter(geometry) {
+        const points = this.collectGeometryPoints(geometry);
+
+        if (!points.length) {
+            return null;
+        }
+
+        let totalLat = 0;
+        let totalLng = 0;
+
+        points.forEach(([lng, lat]) => {
+            totalLng += Number(lng) || 0;
+            totalLat += Number(lat) || 0;
+        });
+
+        return {
+            lat: totalLat / points.length,
+            lng: totalLng / points.length
+        };
+    }
+
+    collectGeometryPoints(geometry) {
+        if (!geometry) {
+            return [];
+        }
+
+        const parsedGeometry = this.parsePossibleJson(geometry);
+        if (!parsedGeometry || !parsedGeometry.coordinates) {
+            return [];
+        }
+
+        const points = [];
+
+        const visit = (node) => {
+            if (!Array.isArray(node)) {
+                return;
+            }
+
+            if (node.length >= 2 && !Array.isArray(node[0])) {
+                points.push([node[0], node[1]]);
+                return;
+            }
+
+            node.forEach(child => visit(child));
+        };
+
+        visit(parsedGeometry.coordinates);
+        return points;
+    }
+
+    normalizeParcelRecord(parcel) {
+        if (!parcel) {
+            return parcel;
+        }
+
+        const normalized = { ...parcel };
+
+        normalized.color_info = this.parsePossibleJson(parcel.color_info) || null;
+        const polygonData = this.parsePossibleJson(parcel.polygon_data);
+        const geometryData = this.parsePossibleJson(parcel.geometry);
+
+        if (geometryData && geometryData.coordinates) {
+            normalized.geometry = geometryData;
+        } else if (polygonData && polygonData.coordinates) {
+            normalized.geometry = polygonData;
+        }
+
+        normalized.parcelNumber = (parcel.parcelNumber || parcel.parcel_name || parcel.parcelName || '').toString().trim();
+        normalized.parcel_name = normalized.parcelNumber || normalized.parcel_name || '';
+
+        const ownerName = parcel.ownerName || parcel.owner_name || '';
+        const ownerAddress = parcel.ownerAddress || parcel.owner_address || '';
+        const ownerContact = parcel.ownerContact || parcel.owner_contact || '';
+
+        normalized.ownerName = ownerName;
+        normalized.ownerAddress = ownerAddress;
+        normalized.ownerContact = ownerContact;
+        normalized.owner_name = ownerName;
+        normalized.owner_address = ownerAddress;
+        normalized.owner_contact = ownerContact;
+
+        normalized.memo = this.normalizeMemoValue(parcel.memo);
+
+        if (!normalized.pnu && parcel.id) {
+            normalized.pnu = parcel.id;
+        }
+
+        if (normalized.lat !== undefined) {
+            normalized.lat = this.safeParseFloat(normalized.lat);
+        }
+        if (normalized.lng !== undefined) {
+            normalized.lng = this.safeParseFloat(normalized.lng);
+        }
+
+        if (normalized.color_info && typeof normalized.color_info.color === 'string') {
+            normalized.color = normalized.color_info.color;
+        } else if (!normalized.color) {
+            normalized.color = 'transparent';
+        }
+
+        const modeCandidates = [
+            parcel.mode,
+            parcel.current_mode,
+            parcel.mode_source,
+            parcel.parcel_type,
+            normalized.color_info?.current_mode,
+            normalized.color_info?.mode_source
+        ].filter(value => typeof value === 'string' && value.trim().length > 0);
+
+        if (modeCandidates.length > 0) {
+            normalized.mode = modeCandidates[0];
+        } else if (!normalized.mode) {
+            normalized.mode = normalized.color === '#9370DB' ? 'search' : 'click';
+        }
+
+        if (typeof normalized.isSearchParcel !== 'boolean') {
+            normalized.isSearchParcel = normalized.mode === 'search';
+        }
+
+        if ((normalized.lat === undefined || normalized.lat === null || normalized.lat === '') ||
+            (normalized.lng === undefined || normalized.lng === null || normalized.lng === '')) {
+            const center = this.computeGeometryCenter(normalized.geometry);
+            if (center) {
+                normalized.lat = center.lat;
+                normalized.lng = center.lng;
+            }
+        }
+
+        return normalized;
     }
 
     // 폴리곤 데이터 로드

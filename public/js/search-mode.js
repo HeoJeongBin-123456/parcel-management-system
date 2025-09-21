@@ -11,6 +11,49 @@ class SearchModeManager {
         this.isSearchActive = false;
     }
 
+    persistSearchState(extra = {}) {
+        try {
+            const serializedResults = this.searchResults.map(result => {
+                const base = {
+                    pnu: result.pnu || result.PNU || result.id || null,
+                    lat: result.lat || result.latitude || null,
+                    lng: result.lng || result.longitude || null,
+                    ownerName: result.ownerName || null,
+                    ownerAddress: result.ownerAddress || null,
+                    mode: 'search'
+                };
+
+                if (result.geometry && typeof result.geometry === 'object') {
+                    base.geometry = result.geometry;
+                }
+
+                if (result.address) {
+                    base.address = result.address;
+                }
+
+                return base;
+            });
+
+            const payload = {
+                query: this.currentQuery,
+                results: serializedResults.map(item => item.pnu).filter(Boolean),
+                parcels: serializedResults,
+                isActive: this.isSearchActive,
+                searchTime: Date.now(),
+                ...extra
+            };
+
+            localStorage.setItem('searchModeData', JSON.stringify(payload));
+        } catch (error) {
+            console.error('[SearchMode] Failed to persist search state:', error);
+        }
+    }
+
+    clearStoredSearchState() {
+        localStorage.removeItem('searchModeData');
+        localStorage.removeItem('searchColors');
+    }
+
     /**
      * 검색 실행
      * @param {string} query - 검색어
@@ -50,6 +93,8 @@ class SearchModeManager {
                 });
             }
 
+            this.persistSearchState({ searchTime, totalResults: results.length });
+
             return {
                 query: query,
                 results: results,
@@ -71,49 +116,42 @@ class SearchModeManager {
         const results = [];
 
         try {
-            switch(searchType) {
-                case 'address':
-                    // 주소 검색 - Naver Geocoding API
+            switch (searchType) {
+                case 'address': {
                     if (window.searchAddressByKeyword) {
                         const searchResults = await window.searchAddressByKeyword(query);
-                        // searchAddressByKeyword가 이미 UI를 업데이트했으므로 결과만 반환
                         return searchResults || [];
                     }
                     break;
+                }
 
                 case 'pnu':
-                case 'jibun':
-                    // 지번 검색 - VWorld API 사용
+                case 'jibun': {
                     if (window.searchParcelByJibun) {
                         const searchResults = await window.searchParcelByJibun(query);
-                        // searchParcelByJibun이 이미 UI를 업데이트했으므로 결과만 반환
                         return searchResults || [];
                     }
                     break;
+                }
 
-                case 'owner':
-                    // 소유자 검색 - Supabase 검색
+                case 'owner': {
                     if (window.SupabaseManager) {
                         const supabaseResults = await window.SupabaseManager.searchByOwner(query);
                         if (supabaseResults && supabaseResults.length > 0) {
                             return supabaseResults;
                         }
                     }
-                    // Supabase 실패시 LocalStorage 검색
+
                     const localParcels = JSON.parse(localStorage.getItem('parcelData') || '[]');
                     return localParcels.filter(p => p.ownerName?.includes(query));
+                }
 
                 case 'all':
-                default:
-                    // 모든 타입 검색 - 더 정교한 분류
-
-                    // 순수 지번 패턴 (예: 1-1, 123-45, 123 등)
+                default: {
                     const pureJibunPattern = /^\d+(-\d+)?$/;
-                    // 지역명 + 지번 패턴 (예: 종로구 1-1, 삼성동 123-45)
                     const areaJibunPattern = /^[가-힣]+\s+\d+(-\d+)?$/;
 
                     if (pureJibunPattern.test(query.trim()) || areaJibunPattern.test(query.trim())) {
-                        // 순수 지번이거나 지역명+지번 형식이면 지번 검색
                         console.log(`[SearchMode] 지번 형식으로 검색: "${query}"`);
                         if (window.searchParcelByJibun) {
                             const searchResults = await window.searchParcelByJibun(query);
@@ -121,14 +159,12 @@ class SearchModeManager {
                                 return searchResults;
                             }
                         }
-                        // 지번 검색 실패시 주소 검색으로 폴백
-                        console.log(`[SearchMode] 지번 검색 실패, 주소 검색으로 재시도`);
+                        console.log('[SearchMode] 지번 검색 실패, 주소 검색으로 재시도');
                         if (window.searchAddressByKeyword) {
                             const searchResults = await window.searchAddressByKeyword(query);
                             return searchResults || [];
                         }
                     } else {
-                        // 그 외는 모두 주소 검색 (도로명, 지역명, 전체 주소 등)
                         console.log(`[SearchMode] 주소 형식으로 검색: "${query}"`);
                         if (window.searchAddressByKeyword) {
                             const searchResults = await window.searchAddressByKeyword(query);
@@ -136,7 +172,6 @@ class SearchModeManager {
                         }
                     }
 
-                    // API 실패시 LocalStorage 검색
                     const allParcels = JSON.parse(localStorage.getItem('parcelData') || '[]');
                     return allParcels.filter(parcel =>
                         parcel.parcelName?.includes(query) ||
@@ -144,6 +179,7 @@ class SearchModeManager {
                         parcel.pnu?.includes(query) ||
                         parcel.ownerName?.includes(query)
                     );
+                }
             }
         } catch (error) {
             console.error('[SearchMode] Search API error:', error);
@@ -188,6 +224,8 @@ class SearchModeManager {
 
         // 검색 결과 목록 UI 업데이트
         this.updateSearchResultsUI(results);
+
+        this.persistSearchState({ totalResults: results.length });
     }
 
     /**
@@ -354,6 +392,16 @@ class SearchModeManager {
             searchInput.value = '';
         }
 
+        this.clearStoredSearchState();
+
+        if (window.ModeManager) {
+            window.ModeManager.updateModeData('search', {
+                query: '',
+                results: [],
+                isActive: false
+            });
+        }
+
         // 모드 전환 (필요시)
         if (!keepMode && window.ModeManager) {
             window.ModeManager.switchMode('click');
@@ -387,6 +435,8 @@ class SearchModeManager {
 
             // 검색 결과에서도 제거
             this.searchResults = this.searchResults.filter(r => r.pnu !== pnu);
+
+            this.persistSearchState({ totalResults: this.searchResults.length });
 
             return {
                 pnu: pnu,

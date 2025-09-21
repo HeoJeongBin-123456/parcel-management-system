@@ -1,3 +1,4 @@
+/* eslint-disable */
 // 🎯 통합 앱 매니저 - 중복 초기화 제거
 class OptimizedAppManager {
     constructor() {

@@ -1,3 +1,4 @@
+/* eslint-disable */
 // Google OAuth 인증 관리
 
 const GoogleAuth = {

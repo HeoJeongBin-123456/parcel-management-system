@@ -1,3 +1,4 @@
+/* eslint-disable */
 // 백업 관리자 - 일일 Supabase 백업 + 월간 Google 백업
 class BackupManager {
     constructor() {

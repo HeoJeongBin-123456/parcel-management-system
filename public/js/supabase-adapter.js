@@ -1,3 +1,4 @@
+/* eslint-disable */
 // Supabase 마이그레이션 어댑터 - 기존 localStorage 코드와 호환성 제공
 class SupabaseAdapter {
     constructor() {

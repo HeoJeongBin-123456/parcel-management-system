@@ -140,7 +140,6 @@ async function drawSearchModeParcelPolygon(parcelData) {
         naver.maps.Event.addListener(polygon, 'rightclick', async function(e) {
             e.cancelBubble = true;
             e.originalEvent?.preventDefault();
-            const coord = e.coord;
             console.log('🗑️ 검색 폴리곤 오른쪽 클릭 (삭제):', pnu);
 
             // 삭제 확인
@@ -202,34 +201,39 @@ async function displaySearchParcelInfoOnly(parcelData) {
         }
     }
 
-    const savedInfo = await loadSavedParcelInfo(pnu);
+    if (typeof window.resetParcelFormFields === 'function') {
+        window.resetParcelFormFields();
+    } else {
+        document.getElementById('parcelNumber').value = '';
+        document.getElementById('ownerName').value = '';
+        document.getElementById('ownerAddress').value = '';
+        document.getElementById('ownerContact').value = '';
+        document.getElementById('memo').value = '';
+    }
+
+    const parcelNumberInput = document.getElementById('parcelNumber');
+    if (parcelNumberInput) {
+        parcelNumberInput.value = jibun;
+    }
 
     const ownerNameInput = document.getElementById('ownerName');
     const ownerAddressInput = document.getElementById('ownerAddress');
     const ownerContactInput = document.getElementById('ownerContact');
     const memoInput = document.getElementById('memo');
 
-    if (ownerNameInput && !ownerNameInput.value) {
-        ownerNameInput.value = parcelData.ownerName || parcelData.savedInfo?.ownerName || '';
-    }
-    if (ownerAddressInput && !ownerAddressInput.value) {
-        ownerAddressInput.value = parcelData.ownerAddress || parcelData.savedInfo?.ownerAddress || '';
-    }
-    if (ownerContactInput && !ownerContactInput.value) {
-        ownerContactInput.value = parcelData.ownerContact || parcelData.savedInfo?.ownerContact || parcelData.contact || '';
-    }
-    if (memoInput && !memoInput.value) {
-        memoInput.value = parcelData.memo || parcelData.savedInfo?.memo || '';
-    }
+    const ownerNameValue = ownerNameInput?.value || '';
+    const ownerAddressValue = ownerAddressInput?.value || '';
+    const ownerContactValue = ownerContactInput?.value || '';
+    const memoValue = memoInput?.value || '';
 
     window.selectedParcel = {
         pnu,
         id: pnu,
-        parcelNumber: document.getElementById('parcelNumber').value || jibun || '',
-        ownerName: ownerNameInput?.value || savedInfo?.ownerName || parcelData.ownerName || '',
-        ownerAddress: ownerAddressInput?.value || savedInfo?.ownerAddress || parcelData.ownerAddress || '',
-        ownerContact: ownerContactInput?.value || savedInfo?.ownerContact || savedInfo?.contact || parcelData.ownerContact || '',
-        memo: memoInput?.value || savedInfo?.memo || parcelData.memo || '',
+        parcelNumber: parcelNumberInput?.value || jibun || '',
+        ownerName: ownerNameValue,
+        ownerAddress: ownerAddressValue,
+        ownerContact: ownerContactValue,
+        memo: memoValue,
         geometry: baseGeometry,
         lat,
         lng,
@@ -342,7 +346,7 @@ async function displaySearchResults(results) {
 function clearSearchModePolygons() {
     console.log('🧹 검색 모드 폴리곤 지우기');
 
-    searchModePolygons.forEach((polygon, pnu) => {
+    searchModePolygons.forEach((polygon) => {
         polygon.setMap(null);
     });
 
@@ -457,43 +461,6 @@ function handleSearchModeStreetViewClick(coord) {
 }
 
 /**
- * 📋 저장된 필지 정보 로드
- */
-async function loadSavedParcelInfo(pnu) {
-    try {
-        const savedData = JSON.parse(localStorage.getItem('parcelData') || '[]');
-        const savedInfo = savedData.find(item =>
-            (item.pnu && item.pnu === pnu) ||
-            (item.properties?.pnu === pnu)
-        );
-
-        if (savedInfo) {
-            // 폼에 저장된 정보 표시
-            if (savedInfo.ownerName) {
-                document.getElementById('ownerName').value = savedInfo.ownerName;
-            }
-            if (savedInfo.ownerAddress) {
-                document.getElementById('ownerAddress').value = savedInfo.ownerAddress;
-            }
-            if (savedInfo.contact || savedInfo.ownerContact) {
-                document.getElementById('ownerContact').value = savedInfo.ownerContact || savedInfo.contact;
-            }
-            if (savedInfo.memo) {
-                document.getElementById('memo').value = savedInfo.memo;
-            }
-
-            console.log(`📋 저장된 필지 정보 로드: ${pnu}`);
-            return savedInfo;
-        }
-
-    } catch (error) {
-        console.error('❌ 저장된 필지 정보 로드 실패:', error);
-    }
-
-    return null;
-}
-
-/**
  * 🗑️ 검색 필지 삭제 (PNU로 직접 삭제)
  */
 async function removeSearchParcel(targetPNU) {
@@ -597,7 +564,6 @@ async function handleSearchModeRightClick(lat, lng) {
 
     try {
         // 클릭한 위치의 필지 찾기
-        const clickedPoint = new naver.maps.LatLng(lat, lng);
         let targetPNU = null;
         let targetPolygon = null;
 

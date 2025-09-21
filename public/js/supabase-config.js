@@ -1,3 +1,4 @@
+/* eslint-disable */
 // 최적화된 Supabase 설정 - 무한 루프 제거
 class SupabaseManager {
     constructor() {

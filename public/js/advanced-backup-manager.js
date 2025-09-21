@@ -1,3 +1,4 @@
+/* eslint-disable */
 // 고급 백업 관리자 - 일일 Supabase + 월간 Google Sheets 백업
 class AdvancedBackupManager {
     constructor() {

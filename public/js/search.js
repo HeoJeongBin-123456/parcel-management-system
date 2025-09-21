@@ -222,8 +222,8 @@ function highlightParcel(parcelData) {
                 // 검색 필지는 생성 시 보라색으로 고정되어 있으므로 별도 설정 불필요
                 console.log('🔍 검색 필지 클릭 - 색상 유지:', pnu);
 
-                // 기존 저장된 데이터 로드 (메모가 있다면)
-                await loadExistingParcelData(jibun, 'search');
+                // 기존 저장된 데이터 로드 (메모가 있다면) - 폼은 유지
+                await loadExistingParcelData(jibun, 'search', { overwriteForm: false, keepParcelNumber: true });
 
                 // 폼의 다른 필드도 초기화 또는 자동 입력 가능
                 document.getElementById('ownerName')?.focus();
@@ -452,6 +452,7 @@ async function toggleSearchMode() {
     const toggleBtn = document.getElementById('searchToggleBtn');
 
     // 🎯 새로운 모드를 localStorage와 Supabase에 저장
+    localStorage.setItem('currentMode', newMode);
     localStorage.setItem('current_mode', newMode);
     console.log('💾 localStorage에 모드 저장:', newMode);
 
@@ -571,12 +572,10 @@ function showSearchResults() {
         return;
     }
     
-    let showCount = 0;
-    window.searchParcels.forEach((result, key) => {
-    // console.log('검색 결과 표시:', key, result);
+    window.searchParcels.forEach((result) => {
+    // console.log('검색 결과 표시:', result);
         if (result.polygon) {
             result.polygon.setMap(window.mapSearch || window.map);
-            showCount++;
         }
         if (result.label) result.label.setMap(window.mapSearch || window.map);
         // 마커와 정보창은 더 이상 사용하지 않음
@@ -594,12 +593,10 @@ function hideSearchResults() {
         return;
     }
     
-    let hideCount = 0;
-    window.searchParcels.forEach((result, key) => {
-    // console.log('검색 결과 숨기기:', key, result);
+    window.searchParcels.forEach((result) => {
+    // console.log('검색 결과 숨기기:', result);
         if (result.polygon) {
             result.polygon.setMap(null);
-            hideCount++;
         }
         if (result.label) result.label.setMap(null);
         // 마커와 정보창은 더 이상 사용하지 않음
@@ -708,12 +705,8 @@ async function searchAddress(query) {
                     }
                 });
                 
-                const item = {
-                    address: fullAddress.trim(),
-                    point: point
-                };
-                
-    // console.log('주소 검색 성공:', item);
+                const formattedAddress = fullAddress.trim();
+                console.debug('주소 검색 성공:', formattedAddress);
                 
                 // 지도 이동 - 검색 모드 지도 사용
                 const searchMap = window.mapSearch || window.map;
@@ -977,7 +970,7 @@ async function getParcelForSearch(lat, lng) {
                 return result;
             }
         } catch (error) {
-    // console.log(`⚠️ 검색용 API 키 ${i+1} 실패:`, error);
+            console.warn(`⚠️ 검색용 API 키 ${i + 1} 실패:`, error);
         }
     }
     
@@ -1099,7 +1092,6 @@ function hideExistingParcels() {
     }
     
     hiddenParcels = [];
-    let hideCount = 0;
     
     window.parcels.forEach((parcelData, pnu) => {
         if (parcelData.polygon && parcelData.polygon.getMap()) {
@@ -1112,12 +1104,8 @@ function hideExistingParcels() {
             
             // 지도에서 제거
             parcelData.polygon.setMap(null);
-            hideCount++;
-    // console.log(`필지 ${hideCount} 숨김 완료: ${pnu}`);
         }
     });
-    
-    // console.log(`${hideCount}개 기존 필지 숨김 완료`);
 }
 
 // 기존 필지 복원
@@ -1129,16 +1117,11 @@ function showExistingParcels() {
         return;
     }
     
-    let restoreCount = 0;
-    hiddenParcels.forEach((item, index) => {
+    hiddenParcels.forEach((item) => {
         if (item.visible && item.polygon) {
             item.polygon.setMap(window.mapSearch || window.map);
-            restoreCount++;
-    // console.log(`필지 ${index + 1} 복원 완료`);
         }
     });
-    
-    // console.log(`기존 필지 ${restoreCount}개 복원 완료`);
     hiddenParcels = [];
 }
 
@@ -1290,7 +1273,7 @@ function clearAllSearchResults() {
         return;
     }
     
-    window.searchParcels.forEach((result, key) => {
+    window.searchParcels.forEach((result) => {
         if (result.polygon) result.polygon.setMap(null);
         if (result.label) result.label.setMap(null);
         // 마커와 정보창은 더 이상 사용하지 않음
@@ -1388,6 +1371,10 @@ window.clearAllSearchResults = clearAllSearchResults;
 window.loadSearchResultsFromStorage = loadSearchResultsFromStorage;
 window.saveSearchResultsToStorage = saveSearchResultsToStorage;
 window.removeSearchResultsFromStorage = removeSearchResultsFromStorage;
+window.showSearchResults = showSearchResults;
+window.hideSearchResults = hideSearchResults;
+window.hideExistingParcels = hideExistingParcels;
+window.showExistingParcels = showExistingParcels;
 window.searchAddressByKeyword = searchAddressByKeyword;
 window.searchParcelByJibun = searchParcelByJibun;
 window.searchParcelAtLocation = searchParcelAtLocation;

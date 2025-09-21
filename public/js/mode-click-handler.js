@@ -168,15 +168,29 @@ async function getParcelInfoViaProxyForClickMode(lat, lng) {
                     createdAt: Date.now()
                 };
 
-                // UI 업데이트
+                // UI 초기화 및 지번 설정
+                if (typeof window.resetParcelFormFields === 'function') {
+                    window.resetParcelFormFields();
+                }
                 displayParcelInfoForClickMode(parcelData);
 
-                // 지번 자동 입력
                 const jibun = formatJibun(feature.properties);
                 if (jibun && document.getElementById('parcelNumber')) {
                     document.getElementById('parcelNumber').value = jibun;
                     console.log(`📝 지번 자동 입력: ${jibun}`);
                 }
+
+                window.currentSelectedPNU = pnu;
+                window.selectedParcel = {
+                    ...parcelData,
+                    parcelNumber: jibun || parcelData.parcelNumber || '',
+                    ownerName: '',
+                    ownerAddress: '',
+                    ownerContact: '',
+                    memo: '',
+                    color: 'transparent'
+                };
+                window.currentSelectedParcel = window.selectedParcel;
 
                 // 폴리곤 그리기
                 const polygon = await drawClickModeParcelPolygon(parcelData);

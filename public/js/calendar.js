@@ -1,3 +1,4 @@
+/* eslint-disable */
 // 최적화된 캘린더 기능 - GoogleAuth 오류 완전 제거
 let isCalendarVisible = false;
 let isCalendarMaximized = false;

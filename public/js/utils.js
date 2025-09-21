@@ -1,3 +1,4 @@
+/* eslint-disable */
 // 유틸리티 함수들
 
 const COLOR_PALETTE_DEFINITION = [

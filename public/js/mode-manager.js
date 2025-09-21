@@ -59,6 +59,24 @@ class ModeManager {
             return true;
         }
 
+        if (this.currentMode === 'search' && newMode === 'click' && window.SearchModeManager) {
+            const searchActive = typeof window.SearchModeManager.isActive === 'function'
+                ? window.SearchModeManager.isActive()
+                : !!window.SearchModeManager.isSearchActive;
+
+            if (searchActive) {
+                const confirmationMessage = '검색 결과를 지우고 클릭 모드로 전환하시겠습니까?';
+                const shouldClear = window.confirm(confirmationMessage);
+
+                if (!shouldClear) {
+                    console.log('[ModeManager] 검색 모드 유지 (사용자가 취소)');
+                    return false;
+                }
+
+                window.SearchModeManager.clearSearch(true);
+            }
+        }
+
         console.log(`🔄 모드 전환: ${this.currentMode} → ${newMode}`);
 
         // 지도 인스턴스 초기화 확인
@@ -101,8 +119,9 @@ class ModeManager {
         // UI 업데이트
         this.updateUI(newMode);
 
-        // 로컬 스토리지에 현재 모드 저장
+        // 로컬 스토리지에 현재 모드 저장 (snake/camel 동시 유지)
         localStorage.setItem('currentMode', newMode);
+        localStorage.setItem('current_mode', newMode);
 
         // 콜백 실행
         this.notifyModeChange(newMode, this.previousMode);
@@ -456,16 +475,24 @@ class ModeManager {
         if (mode === 'click') {
             if (colorContent) {
                 colorContent.style.removeProperty('display');
+                colorContent.style.removeProperty('opacity');
+                colorContent.style.removeProperty('pointer-events');
             }
             if (colorPlaceholder) {
                 colorPlaceholder.style.display = 'none';
+                colorPlaceholder.style.removeProperty('opacity');
+                colorPlaceholder.style.removeProperty('pointer-events');
             }
         } else {
             if (colorContent) {
                 colorContent.style.display = 'none';
+                colorContent.style.opacity = '0.35';
+                colorContent.style.pointerEvents = 'none';
             }
             if (colorPlaceholder) {
                 colorPlaceholder.style.display = 'flex';
+                colorPlaceholder.style.opacity = '1';
+                colorPlaceholder.style.pointerEvents = 'auto';
             }
         }
     }
