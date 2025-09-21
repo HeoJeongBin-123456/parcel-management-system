@@ -1,24 +1,17 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "server.js",
-      "use": "@vercel/node",
-      "config": {
-        "includeFiles": [
-          "public/**/*",
-          "data/**/*"
-        ],
-        "regions": [
-          "icn1"
-        ]
-      }
-    },
-    {
-      "src": "public/**/*",
-      "use": "@vercel/static"
+  "functions": {
+    "server.js": {
+      "runtime": "nodejs18.x",
+      "regions": [
+        "icn1"
+      ],
+      "includeFiles": [
+        "public/**/*",
+        "data/**/*"
+      ]
     }
-  ],
+  },
   "routes": [
     {
       "handle": "filesystem"
