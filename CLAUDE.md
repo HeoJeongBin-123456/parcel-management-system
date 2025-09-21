@@ -170,7 +170,7 @@ await getParcelInfoViaJSONP(lat, lng, apiKey)
 ```
 SUPABASE_URL=https://cqfszcbifonxpfasodto.supabase.co
 SUPABASE_ANON_KEY=[키값]
-VWORLD_API_KEY=E5B1657B-9B6F-3A4B-91EF-98512BE931A1
+VWORLD_API_KEY=12A51C12-8690-3559-9C2B-9F705D0D8AF3
 GOOGLE_CLIENT_ID=[Google OAuth 클라이언트 ID]
 ```
 
