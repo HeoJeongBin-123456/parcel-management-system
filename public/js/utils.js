@@ -752,6 +752,71 @@ async function deleteCurrentParcel(options = {}) {
             }
         }
 
+        const removeFromMemory = (parcel) => {
+            if (!parcel || typeof parcel !== 'object') {
+                return false;
+            }
+
+            const values = [];
+            const appendValue = (value) => {
+                if (!value && value !== 0) {
+                    return;
+                }
+                const stringValue = String(value).trim();
+                if (stringValue.length === 0 || stringValue === 'null' || stringValue === 'undefined') {
+                    return;
+                }
+                values.push(stringValue);
+            };
+
+            appendValue(parcel.pnu);
+            appendValue(parcel.pnu_code);
+            appendValue(parcel.pnuCode);
+            appendValue(parcel.id);
+            appendValue(parcel.parcelNumber);
+            appendValue(parcel.parcel_name);
+
+            if (parcel.properties) {
+                appendValue(parcel.properties.PNU);
+                appendValue(parcel.properties.pnu);
+                appendValue(parcel.properties.pnuCode);
+            }
+
+            if (parcel.savedInfo) {
+                appendValue(parcel.savedInfo.pnu);
+                appendValue(parcel.savedInfo.id);
+                appendValue(parcel.savedInfo.parcelNumber);
+            }
+
+            return values.some(value => supabaseCandidates.has(value));
+        };
+
+        if (window.parcelsData && Array.isArray(window.parcelsData)) {
+            const before = window.parcelsData.length;
+            window.parcelsData = window.parcelsData.filter(parcel => !removeFromMemory(parcel));
+            const after = window.parcelsData.length;
+            if (after !== before) {
+                console.log(`✅ window.parcelsData에서 ${before - after}개 필지 제거`);
+            }
+        }
+
+        const deleteFromMapStore = (mapStore) => {
+            if (!mapStore || typeof mapStore.delete !== 'function') {
+                return;
+            }
+            candidateArray.forEach(candidate => {
+                try {
+                    mapStore.delete(candidate);
+                } catch (error) {
+                    // ignore individual delete errors
+                }
+            });
+        };
+
+        deleteFromMapStore(window.clickParcels);
+        deleteFromMapStore(window.searchParcels);
+        deleteFromMapStore(window.parcels);
+
         // 4. 폼 초기화 (마커 생성 방지를 위해 지번도 초기화)
         if (!skipFormReset) {
             if (parcelNumberInput) {
