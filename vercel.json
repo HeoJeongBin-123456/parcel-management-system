@@ -8,6 +8,9 @@
         "includeFiles": [
           "public/**/*",
           "data/**/*"
+        ],
+        "regions": [
+          "icn1"
         ]
       }
     },
