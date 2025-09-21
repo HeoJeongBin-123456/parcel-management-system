@@ -29,69 +29,50 @@ function calculatePolygonCenter(coordinates) {
 // 실제 VWorld API로 필지 정보 조회
 async function getParcelInfo(lat, lng) {
     // console.log(`🏢 실제 필지 정보 조회 시작: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
-    
-    // 🚀 성능 최적화: 서버 프록시를 통한 빠른 API 호출
+
     try {
-        const result = await getParcelInfoViaProxy(lat, lng);
-        if (result) {
-            // console.log('🎊 서버 프록시로 필지 데이터 획득 성공!');
-            return;
+        const success = await getParcelInfoViaProxy(lat, lng);
+        if (!success) {
+            alert('해당 위치의 필지 정보를 찾을 수 없습니다.');
         }
     } catch (error) {
-        console.warn('⚠️ 서버 프록시 실패, JSONP 백업 시도:', error.message);
-    }
-    
-    // 백업: JSONP 방식 (메인 키만 사용)
-    const result = await getParcelInfoViaJSONP(lat, lng, 'E5B1657B-9B6F-3A4B-91EF-98512BE931A1');
-    if (!result) {
-        alert('해당 위치의 필지 정보를 찾을 수 없습니다.');
+        console.error('❌ 필지 정보 조회 실패:', error);
+        alert('필지 정보를 가져올 수 없습니다.');
     }
 }
 
 // 🚀 서버 프록시를 통한 빠른 VWorld API 호출
 async function getParcelInfoViaProxy(lat, lng) {
+    if (!window.vworldApi || typeof window.vworldApi.fetchFeatures !== 'function') {
+        throw new Error('VWorld API 헬퍼가 준비되지 않았습니다.');
+    }
+
     const geometry = `POINT(${lng} ${lat})`;
-    const url = `/api/vworld-proxy?geomFilter=${encodeURIComponent(geometry)}`;
-    
+
     try {
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json'
-            }
+        const features = await window.vworldApi.fetchFeatures({
+            geomFilter: geometry,
+            size: '1'
         });
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        const data = await response.json();
-        
-        if (data.response && data.response.status === 'OK' && data.response.result) {
-            const features = data.response.result.featureCollection?.features;
-            
-            if (features && features.length > 0) {
-                const feature = features[0];
-                const properties = feature.properties;
-                
-                // 필지 정보 UI 업데이트
-                const parcelForUI = { properties: properties, geometry: feature.geometry };
-                displayParcelInfo(parcelForUI);
-                
-                // 지도에 필지 표시
-                const parcelForMap = { properties: properties, geometry: feature.geometry };
-                const polygon = await drawParcelPolygon(parcelForMap, false);
 
-                // 🎨 새로 조회한 필지에 현재 색상 적용
-                if (polygon) {
-                    console.log('🎨 새로운 필지에 색상 적용:', currentColor);
-                    await toggleParcelSelection(parcelForMap, polygon);
-                }
+        if (features && features.length > 0) {
+            const feature = features[0];
+            const properties = feature.properties;
 
-                return true;
+            const parcelForUI = { properties: properties, geometry: feature.geometry };
+            displayParcelInfo(parcelForUI);
+
+            const parcelForMap = { properties: properties, geometry: feature.geometry };
+            const polygon = await drawParcelPolygon(parcelForMap, false);
+
+            if (polygon) {
+                console.log('🎨 새로운 필지에 색상 적용:', currentColor);
+                await toggleParcelSelection(parcelForMap, polygon);
             }
+
+            return true;
         }
-        
+
         return false;
     } catch (error) {
         console.error('❌ 서버 프록시 호출 실패:', error);
@@ -99,199 +80,59 @@ async function getParcelInfoViaProxy(lat, lng) {
     }
 }
 
-// JSONP 방식으로 VWorld API 호출
-async function getParcelInfoViaJSONP(lat, lng, apiKey) {
-    // console.log('🌐 JSONP 방식으로 VWorld API 재시도...');
-    
-    return new Promise((resolve, reject) => {
-        const callbackName = `vworld_callback_${Date.now()}_${Math.floor(Math.random()*1000)}`;
-        const script = document.createElement('script');
-        
-        // JSONP 콜백 함수 등록
-        window[callbackName] = async function(data) {
-    // console.log('📡 JSONP 응답 수신:', data);
-            
-            try {
-                if (data.response && data.response.status === 'OK' && data.response.result) {
-                    const features = data.response.result.featureCollection?.features;
-                    
-                    if (features && features.length > 0) {
-    // console.log(`🎊 JSONP로 실제 필지 데이터 획득! ${features.length}개`);
-                        
-                        const parcel = features[0];
-                        displayParcelInfo(parcel);
-                        const polygon = await drawParcelPolygon(parcel, true);
-                        await toggleParcelSelection(parcel, polygon);
-                        
-                        resolve(parcel);
-                    } else {
-    // console.log('📭 JSONP: 빈 결과');
-                        resolve(null);
-                    }
-                } else {
-                    console.warn('⚠️ JSONP: 예상하지 못한 응답');
-                    resolve(null);
-                }
-            } finally {
-                // 정리
-                document.head.removeChild(script);
-                delete window[callbackName];
-            }
-        };
-        
-        // JSONP 요청 URL 생성
-        const url = `http://api.vworld.kr/req/data?service=data&request=GetFeature&data=LP_PA_CBND_BUBUN&key=${apiKey}&geometry=true&geomFilter=POINT(${lng} ${lat})&size=10&format=json&crs=EPSG:4326&callback=${callbackName}`;
-        
-        script.src = url;
-        script.onerror = () => {
-            console.error('💥 JSONP 요청 실패');
-            document.head.removeChild(script);
-            delete window[callbackName];
-            resolve(null);
-        };
-        
-        document.head.appendChild(script);
-        
-        // 10초 타임아웃
-        setTimeout(() => {
-            if (document.head.contains(script)) {
-                console.warn('⏱️ JSONP 타임아웃');
-                document.head.removeChild(script);
-                delete window[callbackName];
-                resolve(null);
-            }
-        }, 10000);
-    });
-}
-
 
 
 
 // VWorld API로 영역 내 실제 필지 폴리곤 데이터 로드
 async function loadParcelsInBounds(bounds) {
-    // 검색 모드에서는 자동으로 필지를 로드하지 않음
     if (window.currentMode === 'search') {
-        // 검색 모드에서는 자동 필지 로드를 건너뜀
         return;
     }
-    
-    // console.log('🏘️ VWorld API로 영역 내 실제 필지 데이터 로드 시작');
-    
-    const ne = bounds.getNE();
-    const sw = bounds.getSW();
-    
-    // 경계 박스 생성 (서남쪽 경도, 서남쪽 위도, 동북쪽 경도, 동북쪽 위도)
-    const bbox = `${sw.lng()},${sw.lat()},${ne.lng()},${ne.lat()}`;
-    // console.log('🗺️ 검색 영역 (BBOX):', bbox);
-    
-    // API 키 풀 (메인: 범용키, 백업: 로컬호스트 제한키들)
-    const apiKeys = [
-        'E5B1657B-9B6F-3A4B-91EF-98512BE931A1', // 메인: 범용키 (제한없음)
-        'C1C06245-E008-3F27-BD9E-9CBA4BE0F918', // 백업: localhost:3000
-        '200C6A0D-D0A2-3E72-BADD-B385BB283CAE', // 백업: localhost:4000
-        '37325C63-ACC1-39FA-949D-F4E7F4C9BCF3'  // 백업: localhost:5000
-    ];
-    
-    // CORS 우회를 위해 JSONP를 우선적으로 시도
-    for (let keyIndex = 0; keyIndex < apiKeys.length; keyIndex++) {
-        const apiKey = apiKeys[keyIndex];
-    // console.log(`🔑 JSONP 폴리곤 우선 시도 - API 키 ${keyIndex+1}/${apiKeys.length}: ${apiKey.substring(0, 8)}...`);
-        
-        const result = await loadParcelsInBoundsViaJSONP(bounds, apiKey);
-        if (result > 0) {
-    // console.log(`🎊 JSONP로 실제 폴리곤 데이터 획득 성공! ${result}개 필지`);
-            return; // 성공 시 함수 종료
-        }
-        
-    // console.log(`⚠️ JSONP 폴리곤 API 키 ${keyIndex+1} 실패, 다음 키로 시도...`);
-    }
-    
-    // JSONP가 모든 키로 실패한 경우 메시지 출력
-    // console.log('⚠️ 모든 API 키로 필지 데이터를 가져오지 못했습니다.');
-    // console.log('💡 VWorld API는 CORS 정책으로 인해 JSONP만 지원합니다.');
-}
 
-// JSONP 방식으로 VWorld API 폴리곤 로드
-async function loadParcelsInBoundsViaJSONP(bounds, apiKey) {
-    // console.log('🌐 JSONP 방식으로 VWorld 폴리곤 API 재시도...');
-    
+    if (!window.vworldApi || typeof window.vworldApi.fetchFeatures !== 'function') {
+        console.warn('⚠️ VWorld API 헬퍼가 준비되지 않아 폴리곤 로드를 건너뜁니다. (backup)');
+        return;
+    }
+
     const ne = bounds.getNE();
     const sw = bounds.getSW();
-    const bbox = `${sw.lng()},${sw.lat()},${ne.lng()},${ne.lat()}`;
-    
-    return new Promise((resolve) => {
-        const callbackName = `vworld_polygon_callback_${Date.now()}_${Math.floor(Math.random()*1000)}`;
-        const script = document.createElement('script');
-        
-        // JSONP 콜백 함수 등록
-        window[callbackName] = function(data) {
-    // console.log('📡 폴리곤 JSONP 응답 수신:', data);
-            
+    const geomFilter = `BOX(${sw.lng()},${sw.lat()},${ne.lng()},${ne.lat()})`;
+
+    try {
+        const features = await window.vworldApi.fetchFeatures({
+            geomFilter: geomFilter,
+            size: '100'
+        });
+
+        if (!Array.isArray(features) || features.length === 0) {
+            console.warn('⚠️ 지정한 영역에서 가져올 폴리곤 데이터가 없습니다. (backup)');
+            return;
+        }
+
+        let loadedCount = 0;
+
+        for (let index = 0; index < features.length; index++) {
+            const feature = features[index];
+            const pnu = feature.properties?.PNU || feature.properties?.pnu || `UNKNOWN_${index}`;
+
+            if (window.clickParcels.has(pnu)) {
+                continue;
+            }
+
             try {
-                if (data.response && data.response.status === 'OK' && data.response.result) {
-                    const features = data.response.result.featureCollection?.features;
-                    
-                    if (features && features.length > 0) {
-    // console.log(`🎊 JSONP로 실제 폴리곤 데이터 획득! ${features.length}개`);
-                        
-                        let loadedCount = 0;
-                        features.forEach((feature, index) => {
-                            const pnu = feature.properties?.PNU || feature.properties?.pnu || `UNKNOWN_${index}`;
-                            
-                            if (!window.clickParcels.has(pnu)) {
-                                try {
-                                    const polygon = drawParcelPolygon(feature, false);
-                                    if (polygon) {
-                                        loadedCount++;
-    // console.log(`✅ JSONP 폴리곤 그리기: ${feature.properties?.JIBUN || pnu}`);
-                                    }
-                                } catch (drawError) {
-                                    console.warn(`⚠️ JSONP 필지 ${pnu} 그리기 실패:`, drawError);
-                                }
-                            }
-                        });
-                        
-    // console.log(`🎉 JSONP 폴리곤 로드 완료: ${loadedCount}개`);
-                        resolve(loadedCount);
-                        
-                    } else {
-    // console.log('📭 JSONP: 빈 폴리곤 결과');
-                        resolve(0);
-                    }
-                } else {
-                    console.warn('⚠️ JSONP: 예상하지 못한 폴리곤 응답');
-                    resolve(0);
+                const polygon = await drawParcelPolygon(feature, false);
+                if (polygon) {
+                    loadedCount++;
                 }
-            } finally {
-                // 정리
-                document.head.removeChild(script);
-                delete window[callbackName];
+            } catch (drawError) {
+                console.warn(`⚠️ 필지 ${pnu} 폴리곤 그리기 실패 (backup):`, drawError);
             }
-        };
-        
-        // JSONP 요청 URL 생성
-        const url = `http://api.vworld.kr/req/data?service=data&request=GetFeature&data=LP_PA_CBND_BUBUN&key=${apiKey}&geometry=true&geomFilter=BOX(${bbox})&size=100&format=json&crs=EPSG:4326&callback=${callbackName}`;
-        
-        script.src = url;
-        script.onerror = () => {
-            console.error('💥 JSONP 폴리곤 요청 실패');
-            document.head.removeChild(script);
-            delete window[callbackName];
-            resolve(0);
-        };
-        
-        document.head.appendChild(script);
-        
-        // 15초 타임아웃 (폴리곤 데이터는 더 클 수 있음)
-        setTimeout(() => {
-            if (document.head.contains(script)) {
-                console.warn('⏱️ JSONP 폴리곤 타임아웃');
-                document.head.removeChild(script);
-                delete window[callbackName];
-                resolve(0);
-            }
-        }, 15000);
-    });
+        }
+
+        console.log(`✅ VWorld 폴리곤 로드 완료 (backup): ${loadedCount}개`);
+    } catch (error) {
+        console.error('❌ VWorld 폴리곤 데이터 로드 실패 (backup):', error);
+    }
 }
 
 

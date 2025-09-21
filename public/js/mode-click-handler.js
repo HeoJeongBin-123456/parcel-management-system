@@ -122,12 +122,11 @@ async function getParcelInfoForClickMode(lat, lng) {
     console.log(`🏢 클릭 모드 필지 정보 조회: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
 
     try {
-        // 서버 프록시 우선 시도
-        const result = await getParcelInfoViaProxyForClickMode(lat, lng);
-        if (result) return;
-
-        // 백업: JSONP 방식
-        await getParcelInfoViaJSONPForClickMode(lat, lng);
+        const success = await getParcelInfoViaProxyForClickMode(lat, lng);
+        if (!success) {
+            console.warn('⚠️ 클릭 모드 필지 데이터를 찾지 못했습니다.');
+            alert('필지 정보를 가져올 수 없습니다.');
+        }
     } catch (error) {
         console.error('❌ 클릭 모드 필지 조회 실패:', error);
         alert('필지 정보를 가져올 수 없습니다.');
@@ -138,26 +137,20 @@ async function getParcelInfoForClickMode(lat, lng) {
  * 🚀 클릭 모드 - 서버 프록시를 통한 필지 조회
  */
 async function getParcelInfoViaProxyForClickMode(lat, lng) {
+    if (!window.vworldApi || typeof window.vworldApi.fetchFeatures !== 'function') {
+        throw new Error('VWorld API 헬퍼가 초기화되지 않았습니다.');
+    }
+
     const geometry = `POINT(${lng} ${lat})`;
-    const url = `/api/vworld-proxy?geomFilter=${encodeURIComponent(geometry)}`;
 
     try {
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: { 'Content-Type': 'application/json' }
+        const features = await window.vworldApi.fetchFeatures({
+            geomFilter: geometry,
+            size: '1'
         });
 
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-
-        if (data.response && data.response.status === 'OK' && data.response.result) {
-            const features = data.response.result.featureCollection?.features;
-
-            if (features && features.length > 0) {
-                const feature = features[0];
+        if (features && features.length > 0) {
+            const feature = features[0];
                 const pnu = feature.properties.PNU || feature.properties.pnu;
                 const parcelData = {
                     pnu: pnu,  // PNU를 최상위에 추가
@@ -224,8 +217,7 @@ async function getParcelInfoViaProxyForClickMode(lat, lng) {
                     console.log(`💾 클릭 모드 필지 저장 완료: ${pnu}, 색상: ${currentColor}`);
                 }
 
-                return true;
-            }
+            return true;
         }
 
         return false;
@@ -233,16 +225,6 @@ async function getParcelInfoViaProxyForClickMode(lat, lng) {
         console.error('❌ 클릭 모드 서버 프록시 호출 실패:', error);
         throw error;
     }
-}
-
-/**
- * 🔄 클릭 모드 - JSONP를 통한 필지 조회 (백업)
- */
-async function getParcelInfoViaJSONPForClickMode(lat, lng) {
-    // 기존 JSONP 로직을 클릭 모드용으로 수정
-    // 여기서는 간단히 처리
-    console.log('🔄 클릭 모드 JSONP 백업 시도');
-    return false;
 }
 
 /**

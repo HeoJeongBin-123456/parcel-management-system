@@ -34,6 +34,84 @@ window.CONFIG = {
     GOOGLE_SHEETS_URL: 'https://script.google.com/macros/s/AKfycbxR42RFSg32RjxLzBESBK6lL1KXaCipBiVHK2Crn-GeYyyVMdqTmZGfpBwUFqlZpVxw/exec' // 여기에 Google Apps Script 배포 URL을 입력하세요
 };
 
+// VWorld API 프록시 헬퍼 (모든 모듈에서 재사용)
+if (!window.vworldApi) {
+    window.vworldApi = {
+        async request(params = {}) {
+            const searchParams = new URLSearchParams();
+
+            Object.entries(params).forEach(([key, value]) => {
+                if (value === undefined || value === null) {
+                    return;
+                }
+                const stringValue = String(value);
+                if (stringValue.length === 0) {
+                    return;
+                }
+                searchParams.append(key, stringValue);
+            });
+
+            // 필수 기본값 설정
+            if (!searchParams.has('service')) {
+                searchParams.set('service', 'data');
+            }
+            if (!searchParams.has('request')) {
+                searchParams.set('request', 'GetFeature');
+            }
+            if (!searchParams.has('data')) {
+                searchParams.set('data', 'LP_PA_CBND_BUBUN');
+            }
+            if (!searchParams.has('geometry')) {
+                searchParams.set('geometry', 'true');
+            }
+            if (!searchParams.has('format')) {
+                searchParams.set('format', 'json');
+            }
+            if (!searchParams.has('crs')) {
+                searchParams.set('crs', 'EPSG:4326');
+            }
+
+            const query = searchParams.toString();
+            const endpoint = query.length > 0 ? `/api/vworld?${query}` : '/api/vworld';
+
+            const response = await fetch(endpoint, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`VWorld 프록시 호출 실패: HTTP ${response.status}`);
+            }
+
+            return await response.json();
+        },
+
+        extractFeatures(payload) {
+            if (!payload) {
+                return [];
+            }
+
+            if (Array.isArray(payload.features) && payload.features.length > 0) {
+                return payload.features;
+            }
+
+            const collection = payload.response?.result?.featureCollection;
+            if (collection && Array.isArray(collection.features)) {
+                return collection.features;
+            }
+
+            return [];
+        },
+
+        async fetchFeatures(params = {}) {
+            const payload = await this.request(params);
+            return this.extractFeatures(payload);
+        }
+    };
+}
+
 if (typeof window !== 'undefined' && !window.__searchModeConfirmWrapped) {
     const originalConfirm = window.confirm ? window.confirm.bind(window) : null;
     window.confirm = function(message, ...args) {

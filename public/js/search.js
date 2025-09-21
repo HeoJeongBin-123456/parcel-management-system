@@ -759,148 +759,99 @@ async function searchParcelByJibun(jibun) {
         maxLng: centerLng + 0.45
     };
     
-    // JSONP 방식으로 API 호출
-    const apiKey = 'E5B1657B-9B6F-3A4B-91EF-98512BE931A1'; // 범용 VWorld API 키
-    const callbackName = `searchCallback_${Date.now()}`;
-    
-    return new Promise((resolve) => {
-        // script 변수를 먼저 선언
-        let script;
+    if (!window.vworldApi || typeof window.vworldApi.fetchFeatures !== 'function') {
+        console.warn('⚠️ VWorld API 헬퍼가 준비되지 않았습니다.');
+        return [];
+    }
 
-        window[callbackName] = function(data) {
-    // console.log('지번 검색 API 응답:', data);
+    try {
+        const features = await window.vworldApi.fetchFeatures({
+            geomFilter: `BOX(${expandedBounds.minLng},${expandedBounds.minLat},${expandedBounds.maxLng},${expandedBounds.maxLat})`,
+            size: '1000'
+        });
 
-            // 콜백 함수 정리
-            delete window[callbackName];
-            if (script && script.parentNode) {
-                document.head.removeChild(script);
-            }
-            
-            if (!data.response || data.response.status !== 'OK' || !data.response.result?.featureCollection?.features) {
-                console.warn('VWorld API 응답 없음 또는 데이터 없음');
-
-                // SearchModeManager UI 업데이트
-                if (window.SearchModeManager) {
-                    window.SearchModeManager.searchResults = [];
-                    window.SearchModeManager.renderSearchResults([]);
-                }
-
-                resolve([]);
-                return;
-            }
-            
-            const features = data.response.result.featureCollection.features;
-            
-            // 지번으로 필터링
-            const matchingParcels = features.filter(feature => {
-                const properties = feature.properties;
-                const parcelJibun = formatJibun(properties);
-                const searchJibun = jibun.replace(/\s/g, '').toLowerCase();
-                const targetJibun = parcelJibun.replace(/\s/g, '').toLowerCase();
-                
-    // console.log('지번 비교:', {
-    //                 search: searchJibun,
-    //                 target: targetJibun,
-    //                 match: targetJibun.includes(searchJibun) || searchJibun.includes(targetJibun)
-    //             });
-                
-                return targetJibun.includes(searchJibun) || searchJibun.includes(targetJibun);
-            });
-            
-    // console.log('매칭된 필지 수:', matchingParcels.length);
-            
-            if (matchingParcels.length === 0) {
-                console.warn('매칭되는 지번 없음:', jibun);
-
-                // SearchModeManager가 있고 검색 결과가 아직 없을 때만 alert 표시
-                if (window.SearchModeManager) {
-                    // 이미 다른 검색 결과가 있으면 alert 표시 안함
-                    if (window.SearchModeManager.searchResults.length === 0) {
-                        alert('해당 지번의 필지를 찾을 수 없습니다.');
-                    }
-                    window.SearchModeManager.searchResults = [];
-                    window.SearchModeManager.renderSearchResults([]);
-                }
-
-                resolve([]);
-                return;
-            }
-
-            // 검색 결과를 SearchModeManager 형식으로 변환
-            const results = matchingParcels.map(feature => {
-                const properties = feature.properties || {};
-                const geometry = feature.geometry;
-                const coords = geometry.type === 'MultiPolygon'
-                    ? geometry.coordinates[0][0]
-                    : geometry.coordinates[0];
-                const center = calculatePolygonCenter(coords);
-
-                return {
-                    pnu: properties.PNU || `JIBUN_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                    parcelName: formatJibun(properties),
-                    ownerName: properties.OWNER_NM || '-',
-                    ownerAddress: properties.JUSO || '-',
-                    lat: center[1],
-                    lng: center[0],
-                    geometry: geometry
-                };
-            });
-
-            // SearchModeManager에 결과 전달
+        if (!features || features.length === 0) {
+            console.warn('VWorld API 응답 없음 또는 데이터 없음');
             if (window.SearchModeManager) {
-                window.SearchModeManager.searchResults = results;
-                window.SearchModeManager.renderSearchResults(results);
+                window.SearchModeManager.searchResults = [];
+                window.SearchModeManager.renderSearchResults([]);
             }
+            return [];
+        }
 
-            // 첫 번째 매칭 필지로 지도 이동
-            const firstFeature = matchingParcels[0];
-            if (firstFeature.geometry && firstFeature.geometry.coordinates) {
-                const coords = firstFeature.geometry.type === 'MultiPolygon'
-                    ? firstFeature.geometry.coordinates[0][0]
-                    : firstFeature.geometry.coordinates[0];
-                const center = calculatePolygonCenter(coords);
-                const searchMap = window.mapSearch || window.map;
-                if (searchMap) {
-                    searchMap.setCenter(new naver.maps.LatLng(center[1], center[0]));
-                    searchMap.setZoom(18);
-                } else {
-                    console.error('검색 모드 지도를 찾을 수 없습니다.');
+        const matchingParcels = features.filter((feature) => {
+            const properties = feature.properties || {};
+            const parcelJibun = formatJibun(properties);
+            const searchJibun = jibun.replace(/\s/g, '').toLowerCase();
+            const targetJibun = parcelJibun.replace(/\s/g, '').toLowerCase();
+            return targetJibun.includes(searchJibun) || searchJibun.includes(targetJibun);
+        });
+
+        if (matchingParcels.length === 0) {
+            console.warn('매칭되는 지번 없음:', jibun);
+            if (window.SearchModeManager) {
+                if (window.SearchModeManager.searchResults.length === 0) {
+                    alert('해당 지번의 필지를 찾을 수 없습니다.');
                 }
+                window.SearchModeManager.searchResults = [];
+                window.SearchModeManager.renderSearchResults([]);
+            }
+            return [];
+        }
 
-    // console.log('지도 이동 완료:', center);
+        const results = matchingParcels.map((feature) => {
+            const properties = feature.properties || {};
+            const geometry = feature.geometry;
+            const coords = geometry.type === 'MultiPolygon'
+                ? geometry.coordinates[0][0]
+                : geometry.coordinates[0];
+            const center = calculatePolygonCenter(coords);
+
+            return {
+                pnu: properties.PNU || `JIBUN_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                parcelName: formatJibun(properties),
+                ownerName: properties.OWNER_NM || '-',
+                ownerAddress: properties.JUSO || '-',
+                lat: center[1],
+                lng: center[0],
+                geometry: geometry
+            };
+        });
+
+        if (window.SearchModeManager) {
+            window.SearchModeManager.searchResults = results;
+            window.SearchModeManager.renderSearchResults(results);
+        }
+
+        const firstFeature = matchingParcels[0];
+        if (firstFeature.geometry && firstFeature.geometry.coordinates) {
+            const coords = firstFeature.geometry.type === 'MultiPolygon'
+                ? firstFeature.geometry.coordinates[0][0]
+                : firstFeature.geometry.coordinates[0];
+            const center = calculatePolygonCenter(coords);
+            const searchMap = window.mapSearch || window.map;
+            if (searchMap) {
+                searchMap.setCenter(new naver.maps.LatLng(center[1], center[0]));
+                searchMap.setZoom(18);
+            } else {
+                console.error('검색 모드 지도를 찾을 수 없습니다.');
             }
-            
-            // 모든 매칭 필지를 검색 결과로 하이라이트
-            matchingParcels.forEach(parcel => {
-                highlightParcel(parcel);
-            });
-            
-    // console.log(`${matchingParcels.length}개 필지 하이라이트 완료`);
-            resolve(results);
-        };
-        
-        // 타임아웃 처리
-        const timeout = setTimeout(() => {
-            if (window[callbackName]) {
-                delete window[callbackName];
-                console.error('지번 검색 타임아웃');
-                alert('검색 시간이 초과되었습니다.');
-                resolve([]);
-            }
-        }, 10000);
-        
-        // JSONP 스크립트 추가
-        script = document.createElement('script');
-        script.src = `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=LP_PA_CBND_BUBUN&key=${apiKey}&geometry=true&geomFilter=BOX(${expandedBounds.minLng},${expandedBounds.minLat},${expandedBounds.maxLng},${expandedBounds.maxLat})&size=1000&format=json&crs=EPSG:4326&callback=${callbackName}&domain=http://localhost:3000`;
-        script.onerror = () => {
-            clearTimeout(timeout);
-            delete window[callbackName];
-            console.error('지번 검색 스크립트 로드 실패');
-            alert('검색 중 오류가 발생했습니다.');
-            resolve([]);
-        };
-        document.head.appendChild(script);
-    });
+        }
+
+        matchingParcels.forEach((parcel) => {
+            highlightParcel(parcel);
+        });
+
+        return results;
+    } catch (error) {
+        console.error('VWorld 지번 검색 실패:', error);
+        alert('검색 중 오류가 발생했습니다.');
+        if (window.SearchModeManager) {
+            window.SearchModeManager.searchResults = [];
+            window.SearchModeManager.renderSearchResults([]);
+        }
+        return [];
+    }
 }
 
 // 두 번째 highlightParcel 함수는 첫 번째 함수와 중복되므로 제거됨
@@ -910,71 +861,24 @@ async function searchParcelByJibun(jibun) {
 
 // VWorld API로 실제 필지 데이터 가져오기
 async function getParcelForSearch(lat, lng) {
-    // console.log(`🏢 검색용 실제 필지 정보 조회 시작: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
-    
-    const apiKeys = [
-        'E5B1657B-9B6F-3A4B-91EF-98512BE931A1', // 메인: 범용키 (제한없음)
-        'C1C06245-E008-3F27-BD9E-9CBA4BE0F918', // 백업: localhost:3000
-        '200C6A0D-D0A2-3E72-BADD-B385BB283CAE', // 백업: localhost:4000
-        '37325C63-ACC1-39FA-949D-F4E7F4C9BCF3'  // 백업: localhost:5000
-    ];
-    
-    // JSONP를 우선적으로 시도
-    for (let i = 0; i < apiKeys.length; i++) {
-        const apiKey = apiKeys[i];
-    // console.log(`🔑 검색용 JSONP 시도 - API 키 ${i+1}/${apiKeys.length}`);
-        
-        try {
-            const result = await new Promise((resolve) => {
-                const callbackName = `vworld_search_callback_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-                
-                window[callbackName] = function(data) {
-                    delete window[callbackName];
-                    const script = document.querySelector(`script[src*="${callbackName}"]`);
-                    if (script) script.remove();
-                    
-                    if (data && data.response && data.response.status === 'OK') {
-                        const features = data.response.result?.featureCollection?.features;
-                        if (features && features.length > 0) {
-    // console.log('🎊 검색용 필지 데이터 획득 성공!');
-                            resolve(features[0]); // 첫 번째 필지 반환
-                        } else {
-                            resolve(null);
-                        }
-                    } else {
-                        resolve(null);
-                    }
-                };
-                
-                const script = document.createElement('script');
-                script.src = `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=LP_PA_CBND_BUBUN&key=${apiKey}&geometry=true&geomFilter=POINT(${lng} ${lat})&size=1&format=json&crs=EPSG:4326&callback=${callbackName}&domain=http://localhost:3000`;
-                script.onerror = () => {
-                    delete window[callbackName];
-                    script.remove();
-                    resolve(null);
-                };
-                
-                document.head.appendChild(script);
-                
-                // 타임아웃 설정
-                setTimeout(() => {
-                    if (window[callbackName]) {
-                        delete window[callbackName];
-                        script.remove();
-                        resolve(null);
-                    }
-                }, 3000);
-            });
-            
-            if (result) {
-                return result;
-            }
-        } catch (error) {
-            console.warn(`⚠️ 검색용 API 키 ${i + 1} 실패:`, error);
-        }
+    if (!window.vworldApi || typeof window.vworldApi.fetchFeatures !== 'function') {
+        console.warn('⚠️ VWorld API 헬퍼가 준비되지 않았습니다. (검색 모드)');
+        return null;
     }
-    
-    // console.log('❌ 모든 검색용 API 키 실패');
+
+    try {
+        const features = await window.vworldApi.fetchFeatures({
+            geomFilter: `POINT(${lng} ${lat})`,
+            size: '1'
+        });
+
+        if (features && features.length > 0) {
+            return features[0];
+        }
+    } catch (error) {
+        console.warn('⚠️ 검색용 필지 데이터를 가져오지 못했습니다:', error);
+    }
+
     return null;
 }
 
