@@ -642,108 +642,48 @@ function updateCalendar() {
 }
 
 // 현재 선택된 필지 정보 초기화 함수 (색상은 유지, 마커는 제거)
-async function deleteCurrentParcel() {
-    const currentPNU = window.currentSelectedPNU;
-    const parcelNumber = document.getElementById('parcelNumber').value;
+async function deleteCurrentParcel(options = {}) {
+    const {
+        skipPrompt = false,
+        pnu: overridePnu = null,
+        parcelNumber: overrideParcelNumber = null,
+        candidates: extraCandidates = [],
+        targetParcel = null,
+        skipFormReset = false
+    } = options;
+
+    const parcelNumberInput = document.getElementById('parcelNumber');
+
+    let currentPNU = overridePnu || window.currentSelectedPNU;
+    let parcelNumber = overrideParcelNumber !== null
+        ? overrideParcelNumber
+        : (parcelNumberInput ? parcelNumberInput.value : '');
+
+    if (!currentPNU && targetParcel) {
+        currentPNU = targetParcel.pnu || targetParcel.pnu_code || targetParcel.pnuCode || targetParcel.id || null;
+    }
+
+    if ((!currentPNU || currentPNU.length === 0) && targetParcel && targetParcel.id) {
+        currentPNU = targetParcel.id;
+    }
+
+    if ((!parcelNumber || parcelNumber.length === 0) && targetParcel) {
+        parcelNumber = targetParcel.parcelNumber || targetParcel.parcel_name || '';
+    }
 
     if (!currentPNU && !parcelNumber) {
         alert('초기화할 필지가 선택되지 않았습니다.');
-        return;
+        return false;
     }
 
-    const confirmReset = confirm(`필지 "${parcelNumber}"를 완전히 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.\n색상, 정보, 마커가 모두 제거되며 새로고침 후에도 복원되지 않습니다.`);
-    if (!confirmReset) {
-        return;
+    if (!skipPrompt) {
+        const confirmReset = confirm(`필지 "${parcelNumber || currentPNU}"를 완전히 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.\n색상, 정보, 마커가 모두 제거되며 새로고침 후에도 복원되지 않습니다.`);
+        if (!confirmReset) {
+            return false;
+        }
     }
 
     try {
-        // 1. 모든 LocalStorage 키에서 해당 필지를 완전히 삭제
-        // 동적으로 localStorage의 모든 키를 확인하여 필지 관련 키 찾기
-        const allStorageKeys = [];
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && (
-                key.includes('parcel') ||
-                key.includes('Parcel') ||
-                key === 'parcels' ||
-                key === 'clickParcelData' ||
-                key === 'searchParcels'
-            )) {
-                allStorageKeys.push(key);
-            }
-        }
-
-        // 기본 키들도 추가 (혹시 누락된 것이 있을 수 있음)
-        const defaultKeys = [
-            CONFIG.STORAGE_KEY,           // 'parcelData'
-            'parcels_current_session',    // 실제 저장되는 키
-            'parcels',                    // 다른 가능한 키
-            'parcelData_backup',          // 백업 키
-            'clickParcelData',            // 클릭 모드 데이터
-            'searchParcels'               // 검색 필지 데이터
-        ];
-
-        const storageKeys = [...new Set([...allStorageKeys, ...defaultKeys])]; // 중복 제거
-        console.log(`🔍 완전 삭제 대상 localStorage 키: ${storageKeys.join(', ')}`);
-
-        // 각 키에서 데이터 완전 삭제
-        storageKeys.forEach(key => {
-            try {
-                const data = localStorage.getItem(key);
-                if (!data || data === 'null' || data === 'undefined') {
-                    return; // 이 키는 건너뛰기
-                }
-
-                // clickParcelData는 문자열일 수 있음
-                if (key === 'clickParcelData' && typeof JSON.parse(data) === 'string') {
-                    localStorage.removeItem(key); // 잘못된 데이터 제거
-                    return;
-                }
-
-                const savedData = JSON.parse(data);
-                if (!Array.isArray(savedData)) {
-                    return; // 배열이 아니면 건너뛰기
-                }
-
-                // 해당 필지를 배열에서 완전히 제거
-                const updatedData = savedData.filter(item => {
-                    // PNU, parcelNumber, parcel_name, id 등 다양한 식별자로 매칭
-                    const matches = (
-                        item.pnu === currentPNU ||
-                        item.parcelNumber === parcelNumber ||
-                        item.parcel_name === parcelNumber ||
-                        (currentPNU && item.id && item.id.toString().includes(currentPNU.slice(-6))) // ID 부분 매칭
-                    );
-                    return !matches; // 매칭되지 않는 것만 유지 (매칭되는 것은 삭제)
-                });
-
-                localStorage.setItem(key, JSON.stringify(updatedData));
-                console.log(`✅ ${key}에서 필지 완전 삭제: ${savedData.length} -> ${updatedData.length}개`);
-            } catch (e) {
-                console.warn(`⚠️ ${key} 처리 중 오류:`, e);
-            }
-        });
-
-        // 2. 색상 정보 완전 삭제 (parcelColors에서 제거)
-        if (currentPNU) {
-            try {
-                const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
-                if (parcelColors && parcelColors[currentPNU] !== undefined) {
-                    delete parcelColors[currentPNU];
-                    localStorage.setItem('parcelColors', JSON.stringify(parcelColors));
-                    console.log(`✅ parcelColors에서 필지 색상 삭제: ${currentPNU}`);
-                }
-
-                // ColorPaletteManager를 통한 색상 제거
-                if (window.ColorPaletteManager && window.ColorPaletteManager.removeColorFromParcel) {
-                    window.ColorPaletteManager.removeColorFromParcel(currentPNU);
-                    console.log(`✅ ColorPaletteManager에서 색상 제거: ${currentPNU}`);
-                }
-            } catch (e) {
-                console.warn('색상 정보 삭제 중 오류:', e);
-            }
-        }
-
         const supabaseCandidates = new Set();
         const pushCandidate = (value) => {
             if (!value && value !== 0) {
@@ -758,6 +698,7 @@ async function deleteCurrentParcel() {
 
         pushCandidate(currentPNU);
         pushCandidate(parcelNumber);
+        extraCandidates.forEach(pushCandidate);
 
         if (window.selectedParcel) {
             pushCandidate(window.selectedParcel.pnu);
@@ -773,13 +714,31 @@ async function deleteCurrentParcel() {
             pushCandidate(window.currentSelectedParcel.id);
         }
 
-        // 3. Supabase에서도 완전히 삭제
-        const supabasePrimary = currentPNU || Array.from(supabaseCandidates)[0] || null;
+        if (targetParcel) {
+            pushCandidate(targetParcel.pnu);
+            pushCandidate(targetParcel.pnu_code);
+            pushCandidate(targetParcel.pnuCode);
+            pushCandidate(targetParcel.id);
+            pushCandidate(targetParcel.parcelNumber);
+            pushCandidate(targetParcel.parcel_name);
+        }
 
-        if (window.SupabaseManager && window.SupabaseManager.deleteParcel && supabaseCandidates.size > 0 && supabasePrimary) {
+        const candidateArray = Array.from(supabaseCandidates);
+
+        if (window.removeParcelFromAllStorage && candidateArray.length > 0) {
+            window.removeParcelFromAllStorage(currentPNU, {
+                candidates: candidateArray,
+                parcel: targetParcel
+            });
+        }
+
+        // 3. Supabase에서도 완전히 삭제
+        const supabasePrimary = currentPNU || candidateArray[0] || null;
+
+        if (window.SupabaseManager && window.SupabaseManager.deleteParcel && candidateArray.length > 0 && supabasePrimary) {
             try {
                 await window.SupabaseManager.deleteParcel(supabasePrimary, {
-                    candidates: Array.from(supabaseCandidates),
+                    candidates: candidateArray,
                     parcelNumber,
                     parcelName: parcelNumber,
                     parcel: window.selectedParcel || window.currentSelectedParcel || null,
@@ -794,11 +753,15 @@ async function deleteCurrentParcel() {
         }
 
         // 4. 폼 초기화 (마커 생성 방지를 위해 지번도 초기화)
-        document.getElementById('parcelNumber').value = ''; // 지번도 초기화해야 마커가 생성되지 않음
-        document.getElementById('ownerName').value = '';
-        document.getElementById('ownerAddress').value = '';
-        document.getElementById('ownerContact').value = '';
-        document.getElementById('memo').value = '';
+        if (!skipFormReset) {
+            if (parcelNumberInput) {
+                parcelNumberInput.value = '';
+            }
+            document.getElementById('ownerName').value = '';
+            document.getElementById('ownerAddress').value = '';
+            document.getElementById('ownerContact').value = '';
+            document.getElementById('memo').value = '';
+        }
 
         // 4. 마커 제거 (정보가 없으므로)
         if (window.MemoMarkerManager && currentPNU) {
@@ -826,11 +789,13 @@ async function deleteCurrentParcel() {
 
     // console.log('✅ 필지 완전 삭제 완료:', currentPNU || parcelNumber);
         // 성공 메시지는 콘솔에만 표시 (알림 제거)
-        console.log(`✅ 필지 "${parcelNumber}"가 완전히 삭제되었습니다. (색상, 정보, 마커 모두 제거)`);
+        console.log(`✅ 필지 "${parcelNumber || currentPNU}"가 완전히 삭제되었습니다. (색상, 정보, 마커 모두 제거)`);
+        return true;
 
     } catch (error) {
         console.error('❌ 필지 정보 초기화 실패:', error);
         alert('필지 정보 초기화 중 오류가 발생했습니다.');
+        return false;
     }
 }
 
@@ -1012,6 +977,16 @@ function removeParcelFromAllStorage(primaryPnu, options = {}) {
         if (colorRemoved > 0) {
             localStorage.setItem('parcelColors', JSON.stringify(parcelColors));
             console.log(`✅ parcelColors에서 ${colorRemoved}개 항목 제거`);
+        }
+
+        if (window.ColorPaletteManager && typeof window.ColorPaletteManager.removeColorFromParcel === 'function') {
+            candidateSet.forEach(candidate => {
+                try {
+                    window.ColorPaletteManager.removeColorFromParcel(candidate);
+                } catch (error) {
+                    console.warn('⚠️ ColorPaletteManager 색상 제거 실패:', error);
+                }
+            });
         }
     } catch (error) {
         console.error('❌ parcelColors 처리 실패:', error);

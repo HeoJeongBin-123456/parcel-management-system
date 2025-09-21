@@ -115,7 +115,7 @@ class ParcelManager {
         this.render();
     }
     
-    removeParcel(id) {
+    async removeParcel(id) {
         const targetParcel = this.parcels.find(p => p.id === id);
 
         if (!targetParcel) {
@@ -137,7 +137,7 @@ class ParcelManager {
         };
 
         const resolvedPnu = resolvePnu();
-        const supabaseCandidates = new Set();
+        const candidateSet = new Set();
         const pushCandidate = (value) => {
             if (!value && value !== 0) {
                 return;
@@ -146,7 +146,7 @@ class ParcelManager {
             if (stringValue.length === 0 || stringValue === 'null' || stringValue === 'undefined') {
                 return;
             }
-            supabaseCandidates.add(stringValue);
+            candidateSet.add(stringValue);
         };
 
         pushCandidate(resolvedPnu);
@@ -162,59 +162,41 @@ class ParcelManager {
             pushCandidate(targetParcel.savedInfo.parcelNumber);
         }
 
-        this.parcels = this.parcels.filter(p => p.id !== id);
-        this.selectedParcels.delete(id);
-        this.saveParcels();
-        this.applyFilters();
-        this.render();
-
-        if (resolvedPnu && window.removeParcelFromAllStorage) {
-            window.removeParcelFromAllStorage(resolvedPnu, {
-                candidates: Array.from(supabaseCandidates),
-                parcel: targetParcel
-            });
+        if (resolvedPnu) {
+            window.currentSelectedPNU = resolvedPnu;
         }
-
-        if (resolvedPnu && window.addToDeletedParcels) {
-            window.addToDeletedParcels(resolvedPnu);
-        }
-
-        if (window.MemoMarkerManager && typeof window.MemoMarkerManager.removeMemoMarker === 'function' && resolvedPnu) {
-            try {
-                window.MemoMarkerManager.removeMemoMarker(resolvedPnu);
-            } catch (error) {
-                console.warn('⚠️ MemoMarker 제거 중 오류:', error);
+        if (typeof document !== 'undefined') {
+            const parcelNumberInput = document.getElementById('parcelNumber');
+            if (parcelNumberInput) {
+                parcelNumberInput.value = targetParcel.parcelNumber || targetParcel.parcel_name || '';
             }
         }
 
-        if (window.clickParcels && typeof window.clickParcels.delete === 'function') {
-            window.clickParcels.delete(resolvedPnu || targetParcel.id);
-        }
-        if (window.searchParcels && typeof window.searchParcels.delete === 'function') {
-            window.searchParcels.delete(resolvedPnu || targetParcel.id);
-        }
+        window.selectedParcel = targetParcel;
+        window.currentSelectedParcel = targetParcel;
 
-        if (window.SupabaseManager && typeof window.SupabaseManager.deleteParcel === 'function' && supabaseCandidates.size > 0) {
-            const primary = resolvedPnu || targetParcel.id;
-            window.SupabaseManager.deleteParcel(primary, {
-                candidates: Array.from(supabaseCandidates),
-                parcelNumber: targetParcel.parcelNumber || targetParcel.parcel_name || null,
-                parcelName: targetParcel.parcelNumber || targetParcel.parcel_name || null,
-                parcel: targetParcel,
-                id: targetParcel.id,
-                pnuCode: targetParcel.pnu_code || targetParcel.pnuCode || null
-            }).catch(error => {
-                console.error('⚠️ Supabase 삭제 실패:', error);
+        const deleted = await deleteCurrentParcel({
+            skipPrompt: true,
+            pnu: resolvedPnu,
+            parcelNumber: targetParcel.parcelNumber || targetParcel.parcel_name || '',
+            candidates: Array.from(candidateSet),
+            targetParcel
+        });
+
+        if (deleted) {
+            this.parcels = this.parcels.filter(p => p.id !== id);
+            this.selectedParcels.delete(id);
+            this.saveParcels();
+            this.applyFilters();
+            this.render();
+            console.log('🗑️ 필지 카드 삭제 완료:', {
+                id,
+                resolvedPnu,
+                candidates: Array.from(candidateSet)
             });
         }
-
-        console.log('🗑️ 필지 카드 삭제 완료:', {
-            id,
-            resolvedPnu,
-            candidates: Array.from(supabaseCandidates)
-        });
     }
-    
+
     toggleSelection(id) {
         if (this.selectedParcels.has(id)) {
             this.selectedParcels.delete(id);
