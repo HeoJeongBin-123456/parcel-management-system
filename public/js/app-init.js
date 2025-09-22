@@ -280,7 +280,57 @@ class AppInitializer {
 
             if (!error && data) {
                 console.log(`✅ Supabase: ${data.length}개 필지`);
-                return data.map(item => this.normalizeParcelRecord(item));
+
+                const deletedParcels = window.getDeletedParcels ? window.getDeletedParcels() : [];
+                const deletedSet = new Set(
+                    deletedParcels
+                        .map(value => {
+                            if (!value && value !== 0) {
+                                return null;
+                            }
+                            const cleaned = String(value).trim();
+                            return cleaned.length > 0 && cleaned !== 'null' && cleaned !== 'undefined'
+                                ? cleaned
+                                : null;
+                        })
+                        .filter(Boolean)
+                );
+
+                const normalized = data.map(item => this.normalizeParcelRecord(item));
+
+                if (deletedSet.size === 0) {
+                    return normalized;
+                }
+
+                const filtered = normalized.filter(parcel => {
+                    const identifiers = [
+                        parcel.pnu,
+                        parcel.id,
+                        parcel.pnu_code,
+                        parcel.parcel_name,
+                        parcel.parcelNumber
+                    ].map(value => {
+                        if (!value && value !== 0) {
+                            return null;
+                        }
+                        const cleaned = String(value).trim();
+                        return cleaned.length > 0 ? cleaned : null;
+                    });
+
+                    const isDeleted = identifiers.some(identifier => identifier && deletedSet.has(identifier));
+
+                    if (isDeleted) {
+                        console.log(`⏩ Supabase 삭제 필지 제외: ${parcel.pnu || parcel.id || parcel.parcelNumber || '식별자 없음'}`);
+                    }
+
+                    return !isDeleted;
+                });
+
+                if (filtered.length !== normalized.length) {
+                    console.log(`🧹 Supabase 데이터에서 삭제된 필지 ${normalized.length - filtered.length}개 필터링`);
+                }
+
+                return filtered;
             }
         } catch (error) {
             console.warn('⚠️ Supabase 로드 실패:', error);

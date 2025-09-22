@@ -725,6 +725,41 @@ async function deleteCurrentParcel(options = {}) {
 
         const candidateArray = Array.from(supabaseCandidates);
 
+        // 삭제 추적 시스템에 식별자 기록 (새로고침 시 복원 방지)
+        if (window.addToDeletedParcels) {
+            const deletionTracker = new Set();
+            const trackDeletionIdentifier = (value) => {
+                if (!value && value !== 0) {
+                    return;
+                }
+                const cleaned = String(value).trim();
+                if (cleaned.length === 0 || cleaned === 'null' || cleaned === 'undefined') {
+                    return;
+                }
+                deletionTracker.add(cleaned);
+            };
+
+            trackDeletionIdentifier(resolvedPnu);
+            trackDeletionIdentifier(currentPNU);
+
+            if (targetParcel) {
+                trackDeletionIdentifier(targetParcel.pnu);
+                trackDeletionIdentifier(targetParcel.pnu_code);
+                trackDeletionIdentifier(targetParcel.pnuCode);
+                trackDeletionIdentifier(targetParcel.id);
+            }
+
+            candidateArray.forEach(trackDeletionIdentifier);
+
+            deletionTracker.forEach(identifier => {
+                try {
+                    window.addToDeletedParcels(identifier);
+                } catch (trackerError) {
+                    console.warn('⚠️ 삭제 추적 업데이트 실패:', trackerError);
+                }
+            });
+        }
+
         if (window.removeParcelFromAllStorage && candidateArray.length > 0) {
             window.removeParcelFromAllStorage(currentPNU, {
                 candidates: candidateArray,

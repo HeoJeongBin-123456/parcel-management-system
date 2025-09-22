@@ -5,7 +5,10 @@
   "scripts": {
     "build": "echo 'No build process needed'",
     "start": "node server.js",
-    "test": "playwright test"
+    "postinstall": "npx playwright install chromium",
+    "test": "playwright test",
+    "test:fast": "playwright test --project=chromium --workers=1 --reporter=line",
+    "test:ci": "playwright test --project=chromium --workers=1 --timeout=60000 --reporter=line"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
