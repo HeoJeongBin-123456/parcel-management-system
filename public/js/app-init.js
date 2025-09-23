@@ -342,10 +342,12 @@ class AppInitializer {
     async loadFromLocalStorage() {
         console.log('🔍 loadFromLocalStorage 시작');
 
-        // 삭제된 필지 목록 가져오기
+        // 삭제된 필지 목록 가져오기 (Set으로 변환하여 빠른 조회)
         const deletedParcels = window.getDeletedParcels ? window.getDeletedParcels() : [];
-        if (deletedParcels.length > 0) {
-            console.log(`🗑️ 삭제된 필지 ${deletedParcels.length}개 필터링 예정`);
+        const deletedSet = new Set(deletedParcels.map(id => String(id).trim()));
+
+        if (deletedSet.size > 0) {
+            console.log(`🗑️ 삭제된 필지 ${deletedSet.size}개 필터링 예정`);
         }
 
         const sources = ['clickParcelData', 'parcelData', 'parcels', 'parcels_current_session'];
@@ -375,9 +377,26 @@ class AppInitializer {
             const normalized = this.normalizeParcelRecord(parcel);
             const pnu = normalized.pnu || normalized.id;
 
-            // 삭제된 필지는 건너뛰기
-            if (pnu && deletedParcels.includes(pnu)) {
-                console.log(`⏩ 삭제된 필지 건너뛰기: ${pnu}`);
+            // isDeleted 플래그가 있는 경우 - 색상/폴리곤은 유지하되 정보는 비움
+            if (parcel.isDeleted === true) {
+                console.log(`🎨 삭제된 필지의 색상/폴리곤만 유지: ${pnu}`);
+                // 색상과 폴리곤 정보는 유지하되, 필지 정보는 비워진 상태로 유지
+            }
+
+            // 삭제 추적 리스트에 있는지 체크 (완전 삭제된 필지)
+            const identifiers = [
+                normalized.pnu,
+                normalized.id,
+                normalized.pnu_code,
+                normalized.parcelNumber,
+                normalized.parcel_name
+            ].filter(Boolean).map(id => String(id).trim());
+
+            const isFullyDeleted = identifiers.some(id => deletedSet.has(id));
+
+            // 완전 삭제된 필지는 건너뛰기 (색상도 없는 경우)
+            if (isFullyDeleted && !parcel.color && !parcel.geometry) {
+                console.log(`⏩ 완전 삭제된 필지 건너뛰기: ${pnu || identifiers[0]}`);
                 continue;
             }
 
@@ -1324,9 +1343,27 @@ class AppInitializer {
         try {
             console.log('🔍 저장된 모든 필지에서 마커 필요 여부 확인...');
 
+            // 삭제된 필지 목록 가져오기
+            const deletedParcels = window.getDeletedParcels ? window.getDeletedParcels() : [];
+            const deletedSet = new Set(deletedParcels.map(id => String(id).trim()));
+
             // window.parcelsData에서 마커가 필요한 필지들 찾기
             if (window.parcelsData && Array.isArray(window.parcelsData)) {
                 const parcelsNeedingMarkers = window.parcelsData.filter(parcel => {
+                    // 삭제된 필지는 제외
+                    const identifiers = [
+                        parcel.pnu,
+                        parcel.id,
+                        parcel.pnu_code,
+                        parcel.parcelNumber,
+                        parcel.parcel_name
+                    ].filter(Boolean).map(id => String(id).trim());
+
+                    if (identifiers.some(id => deletedSet.has(id))) {
+                        console.log(`⏩ 삭제된 필지 마커 생성 건너뛰기: ${parcel.pnu || parcel.id}`);
+                        return false;
+                    }
+
                     // 실제 정보가 있을 때만 마커 필요
                     try {
                         return window.MemoMarkerManager && window.MemoMarkerManager.shouldShowMarker(parcel);
@@ -1336,7 +1373,7 @@ class AppInitializer {
                     }
                 });
 
-                console.log(`📌 마커가 필요한 필지 ${parcelsNeedingMarkers.length}개 발견`);
+                console.log(`📌 마커가 필요한 필지 ${parcelsNeedingMarkers.length}개 발견 (삭제된 ${deletedSet.size}개 제외)`);
 
                 // 각 필지에 대해 마커 생성 시도
                 for (const parcel of parcelsNeedingMarkers) {

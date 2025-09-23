@@ -750,15 +750,16 @@ async function deleteCurrentParcel(options = {}) {
 
             candidateArray.forEach(trackDeletionIdentifier);
 
-            // 삭제 추적 비활성화 - 색상과 폴리곤 유지를 위해
-            // deletionTracker.forEach(identifier => {
-            //     try {
-            //         window.addToDeletedParcels(identifier);
-            //     } catch (trackerError) {
-            //         console.warn('⚠️ 삭제 추적 업데이트 실패:', trackerError);
-            //     }
-            // });
-            console.log('🎨 삭제 추적 건너뜀 - 색상과 폴리곤 유지');
+            // 삭제 추적 활성화 - 완전 삭제 시 새로고침 후에도 복원 방지
+            deletionTracker.forEach(identifier => {
+                try {
+                    window.addToDeletedParcels(identifier);
+                    console.log('🗑️ 삭제 추적 목록에 추가:', identifier);
+                } catch (trackerError) {
+                    console.warn('⚠️ 삭제 추적 업데이트 실패:', trackerError);
+                }
+            });
+            console.log('✅ 삭제 추적 시스템 활성화 - 새로고침 후 복원 방지');
         }
 
         if (window.removeParcelFromAllStorage && candidateArray.length > 0) {
@@ -1120,31 +1121,42 @@ function removeParcelFromAllStorage(primaryPnu, options = {}) {
             const originalLength = data.length;
             const filtered = [];
 
-            // 필지 정보를 완전히 삭제하는 대신 최소 정보만 유지
+            // 필지 처리
             for (const item of data) {
                 if (matchesItem(item)) {
-                    // 색상과 geometry만 유지하고 나머지 정보는 제거
-                    const minimalData = {
-                        pnu: item.pnu,
-                        geometry: item.geometry,
-                        color: item.color,
-                        mode: item.mode || 'click',
-                        source: item.source || 'click',
-                        // 필지 정보는 제거 (빈 값으로 설정)
-                        parcelNumber: '',
-                        ownerName: '',
-                        ownerAddress: '',
-                        phone: '',
-                        memo: '',
-                        isMinimalData: true  // 최소 데이터임을 표시
-                    };
-
-                    // geometry가 있는 경우에만 최소 데이터 유지
-                    if (item.geometry) {
-                        filtered.push(minimalData);
-                        console.log(`🎨 필지 ${item.pnu}의 색상과 폴리곤 정보만 유지`);
-                    } else {
+                    if (options.removeColor) {
+                        // 색상도 함께 삭제 (완전 삭제)
                         totalRemoved++;
+                        console.log(`🗑️ 필지 ${item.pnu || item.id}를 완전히 삭제 (색상 포함)`);
+                    } else {
+                        // 색상과 geometry가 있는 경우에만 최소 정보 유지
+                        if ((item.color && item.color !== 'transparent') || item.geometry) {
+                            const cleanedData = {
+                                pnu: item.pnu,
+                                id: item.id,
+                                geometry: item.geometry,
+                                color: item.color,
+                                mode: item.mode || 'click',
+                                source: item.source || 'click',
+                                // 필지 정보는 모두 제거 (빈 값으로 설정)
+                                parcelNumber: '',
+                                ownerName: '',
+                                ownerAddress: '',
+                                ownerContact: '',
+                                phone: '',
+                                memo: '',
+                                // 삭제된 필지임을 표시 (나중에 마커/정보 표시 안 함)
+                                isDeleted: true,
+                                deletedAt: new Date().toISOString()
+                            };
+                            filtered.push(cleanedData);
+                            console.log(`🎨 필지 ${item.pnu || item.id}의 색상과 폴리곤만 유지 (정보는 삭제)`);
+                            totalRemoved++;
+                        } else {
+                            // 색상도 폴리곤도 없으면 완전 삭제
+                            totalRemoved++;
+                            console.log(`🗑️ 필지 ${item.pnu || item.id}를 완전히 삭제`);
+                        }
                     }
                 } else {
                     filtered.push(item);
@@ -1153,7 +1165,7 @@ function removeParcelFromAllStorage(primaryPnu, options = {}) {
 
             if (filtered.length !== originalLength) {
                 localStorage.setItem(key, JSON.stringify(filtered));
-                console.log(`✅ ${key}에서 정보 제거 (색상/폴리곤은 유지)`);
+                console.log(`✅ ${key}에서 ${originalLength - filtered.length}개 필지 완전 삭제`);
             }
         } catch (error) {
             console.error(`❌ ${key} 처리 실패:`, error);
@@ -1161,36 +1173,39 @@ function removeParcelFromAllStorage(primaryPnu, options = {}) {
     }
 
     // 색상 정보는 유지 (필지 정보와 마커만 삭제)
-    /*
-    try {
-        const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
-        let colorRemoved = 0;
-        Object.keys(parcelColors).forEach((key) => {
-            const trimmedKey = String(key).trim();
-            if (candidateSet.has(trimmedKey)) {
-                delete parcelColors[key];
-                colorRemoved += 1;
-            }
-        });
-        if (colorRemoved > 0) {
-            localStorage.setItem('parcelColors', JSON.stringify(parcelColors));
-            console.log(`✅ parcelColors에서 ${colorRemoved}개 항목 제거`);
-        }
-
-        if (window.ColorPaletteManager && typeof window.ColorPaletteManager.removeColorFromParcel === 'function') {
-            candidateSet.forEach(candidate => {
-                try {
-                    window.ColorPaletteManager.removeColorFromParcel(candidate);
-                } catch (error) {
-                    console.warn('⚠️ ColorPaletteManager 색상 제거 실패:', error);
+    // 색상 제거 (옵션에 따라)
+    if (options.removeColor) {
+        try {
+            const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
+            let colorRemoved = 0;
+            Object.keys(parcelColors).forEach((key) => {
+                const trimmedKey = String(key).trim();
+                if (candidateSet.has(trimmedKey)) {
+                    delete parcelColors[key];
+                    colorRemoved += 1;
                 }
             });
+            if (colorRemoved > 0) {
+                localStorage.setItem('parcelColors', JSON.stringify(parcelColors));
+                console.log(`✅ parcelColors에서 ${colorRemoved}개 항목 제거`);
+            }
+
+            if (window.ColorPaletteManager && typeof window.ColorPaletteManager.removeColorFromParcel === 'function') {
+                candidateSet.forEach(candidate => {
+                    try {
+                        window.ColorPaletteManager.removeColorFromParcel(candidate);
+                    } catch (error) {
+                        console.warn('⚠️ ColorPaletteManager 색상 제거 실패:', error);
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('❌ parcelColors 처리 실패:', error);
         }
-    } catch (error) {
-        console.error('❌ parcelColors 처리 실패:', error);
+        console.log('🎨 색상 정보도 함께 삭제');
+    } else {
+        console.log('🎨 색상 정보 유지 (필지 정보와 마커만 삭제)');
     }
-    */
-    console.log('🎨 색상 정보 유지 (필지 정보와 마커만 삭제)');
 
     try {
         const markerStates = JSON.parse(localStorage.getItem('markerStates') || '{}');

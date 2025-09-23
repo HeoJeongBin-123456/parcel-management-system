@@ -1128,7 +1128,8 @@ class SupabaseManager {
 
             const candidateList = Array.from(candidateSet);
             const deletedRows = [];
-            const targetColumns = ['pnu', 'id', 'pnu_code', 'parcel_name'];
+            // pnu_code 컬럼은 실제로 존재하지 않으므로 제거
+            const targetColumns = ['id', 'parcel_name'];
 
             for (const column of targetColumns) {
                 try {
@@ -1136,7 +1137,7 @@ class SupabaseManager {
                         .from('parcels')
                         .delete()
                         .in(column, candidateList)
-                        .select('id, pnu, pnu_code');
+                        .select('id, parcel_name');
 
                     if (error) {
                         if (error.code && error.code !== 'PGRST116') {
@@ -1155,7 +1156,9 @@ class SupabaseManager {
 
             if (deletedRows.length === 0) {
                 console.warn('⚠️ Supabase에서 삭제된 필지가 없습니다.', candidateList);
-                return false;
+                // 이미 삭제되었거나 존재하지 않는 경우도 성공으로 처리
+                console.log('📝 필지가 이미 삭제되었거나 존재하지 않음 - 정상 처리');
+                return true; // false 대신 true 반환 (이미 없으면 삭제 목적 달성)
             }
 
             const polygonCandidates = new Set(candidateList);

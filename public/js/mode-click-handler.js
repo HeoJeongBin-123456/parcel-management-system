@@ -100,12 +100,12 @@ function setupClickModeEventListeners() {
     });
 
     // 오른쪽 클릭 이벤트 (필지 삭제)
-    naver.maps.Event.addListener(window.mapClick, 'rightclick', function(e) {
+    naver.maps.Event.addListener(window.mapClick, 'rightclick', async function(e) {
         e.originalEvent?.preventDefault();
         const coord = e.coord;
 
         console.log('🗑️ 클릭 모드 오른쪽 클릭 (삭제):', coord.lat(), coord.lng());
-        handleClickModeRightClick(coord.lat(), coord.lng());
+        await handleClickModeRightClick(coord.lat(), coord.lng());
     });
 
     // 컨텍스트 메뉴 방지
@@ -174,6 +174,8 @@ async function getParcelInfoViaProxyForClickMode(lat, lng) {
                 }
 
                 window.currentSelectedPNU = pnu;
+                // 현재 선택된 색상 가져오기
+                const selectedColor = getCurrentSelectedColor() || 'transparent';
                 window.selectedParcel = {
                     ...parcelData,
                     parcelNumber: jibun || parcelData.parcelNumber || '',
@@ -181,7 +183,7 @@ async function getParcelInfoViaProxyForClickMode(lat, lng) {
                     ownerAddress: '',
                     ownerContact: '',
                     memo: '',
-                    color: 'transparent'
+                    color: selectedColor  // 현재 선택된 색상 사용
                 };
                 window.currentSelectedParcel = window.selectedParcel;
 
@@ -208,7 +210,7 @@ async function getParcelInfoViaProxyForClickMode(lat, lng) {
                         polygon: polygon,
                         data: parcelData,    // 'data' 키로 저장 (parcel.js와 호환)
                         parcel: parcelData,  // 'parcel' 키로도 저장 (mode-click-handler와 호환)
-                        color: 'transparent' // 초기값은 transparent (색상 없음)
+                        color: currentColor || 'transparent'  // 현재 선택된 색상 저장
                     });
                     console.log('✅ window.clickParcels에 저장:', pnu);
 
@@ -342,14 +344,6 @@ async function applyClickModeColorToParcel(parcel, color, polygon) {
     const pnu = parcel.properties?.PNU || parcel.properties?.pnu || parcel.pnu;
 
     try {
-        // 같은 색상 재클릭 시 삭제 (토글)
-        const currentParcelColor = await getParcelColorFromStorage(pnu);
-        if (currentParcelColor === color) {
-            console.log('🎨 클릭 모드: 같은 색상 토글 - 필지 삭제');
-            await deleteClickModeParcel(pnu, polygon);
-            return;
-        }
-
         // 색상 적용
         polygon.setOptions({
             fillColor: color,
@@ -485,7 +479,7 @@ async function deleteClickModeParcel(pnu, polygon) {
 
         // 5. 모든 LocalStorage에서 완전 삭제 (utils.js 헬퍼 함수 사용)
         if (window.removeParcelFromAllStorage) {
-            const removed = window.removeParcelFromAllStorage(pnu);
+            const removed = window.removeParcelFromAllStorage(pnu, { removeColor: true }); // 색상도 함께 삭제
             console.log(`✅ 총 ${removed}개 항목이 모든 localStorage에서 제거됨`);
         }
 
@@ -639,12 +633,12 @@ async function handleClickModeLeftClick(lat, lng) {
             }
         }
 
-        // 기존 필지가 있으면 색상 토글 처리
+        // 기존 필지가 있으면 색상 적용
         if (existingPNU && existingPolygon && existingParcelData) {
             const currentColor = getCurrentSelectedColor();
-            console.log('🎨 기존 필지에 색상 적용/토글:', existingPNU, '현재 색상:', currentColor);
+            console.log('🎨 기존 필지에 색상 적용:', existingPNU, '현재 색상:', currentColor);
 
-            // parcel.js의 applyColorToParcel 함수 호출 (토글 기능 포함)
+            // parcel.js의 applyColorToParcel 함수 호출
             if (window.applyColorToParcel && typeof window.applyColorToParcel === 'function') {
                 // applyColorToParcel이 기대하는 형식으로 데이터 구조 확인/변환
                 let parcelToPass = existingParcelData;
@@ -885,6 +879,12 @@ async function loadSavedClickModeParcels() {
 
         // clickParcelData 먼저 처리
         for (const parcel of clickParcels) {
+            // isMinimalData 플래그가 있는 항목은 건너뛰기 (삭제된 정보)
+            if (parcel.isMinimalData === true) {
+                console.log(`⏩ 최소 데이터 필지 복원 제외: ${parcel.pnu}`);
+                continue;
+            }
+
             const pnu = parcel.pnu || parcel.id;
 
             // 삭제된 필지는 건너뛰기
@@ -922,6 +922,12 @@ async function loadSavedClickModeParcels() {
 
         // parcelData 추가 (중복 제외)
         for (const parcel of normalParcels) {
+            // isMinimalData 플래그가 있는 항목은 건너뛰기 (삭제된 정보)
+            if (parcel.isMinimalData === true) {
+                console.log(`⏩ 최소 데이터 필지 복원 제외: ${parcel.pnu}`);
+                continue;
+            }
+
             const pnu = parcel.pnu || parcel.id;
 
             // 삭제된 필지 체크 - geometry가 있으면 색상/폴리곤 복원용으로 포함

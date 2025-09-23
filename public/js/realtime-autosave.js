@@ -128,9 +128,25 @@ class RealtimeAutoSave {
 
     // 사용자 상호작용 처리
     handleUserInteraction(event, type) {
+        // 삭제 버튼 클릭 시 자동저장 일시 정지
+        if (event.target.matches('#deleteParcelInfoBtn')) {
+            console.log('🛑 삭제 버튼 클릭 - 자동저장 일시 정지');
+            this.isSuspended = true;
+            // 대기중인 저장 작업 취소
+            clearTimeout(this.saveTimeout);
+            clearTimeout(this.inputTimeout);
+            this.saveQueue.clear();
+            // 5초 후 자동저장 재개
+            setTimeout(() => {
+                this.isSuspended = false;
+                console.log('✅ 자동저장 재개');
+            }, 5000);
+            return;
+        }
+
         const interactionElements = [
             '#saveParcelInfoBtn',
-            '#deleteParcelInfoBtn',
+            // '#deleteParcelInfoBtn',  // 삭제 버튼은 자동저장 트리거에서 제외
             '.color-item',
             '.map-type-btn',
             '#searchBtn'
@@ -286,17 +302,47 @@ class RealtimeAutoSave {
             // 1. localStorage에서 기존 데이터 먼저 불러오기 (클릭 모드 데이터 포함)
             const savedData = JSON.parse(localStorage.getItem('parcelData') || '[]');
             if (Array.isArray(savedData)) {
-                data = [...savedData];
-                console.log(`📦 localStorage에서 ${savedData.length}개 필지 로드`);
+                // 삭제된 필지 목록 가져오기
+                const deletedParcels = window.getDeletedParcels ? window.getDeletedParcels() : [];
+                let filteredCount = 0;
+
+                // isMinimalData 플래그가 있는 항목과 삭제된 필지 필터링
+                data = savedData.filter(item => {
+                    // 최소 데이터 필터링 (삭제된 정보)
+                    if (item.isMinimalData === true) {
+                        filteredCount++;
+                        console.log(`⏩ 최소 데이터 필지 필터링: ${item.pnu}`);
+                        return false;
+                    }
+
+                    // 삭제된 필지 필터링
+                    const pnu = item.pnu || item.properties?.PNU || item.properties?.pnu || item.id;
+                    if (deletedParcels.includes(pnu)) {
+                        filteredCount++;
+                        return false;
+                    }
+
+                    return true;
+                });
+
+                if (filteredCount > 0) {
+                    console.log(`🗑️ 자동저장 시 ${filteredCount}개 필지 제외 (삭제된 정보 및 최소 데이터)`);
+                }
+                console.log(`📦 localStorage에서 ${data.length}개 필지 로드`);
             }
 
             // 2. window.parcelsData가 있으면 병합 (중복 제거)
             if (window.parcelsData && Array.isArray(window.parcelsData)) {
                 // PNU 기준으로 중복 제거하며 병합
                 const existingPNUs = new Set(data.map(item => item.pnu || item.properties?.PNU || item.properties?.pnu));
+                const deletedParcels = window.getDeletedParcels ? window.getDeletedParcels() : [];
 
                 window.parcelsData.forEach(parcel => {
                     const pnu = parcel.pnu || parcel.properties?.PNU || parcel.properties?.pnu;
+                    // 삭제된 필지는 병합하지 않음
+                    if (pnu && deletedParcels.includes(pnu)) {
+                        return;
+                    }
                     if (pnu && !existingPNUs.has(pnu)) {
                         data.push(parcel);
                         existingPNUs.add(pnu);
@@ -457,9 +503,11 @@ class RealtimeAutoSave {
                 updated_at: new Date().toISOString()
             };
         } else if (formData.parcelNumber.trim()) {
+            // PNU를 기본 ID로 사용 (일관성 유지)
+            const idValue = formData.pnu || formData.parcelNumber;
             existingData.push({
-                id: Date.now(),
-                pnu: formData.parcelNumber,
+                id: idValue,  // PNU를 ID로 사용
+                pnu: idValue,
                 ...formData,
                 created_at: new Date().toISOString()
             });

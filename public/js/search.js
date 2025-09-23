@@ -845,7 +845,7 @@ async function searchParcelByJibun(jibun) {
         return results;
     } catch (error) {
         console.error('VWorld 지번 검색 실패:', error);
-        alert('검색 중 오류가 발생했습니다.');
+        // 오류 알림 제거 - SearchModeManager가 재시도 로직을 처리함
         if (window.SearchModeManager) {
             window.SearchModeManager.searchResults = [];
             window.SearchModeManager.renderSearchResults([]);

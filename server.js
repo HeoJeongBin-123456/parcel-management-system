@@ -531,13 +531,14 @@ app.get('/', (req, res) => {
 
 // 서버 시작
 function startServer() {
-    const server = app.listen(PORT, () => {
+    const HOST = '127.0.0.1';
+    const server = app.listen(PORT, HOST, () => {
         console.log(`
         ======================================
         🚀 서버가 시작되었습니다!
         
-        📍 로컬: http://localhost:${PORT}
-        📍 네트워크: http://127.0.0.1:${PORT}
+        📍 로컬: http://${HOST}:${PORT}
+        📍 네트워크: http://${HOST}:${PORT}
         
         ✅ parcel-management-system
         ======================================

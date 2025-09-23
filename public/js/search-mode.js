@@ -162,6 +162,10 @@ class SearchModeManager {
                         console.log('[SearchMode] 지번 검색 실패, 주소 검색으로 재시도');
                         if (window.searchAddressByKeyword) {
                             const searchResults = await window.searchAddressByKeyword(query);
+                            // 재시도도 실패했을 때만 오류 표시
+                            if (!searchResults || searchResults.length === 0) {
+                                alert('검색 중 오류가 발생했습니다.');
+                            }
                             return searchResults || [];
                         }
                     } else {

@@ -179,6 +179,15 @@ class RealtimeSync {
     async handlePolygonAdded(polygon) {
         console.log('🗺️ 새 폴리곤 추가:', polygon.pnu);
 
+        // 삭제된 필지 체크 - 삭제된 필지의 폴리곤은 복원하지 않음
+        if (window.getDeletedParcels) {
+            const deletedParcels = window.getDeletedParcels();
+            if (deletedParcels.includes(polygon.pnu)) {
+                console.log(`⏩ 실시간 동기화: 삭제된 필지의 폴리곤 복원 방지: ${polygon.pnu}`);
+                return; // 삭제된 필지의 폴리곤은 처리하지 않음
+            }
+        }
+
         // 지도에 폴리곤 그리기
         if (window.drawParcelPolygon) {
             const feature = {
@@ -255,9 +264,19 @@ class RealtimeSync {
 
     // 필지 추가 처리
     handleParcelAdded(parcel) {
+        // 삭제된 필지 체크 - 삭제된 필지는 복원하지 않음
+        const pnu = parcel.pnu || parcel.id;
+        if (window.getDeletedParcels) {
+            const deletedParcels = window.getDeletedParcels();
+            if (deletedParcels.includes(pnu)) {
+                console.log(`⏩ 실시간 동기화: 삭제된 필지 복원 방지: ${pnu}`);
+                return; // 삭제된 필지는 처리하지 않음
+            }
+        }
+
         // 지도에 새 필지 표시
         this.addParcelToMap(parcel);
-        
+
         // 알림 표시
         this.showNotification(`새 필지 추가: ${parcel.parcel_name}`, 'success');
     }

@@ -25,5 +25,18 @@ Thumbs.db
 temp/
 .next/
 
+# Playwright 테스트 스크린샷
+.playwright-mcp/
+*.png
+*.jpg
+
+# 임시 테스트 파일
+test-*.html
+test-*.js
+debug-*.js
+direct-*.js
+clear-*.js
+complete-*.js
+
 .vercel
 test-results/

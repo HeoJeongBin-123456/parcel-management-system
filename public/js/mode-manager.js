@@ -59,21 +59,29 @@ class ModeManager {
             return true;
         }
 
-        if (this.currentMode === 'search' && newMode === 'click' && window.SearchModeManager) {
+        // 검색 모드에서 다른 모드로 전환 시 검색 결과를 숨김 (삭제 X)
+        if (this.currentMode === 'search' && newMode !== 'search' && window.SearchModeManager) {
             const searchActive = typeof window.SearchModeManager.isActive === 'function'
                 ? window.SearchModeManager.isActive()
                 : !!window.SearchModeManager.isSearchActive;
 
             if (searchActive) {
-                const confirmationMessage = '검색 결과를 지우고 클릭 모드로 전환하시겠습니까?';
-                const shouldClear = window.confirm(confirmationMessage);
+                // 검색 결과를 숨기기만 함 (삭제하지 않음)
+                window.SearchModeManager.setVisible(false);
+                console.log('[ModeManager] 검색 결과를 숨김 (데이터는 유지)');
+            }
+        }
 
-                if (!shouldClear) {
-                    console.log('[ModeManager] 검색 모드 유지 (사용자가 취소)');
-                    return false;
-                }
+        // 검색 모드로 다시 전환 시 이전 검색 결과를 다시 표시
+        if (newMode === 'search' && this.currentMode !== 'search' && window.SearchModeManager) {
+            const searchActive = typeof window.SearchModeManager.isActive === 'function'
+                ? window.SearchModeManager.isActive()
+                : !!window.SearchModeManager.isSearchActive;
 
-                window.SearchModeManager.clearSearch(true);
+            if (searchActive) {
+                // 숨겨진 검색 결과를 다시 표시
+                window.SearchModeManager.setVisible(true);
+                console.log('[ModeManager] 이전 검색 결과 복원');
             }
         }
 
