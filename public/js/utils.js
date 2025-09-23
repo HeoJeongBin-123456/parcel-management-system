@@ -641,7 +641,7 @@ function updateCalendar() {
     }
 }
 
-// 현재 선택된 필지 정보 초기화 함수 (색상은 유지, 마커는 제거)
+// 현재 선택된 필지 완전 삭제 함수 (색상, 정보, 마커 모두 제거)
 async function deleteCurrentParcel(options = {}) {
     const {
         skipPrompt = false,
@@ -677,7 +677,7 @@ async function deleteCurrentParcel(options = {}) {
     }
 
     if (!skipPrompt) {
-        const confirmReset = confirm(`필지 "${parcelNumber || currentPNU}"를 완전히 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.\n색상, 정보, 마커가 모두 제거되며 새로고침 후에도 복원되지 않습니다.`);
+        const confirmReset = confirm(`필지 "${parcelNumber || currentPNU}"의 정보를 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.\n정보와 마커가 제거됩니다. (색상과 폴리곤은 유지됩니다)`);
         if (!confirmReset) {
             return false;
         }
@@ -739,7 +739,6 @@ async function deleteCurrentParcel(options = {}) {
                 deletionTracker.add(cleaned);
             };
 
-            trackDeletionIdentifier(resolvedPnu);
             trackDeletionIdentifier(currentPNU);
 
             if (targetParcel) {
@@ -751,13 +750,15 @@ async function deleteCurrentParcel(options = {}) {
 
             candidateArray.forEach(trackDeletionIdentifier);
 
-            deletionTracker.forEach(identifier => {
-                try {
-                    window.addToDeletedParcels(identifier);
-                } catch (trackerError) {
-                    console.warn('⚠️ 삭제 추적 업데이트 실패:', trackerError);
-                }
-            });
+            // 삭제 추적 비활성화 - 색상과 폴리곤 유지를 위해
+            // deletionTracker.forEach(identifier => {
+            //     try {
+            //         window.addToDeletedParcels(identifier);
+            //     } catch (trackerError) {
+            //         console.warn('⚠️ 삭제 추적 업데이트 실패:', trackerError);
+            //     }
+            // });
+            console.log('🎨 삭제 추적 건너뜀 - 색상과 폴리곤 유지');
         }
 
         if (window.removeParcelFromAllStorage && candidateArray.length > 0) {
@@ -848,11 +849,58 @@ async function deleteCurrentParcel(options = {}) {
             });
         };
 
-        deleteFromMapStore(window.clickParcels);
-        deleteFromMapStore(window.searchParcels);
-        deleteFromMapStore(window.parcels);
+        // 폴리곤 Map에서 삭제하지 않음 - 색상과 폴리곤 유지
+        // deleteFromMapStore(window.clickParcels);
+        // deleteFromMapStore(window.searchParcels);
+        // deleteFromMapStore(window.parcels);
+        console.log('🎨 폴리곤 Map 유지 - 색상과 폴리곤 보존');
 
-        // 4. 폼 초기화 (마커 생성 방지를 위해 지번도 초기화)
+        // 4. 색상 정보는 유지 (필지 정보와 마커만 삭제)
+        // 색상 삭제 코드 주석 처리 - 색상은 유지해야 함
+        /*
+        const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
+        let colorDeleted = false;
+        candidateArray.forEach(candidate => {
+            if (parcelColors[candidate]) {
+                delete parcelColors[candidate];
+                colorDeleted = true;
+            }
+        });
+        if (colorDeleted) {
+            localStorage.setItem('parcelColors', JSON.stringify(parcelColors));
+            console.log('✅ 색상 정보 삭제 완료');
+        }
+        */
+        console.log('🎨 색상 정보 유지 (필지 정보와 마커만 삭제)');
+
+        // 5. 폴리곤은 유지 (색상 유지를 위해)
+        // 폴리곤 제거 코드 주석 처리 - 색상은 유지해야 함
+        /*
+        if (window.clickParcels) {
+            let polygonRemoved = false;
+            candidateArray.forEach(candidate => {
+                const polygon = window.clickParcels.get(candidate);
+                if (polygon && polygon.setMap) {
+                    polygon.setMap(null);
+                    window.clickParcels.delete(candidate);
+                    polygonRemoved = true;
+                    console.log(`✅ 폴리곤 지도에서 제거: ${candidate}`);
+                }
+            });
+            if (!polygonRemoved && currentPNU) {
+                // 폴백: currentPNU로 한번 더 시도
+                const polygon = window.clickParcels.get(currentPNU);
+                if (polygon && polygon.setMap) {
+                    polygon.setMap(null);
+                    window.clickParcels.delete(currentPNU);
+                    console.log(`✅ 폴리곤 지도에서 제거 (폴백): ${currentPNU}`);
+                }
+            }
+        }
+        */
+        console.log('🎨 폴리곤 유지 (색상 유지)');
+
+        // 6. 폼 초기화 (마커 생성 방지를 위해 지번도 초기화)
         if (!skipFormReset) {
             if (parcelNumberInput) {
                 parcelNumberInput.value = '';
@@ -863,22 +911,36 @@ async function deleteCurrentParcel(options = {}) {
             document.getElementById('memo').value = '';
         }
 
-        // 4. 마커 제거 (정보가 없으므로)
-        if (window.MemoMarkerManager && currentPNU) {
-            try {
-                window.MemoMarkerManager.removeMemoMarker(currentPNU);
-                // 보조: markerStates 로컬 캐시에서도 제거 (존재 시)
+        // 7. 마커 제거 (모든 candidate에 대해 처리)
+        if (window.MemoMarkerManager) {
+            let markerRemoved = false;
+            candidateArray.forEach(candidate => {
                 try {
-                    const markerStates = JSON.parse(localStorage.getItem('markerStates') || '{}');
-                    if (markerStates && markerStates[currentPNU]) {
-                        delete markerStates[currentPNU];
-                        localStorage.setItem('markerStates', JSON.stringify(markerStates));
+                    if (window.MemoMarkerManager.removeMemoMarker(candidate)) {
+                        markerRemoved = true;
+                        console.log(`✅ 마커 제거: ${candidate}`);
                     }
-                } catch (e) {
-                    // ignore
+                } catch (err) {
+                    // 개별 마커 제거 실패는 무시
                 }
-            } catch (err) {
-                console.warn('마커 제거 중 오류:', err);
+            });
+
+            // markerStates 로컬 캐시에서도 모든 candidate 제거
+            try {
+                const markerStates = JSON.parse(localStorage.getItem('markerStates') || '{}');
+                let stateModified = false;
+                candidateArray.forEach(candidate => {
+                    if (markerStates[candidate]) {
+                        delete markerStates[candidate];
+                        stateModified = true;
+                    }
+                });
+                if (stateModified) {
+                    localStorage.setItem('markerStates', JSON.stringify(markerStates));
+                    console.log('✅ 마커 상태 정보 삭제 완료');
+                }
+            } catch (e) {
+                // ignore
             }
         }
 
@@ -889,7 +951,7 @@ async function deleteCurrentParcel(options = {}) {
 
     // console.log('✅ 필지 완전 삭제 완료:', currentPNU || parcelNumber);
         // 성공 메시지는 콘솔에만 표시 (알림 제거)
-        console.log(`✅ 필지 "${parcelNumber || currentPNU}"가 완전히 삭제되었습니다. (색상, 정보, 마커 모두 제거)`);
+        console.log(`✅ 필지 "${parcelNumber || currentPNU}"의 정보와 마커가 삭제되었습니다. (색상과 폴리곤은 유지)`);
         return true;
 
     } catch (error) {
@@ -961,6 +1023,8 @@ function isParcelDeleted(pnu) {
  * 모든 localStorage 키에서 필지 완전 삭제
  */
 function removeParcelFromAllStorage(primaryPnu, options = {}) {
+    console.log('🔍 removeParcelFromAllStorage 호출:', { primaryPnu, options });
+
     const candidateSet = new Set();
     const pushCandidate = (value) => {
         if (!value && value !== 0) {
@@ -998,6 +1062,8 @@ function removeParcelFromAllStorage(primaryPnu, options = {}) {
         console.warn('⚠️ removeParcelFromAllStorage: 삭제할 식별자가 없습니다.');
         return 0;
     }
+
+    console.log('📋 삭제 대상 식별자들:', Array.from(candidateSet));
 
     const matchesItem = (item) => {
         if (!item || typeof item !== 'object') {
@@ -1052,18 +1118,50 @@ function removeParcelFromAllStorage(primaryPnu, options = {}) {
             }
 
             const originalLength = data.length;
-            const filtered = data.filter(item => !matchesItem(item));
+            const filtered = [];
 
-            if (filtered.length < originalLength) {
+            // 필지 정보를 완전히 삭제하는 대신 최소 정보만 유지
+            for (const item of data) {
+                if (matchesItem(item)) {
+                    // 색상과 geometry만 유지하고 나머지 정보는 제거
+                    const minimalData = {
+                        pnu: item.pnu,
+                        geometry: item.geometry,
+                        color: item.color,
+                        mode: item.mode || 'click',
+                        source: item.source || 'click',
+                        // 필지 정보는 제거 (빈 값으로 설정)
+                        parcelNumber: '',
+                        ownerName: '',
+                        ownerAddress: '',
+                        phone: '',
+                        memo: '',
+                        isMinimalData: true  // 최소 데이터임을 표시
+                    };
+
+                    // geometry가 있는 경우에만 최소 데이터 유지
+                    if (item.geometry) {
+                        filtered.push(minimalData);
+                        console.log(`🎨 필지 ${item.pnu}의 색상과 폴리곤 정보만 유지`);
+                    } else {
+                        totalRemoved++;
+                    }
+                } else {
+                    filtered.push(item);
+                }
+            }
+
+            if (filtered.length !== originalLength) {
                 localStorage.setItem(key, JSON.stringify(filtered));
-                totalRemoved += originalLength - filtered.length;
-                console.log(`✅ ${key}에서 ${originalLength - filtered.length}개 항목 제거`);
+                console.log(`✅ ${key}에서 정보 제거 (색상/폴리곤은 유지)`);
             }
         } catch (error) {
             console.error(`❌ ${key} 처리 실패:`, error);
         }
     }
 
+    // 색상 정보는 유지 (필지 정보와 마커만 삭제)
+    /*
     try {
         const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
         let colorRemoved = 0;
@@ -1091,6 +1189,8 @@ function removeParcelFromAllStorage(primaryPnu, options = {}) {
     } catch (error) {
         console.error('❌ parcelColors 처리 실패:', error);
     }
+    */
+    console.log('🎨 색상 정보 유지 (필지 정보와 마커만 삭제)');
 
     try {
         const markerStates = JSON.parse(localStorage.getItem('markerStates') || '{}');

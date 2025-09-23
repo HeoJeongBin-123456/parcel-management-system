@@ -924,10 +924,15 @@ async function loadSavedClickModeParcels() {
         for (const parcel of normalParcels) {
             const pnu = parcel.pnu || parcel.id;
 
-            // 삭제된 필지는 건너뛰기
+            // 삭제된 필지 체크 - geometry가 있으면 색상/폴리곤 복원용으로 포함
             if (deletedParcels.includes(pnu)) {
-                console.log(`⏩ 삭제된 필지 복원 제외 (parcelData): ${pnu}`);
-                continue;
+                if (parcel.geometry && parcel.color) {
+                    console.log(`🎨 삭제된 필지의 색상/폴리곤 복원: ${pnu}`);
+                    // geometry와 color만 있는 필지는 포함 (정보는 없지만 색상은 유지)
+                } else {
+                    console.log(`⏩ 삭제된 필지 복원 제외 (완전 삭제): ${pnu}`);
+                    continue;
+                }
             }
 
             if (pnu && !pnuSet.has(pnu)) {
@@ -1003,8 +1008,8 @@ async function loadSavedClickModeParcels() {
                         restoredCount++;
                         console.log(`✅ 클릭 모드 필지 복원: ${pnu} (색상: ${savedColor})`);
 
-                        // 👍 마커 생성 조건 확인
-                        if (window.MemoMarkerManager) {
+                        // 👍 마커 생성 조건 확인 (최소 데이터인 경우 마커 생성하지 않음)
+                        if (window.MemoMarkerManager && !parcelData.isMinimalData) {
                             const hasRealInfo = !!(
                                 (parcelData.memo && parcelData.memo.trim()) ||
                                 (parcelData.ownerName && parcelData.ownerName.trim())
