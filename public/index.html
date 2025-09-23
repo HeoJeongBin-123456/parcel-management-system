@@ -55,6 +55,7 @@
             </div>
             <div class="header-right">
                 <div id="connectionStatus" class="connection-status disconnected">🔴 연결 중...</div>
+                <button id="calendarToggleBtn" class="calendar-toggle-btn" onclick="if(window.CalendarWidget) CalendarWidget.toggle()" style="padding: 6px 12px; background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); border-radius: 15px; color: white; cursor: pointer; font-size: 0.8rem; margin-right: 10px;">📅 캘린더</button>
                 <button id="logoutBtn" class="logout-btn" onclick="GoogleAuth.logout()">로그아웃</button>
             </div>
         </header>
@@ -219,6 +220,7 @@
     <script src="/js/search.js"></script>
     <script src="/js/memo-markers.js"></script>
     <script src="/js/backup-manager.js"></script>
+    <script src="/js/calendar-widget.js"></script>
     <script src="/js/sheets.js"></script>
     <script src="/js/mobile-handler.js"></script>
     <!-- data-persistence-manager.js 비활성화 - LocalStorage와 Supabase만 사용 -->

@@ -2,13 +2,28 @@
 // 백업 관리자 - 일일 Supabase 백업 + 월간 Google 백업
 class BackupManager {
     constructor() {
-        this.lastDailyBackup = null;
-        this.lastMonthlyBackup = null;
+        this.lastDailyBackup = null;      // Supabase 일일 백업
+        this.lastWeeklyBackup = null;     // Google 주간 백업 (변경)
         this.isBackupRunning = false;
         this.backupHistory = [];
         this.maxHistorySize = 50;
-        
-        console.log('💾 BackupManager 초기화');
+
+        // 백업 스케줄 설정
+        this.backupSchedule = {
+            supabase: {
+                interval: 'daily',
+                hour: 0,              // 자정
+                retention: 7          // 7일 보관
+            },
+            google: {
+                interval: 'weekly',
+                day: 0,               // 일요일 (0 = Sunday)
+                hour: 0,              // 자정
+                retention: 90         // 90일 보관
+            }
+        };
+
+        console.log('💾 BackupManager 초기화 (Supabase: 일일, Google: 주간)');
         this.loadBackupSettings();
         this.scheduleBackups();
     }
@@ -18,12 +33,12 @@ class BackupManager {
         try {
             const settings = JSON.parse(await window.migratedGetItem('backup_settings') || '{}');
             this.lastDailyBackup = settings.lastDailyBackup ? new Date(settings.lastDailyBackup) : null;
-            this.lastMonthlyBackup = settings.lastMonthlyBackup ? new Date(settings.lastMonthlyBackup) : null;
+            this.lastWeeklyBackup = settings.lastWeeklyBackup ? new Date(settings.lastWeeklyBackup) : null;
             this.backupHistory = settings.backupHistory || [];
-            
+
             console.log('💾 백업 설정 로드 완료:', {
-                lastDaily: this.lastDailyBackup,
-                lastMonthly: this.lastMonthlyBackup,
+                lastSupabase: this.lastDailyBackup,
+                lastGoogle: this.lastWeeklyBackup,
                 historyCount: this.backupHistory.length
             });
         } catch (error) {
@@ -36,7 +51,7 @@ class BackupManager {
         try {
             const settings = {
                 lastDailyBackup: this.lastDailyBackup?.toISOString(),
-                lastMonthlyBackup: this.lastMonthlyBackup?.toISOString(),
+                lastWeeklyBackup: this.lastWeeklyBackup?.toISOString(),
                 backupHistory: this.backupHistory.slice(-this.maxHistorySize)
             };
             await window.migratedSetItem('backup_settings', JSON.stringify(settings));
@@ -108,32 +123,51 @@ class BackupManager {
         }
 
         const now = new Date();
-        
-        // 일일 백업 체크 (마지막 백업이 24시간 이전인 경우)
+
+        // Supabase 일일 백업 체크
         if (this.shouldRunDailyBackup(now)) {
+            console.log('📅 Supabase 일일 백업 시작');
             await this.runDailyBackup();
         }
-        
-        // 월간 백업 체크 (마지막 백업이 30일 이전인 경우)
-        if (this.shouldRunMonthlyBackup(now)) {
-            await this.runMonthlyBackup();
+
+        // Google 주간 백업 체크
+        if (this.shouldRunWeeklyGoogleBackup(now)) {
+            console.log('📅 Google 주간 백업 시작');
+            await this.runWeeklyGoogleBackup();
         }
     }
 
-    // 일일 백업이 필요한지 체크
+    // Supabase 일일 백업이 필요한지 체크
     shouldRunDailyBackup(now) {
         if (!this.lastDailyBackup) return true;
-        
+
         const hoursSinceLastBackup = (now - this.lastDailyBackup) / (1000 * 60 * 60);
         return hoursSinceLastBackup >= 24;
     }
 
-    // 월간 백업이 필요한지 체크
-    shouldRunMonthlyBackup(now) {
-        if (!this.lastMonthlyBackup) return true;
-        
-        const daysSinceLastBackup = (now - this.lastMonthlyBackup) / (1000 * 60 * 60 * 24);
-        return daysSinceLastBackup >= 30;
+    // Google 주간 백업이 필요한지 체크
+    shouldRunWeeklyGoogleBackup(now) {
+        // 마지막 백업이 없으면 즉시 실행
+        if (!this.lastWeeklyBackup) return true;
+
+        // 마지막 백업으로부터 경과 시간 계산
+        const daysSinceLastBackup = (now - this.lastWeeklyBackup) / (1000 * 60 * 60 * 24);
+
+        // 오늘이 일요일인지 확인 (0 = 일요일)
+        const isSunday = now.getDay() === 0;
+
+        // 일요일이고, 마지막 백업으로부터 6일 이상 지났으면 백업 실행
+        if (isSunday && daysSinceLastBackup >= 6) {
+            return true;
+        }
+
+        // 마지막 백업이 14일 이상 전이면 무조건 실행 (안전장치)
+        if (daysSinceLastBackup >= 14) {
+            console.log('⚠️ 2주 이상 백업이 없어 강제 실행');
+            return true;
+        }
+
+        return false;
     }
 
     // 일일 백업 실행 (Supabase daily_backups 테이블) - 개선판
@@ -230,56 +264,57 @@ class BackupManager {
         this.useIndexedDBBackup = true;
     }
 
-    // 월간 백업 실행 (Google Sheets 연동)
-    async runMonthlyBackup() {
+    // Google 주간 백업 실행 (Google Sheets/Drive 연동)
+    async runWeeklyGoogleBackup() {
         this.isBackupRunning = true;
         const startTime = new Date();
         
         try {
-            console.log('💾 월간 백업 시작...');
+            console.log('📊 Google 주간 백업 시작...');
             
             // 현재 필지 데이터 가져오기
             const parcelData = JSON.parse(await window.migratedGetItem(CONFIG.STORAGE_KEY) || '[]');
             
             if (parcelData.length === 0) {
                 console.log('💾 백업할 데이터가 없습니다.');
-                this.addBackupHistory('monthly', 'success', '백업할 데이터 없음', 0);
+                this.addBackupHistory('weekly', 'success', '백업할 데이터 없음', 0);
                 return;
             }
 
             // Google Sheets로 백업 (sheets.js의 기존 함수 활용)
             if (typeof exportDataToGoogleSheets === 'function') {
-                await exportDataToGoogleSheets(parcelData, `월간백업_${startTime.toISOString().slice(0, 10)}`);
+                await exportDataToGoogleSheets(parcelData, `주간백업_${startTime.toISOString().slice(0, 10)}`);
                 
-                // 월간 백업 로그 Supabase에 저장
+                // 주간 백업 로그 Supabase에 저장
                 if (window.SupabaseManager && window.SupabaseManager.supabase) {
                     const logRecord = {
                         backup_date: startTime.toISOString(),
                         data_count: parcelData.length,
                         backup_method: 'google_sheets',
+                        backup_type: 'weekly',
                         status: 'success'
                     };
 
                     await window.SupabaseManager.supabase
-                        .from('monthly_backup_logs')
+                        .from('backup_logs')
                         .insert([logRecord]);
                 }
                 
-                this.lastMonthlyBackup = startTime;
+                this.lastWeeklyBackup = startTime;
                 await this.saveBackupSettings();
                 
                 const endTime = new Date();
                 const duration = endTime - startTime;
                 
-                this.addBackupHistory('monthly', 'success', `Google Sheets 백업 완료: ${parcelData.length}개 필지`, duration);
-                console.log(`✅ 월간 백업 완료: ${parcelData.length}개 필지, ${duration}ms`);
+                this.addBackupHistory('weekly', 'success', `Google Sheets 백업 완료: ${parcelData.length}개 필지`, duration);
+                console.log(`✅ Google 주간 백업 완료: ${parcelData.length}개 필지, ${duration}ms`);
             } else {
                 throw new Error('Google Sheets 연동 함수를 찾을 수 없습니다.');
             }
             
         } catch (error) {
-            console.error('❌ 월간 백업 실패:', error);
-            this.addBackupHistory('monthly', 'error', error.message, new Date() - startTime);
+            console.error('❌ Google 주간 백업 실패:', error);
+            this.addBackupHistory('weekly', 'error', error.message, new Date() - startTime);
             
             // 실패 로그도 Supabase에 저장
             if (window.SupabaseManager && window.SupabaseManager.supabase) {
@@ -288,12 +323,13 @@ class BackupManager {
                         backup_date: startTime.toISOString(),
                         data_count: 0,
                         backup_method: 'google_sheets',
+                        backup_type: 'weekly',
                         status: 'failed',
                         error_message: error.message
                     };
 
                     await window.SupabaseManager.supabase
-                        .from('monthly_backup_logs')
+                        .from('backup_logs')
                         .insert([logRecord]);
                 } catch (logError) {
                     console.error('❌ 백업 로그 저장 실패:', logError);

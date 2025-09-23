@@ -2,8 +2,8 @@
 // Google OAuth 인증 관리
 
 const GoogleAuth = {
-    // OAuth 설정
-    CLIENT_ID: '506368463001-um0b25os2vlep7mumonf63pcm9c9a0n3.apps.googleusercontent.com',
+    // OAuth 설정 (새로운 클라이언트 ID)
+    CLIENT_ID: '1006610066972-6nqfmk0634uuv70f8gov48q37p06nvl3.apps.googleusercontent.com',
     DISCOVERY_DOCS: [
         'https://sheets.googleapis.com/$discovery/rest?version=v4',
         'https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest',
@@ -19,12 +19,32 @@ const GoogleAuth = {
     
     // 토큰 만료 시간 확인
     isTokenExpired() {
-        return false;
+        const expiry = localStorage.getItem('tokenExpiry');
+        if (!expiry) return true;
+        return new Date().getTime() > parseInt(expiry);
     },
     
     // 로그인 상태 확인
     isAuthenticated() {
-        return true;
+        const authProvider = localStorage.getItem('authProvider');
+
+        // 개발자 모드 확인
+        if (authProvider === 'dev') {
+            const devExpiry = localStorage.getItem('devLoginExpiry');
+            if (devExpiry && new Date().getTime() < parseInt(devExpiry)) {
+                return true;
+            }
+        }
+
+        // Google 로그인 확인
+        if (authProvider === 'google') {
+            const token = this.getAccessToken();
+            if (token && !this.isTokenExpired()) {
+                return true;
+            }
+        }
+
+        return false;
     },
     
     // 액세스 토큰 가져오기
@@ -70,9 +90,9 @@ const GoogleAuth = {
     
     // 로그인 페이지로 리다이렉트
     redirectToLogin() {
-        console.log('🔓 로그인 없이 접근이 허용됩니다.');
-        if (window.location.pathname.includes('login.html')) {
-            window.location.href = '/index.html';
+        console.log('🔒 로그인이 필요합니다.');
+        if (!window.location.pathname.includes('login.html')) {
+            window.location.href = '/login.html';
         }
     },
 
@@ -323,19 +343,21 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
     }
 
-    const isAutomationEnvironment = navigator.webdriver === true;
-    if (isAutomationEnvironment) {
-        console.log('🤖 자동화 환경 감지 - 인증 검증을 건너뜁니다.');
-        return;
-    }
+    // 테스트를 위해 임시 비활성화
+    // const isAutomationEnvironment = navigator.webdriver === true;
+    // if (isAutomationEnvironment) {
+    //     console.log('🤖 자동화 환경 감지 - 인증 검증을 건너뜁니다.');
+    //     return;
+    // }
 
     console.log('🔍 인증 상태 확인 중...');
 
     if (!GoogleAuth.isAuthenticated()) {
-        console.log('⚠️ 인증 실패 - 로그인 페이지로 리다이렉트');
+        console.log('⚠️ 인증되지 않음 - 로그인 페이지로 이동');
         GoogleAuth.redirectToLogin();
     } else {
-        console.log('✅ 인증 성공 - 메인 페이지 접근 허용');
+        const authProvider = localStorage.getItem('authProvider');
+        console.log(`✅ 인증 성공 (${authProvider === 'dev' ? '개발자 모드' : 'Google'}) - 메인 페이지 접근 허용`);
 
         // 인증된 경우 사용자 정보 표시
         const userInfo = GoogleAuth.getUserInfo();
