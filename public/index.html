@@ -11,8 +11,6 @@
     <!-- 네이버 지도 API -->
     <script type="text/javascript" src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=x21kpuf1v4&submodules=geocoder,panorama"></script>
     
-    <!-- Google Identity Services -->
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
 
     <!-- Supabase -->
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
@@ -27,6 +25,7 @@
     <link rel="stylesheet" href="/css/responsive.css">
     <link rel="stylesheet" href="/css/backup-ui.css">
     <link rel="stylesheet" href="/css/modes.css">
+    <link rel="stylesheet" href="/css/google-calendar.css">
 </head>
 <body>
     <div id="app">
@@ -55,8 +54,7 @@
             </div>
             <div class="header-right">
                 <div id="connectionStatus" class="connection-status disconnected">🔴 연결 중...</div>
-                <button id="calendarToggleBtn" class="calendar-toggle-btn" onclick="if(window.CalendarWidget) CalendarWidget.toggle()" style="padding: 6px 12px; background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); border-radius: 15px; color: white; cursor: pointer; font-size: 0.8rem; margin-right: 10px;">📅 캘린더</button>
-                <button id="logoutBtn" class="logout-btn" onclick="GoogleAuth.logout()">로그아웃</button>
+                <button id="logoutBtn" class="logout-btn" onclick="handleLogout()">로그아웃</button>
             </div>
         </header>
 
@@ -132,14 +130,11 @@
             <!-- 지도 영역 -->
             <div class="map-container">
                 <div class="map-floating-actions">
-                    <button type="button" id="calendarBtn" class="floating-action-btn" onclick="openCalendarModal()">
-                        📅 캘린더
-                    </button>
                     <button type="button" id="backupBtn" class="floating-action-btn" onclick="showBackupModal()">
                         💾 백업
                     </button>
-                    <button type="button" id="resetMapBtn" class="floating-action-btn critical">
-                        데이터 초기화
+                    <button type="button" id="calendarBtn" class="floating-action-btn">
+                        📅 캘린더
                     </button>
                 </div>
                 <!-- 모드 인디케이터 제거됨 -->
@@ -167,6 +162,9 @@
         </div>
     </div>
 
+    <!-- 구글 캘린더 사이드바 (google-calendar.js에서 동적 생성) -->
+    <!-- 사이드바는 google-calendar.js에서 자동으로 생성됩니다 -->
+
     <!-- 모달 -->
     <div id="modal" class="modal">
         <div class="modal-content">
@@ -175,28 +173,6 @@
         </div>
     </div>
     
-    <!-- 캘린더 모달 -->
-    <div id="calendarModal" class="modal" style="display: none;">
-        <div class="modal-content calendar-modal">
-            <div class="modal-header">
-                <h2>업무 캘린더</h2>
-                <span class="close" onclick="closeCalendarModal()">&times;</span>
-            </div>
-            <div class="modal-body">
-                <iframe id="calendarIframe" 
-                        src="https://calendar.google.com/calendar/embed?height=600&wkst=2&bgcolor=%23ffffff&ctz=Asia%2FSeoul&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=1&showCalendars=1&showTz=0&mode=MONTH&src=ko.south_korea%23holiday%40group.v.calendar.google.com&color=%230B8043" 
-                        style="border: 0; width: 100%; height: 500px;" 
-                        frameborder="0" 
-                        scrolling="yes">
-                </iframe>
-            </div>
-            <div class="modal-footer">
-                <input type="text" id="calendarUrl" placeholder="구글 캘린더 URL 또는 이메일">
-                <button onclick="updateCalendar()" class="btn-primary">적용</button>
-                <button onclick="closeCalendarModal()" class="btn-secondary">닫기</button>
-            </div>
-        </div>
-    </div>
     
 
     <!-- JavaScript -->
@@ -207,7 +183,6 @@
     <script src="/js/realtime-sync.js"></script>
     <script src="/js/auth.js"></script>
     <script src="/js/utils.js"></script>
-    <script src="/js/calendar.js"></script>
     <script src="/js/map.js"></script>
     <script src="/js/mode-click-handler.js"></script>
     <script src="/js/mode-search-handler.js"></script>
@@ -220,8 +195,6 @@
     <script src="/js/search.js"></script>
     <script src="/js/memo-markers.js"></script>
     <script src="/js/backup-manager.js"></script>
-    <script src="/js/calendar-widget.js"></script>
-    <script src="/js/sheets.js"></script>
     <script src="/js/mobile-handler.js"></script>
     <!-- data-persistence-manager.js 비활성화 - LocalStorage와 Supabase만 사용 -->
     <!-- <script src="/js/data-persistence-manager.js"></script> -->
@@ -231,6 +204,7 @@
     <script src="/js/realtime-autosave.js"></script>
     <script src="/js/debug-save-system.js"></script>
     <script src="/js/app-init.js"></script>
+    <script src="/js/google-calendar.js"></script>
     <script>
         // 모드 전환 버튼 이벤트 리스너
         document.addEventListener('DOMContentLoaded', function() {
@@ -331,9 +305,6 @@
                     <button onclick="runManualBackup()" class="backup-action-btn">
                         💾 수동 백업 실행
                     </button>
-                    <button onclick="exportToGoogleSheets()" class="backup-action-btn">
-                        📊 Google Sheets로 내보내기
-                    </button>
                 </div>
                 <hr style="margin: 20px 0;">
                 <h3>백업 목록</h3>
@@ -376,20 +347,25 @@
             }
         }
 
-        // Google Sheets로 내보내기
-        async function exportToGoogleSheets() {
-            if (confirm('Google Sheets로 데이터를 내보내시겠습니까?')) {
-                try {
-                    const result = await window.BackupManager.exportToGoogleSheets();
-                    if (result.success) {
-                        alert('Google Sheets로 성공적으로 내보냈습니다.\n' + result.spreadsheetUrl);
-                    } else {
-                        alert('Google Sheets 내보내기에 실패했습니다.');
-                    }
-                } catch (error) {
-                    console.error('Google Sheets 내보내기 실패:', error);
-                    alert('Google Sheets 내보내기에 실패했습니다.');
-                }
+        // TODO(human)
+        // 로그아웃 처리 함수
+        function handleLogout() {
+            if (confirm('로그아웃 하시겠습니까?')) {
+                // 세션 정보 삭제
+                localStorage.removeItem('isLoggedIn');
+                localStorage.removeItem('userInfo');
+                localStorage.removeItem('authProvider');
+                localStorage.removeItem('loginToken');
+                localStorage.removeItem('tokenExpiry');
+                localStorage.removeItem('devLoginToken');
+                localStorage.removeItem('devLoginExpiry');
+
+                // 구글 관련 토큰도 정리 (있을 경우)
+                localStorage.removeItem('googleToken');
+                localStorage.removeItem('accessToken');
+
+                // 로그인 페이지로 이동
+                window.location.href = '/login.html';
             }
         }
 

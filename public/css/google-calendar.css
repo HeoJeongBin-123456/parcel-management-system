@@ -1,0 +1,341 @@
+/* 구글 캘린더 사이드바 스타일 */
+.google-calendar-sidebar {
+    position: fixed;
+    top: 60px;
+    right: -500px;
+    width: 500px;
+    height: calc(100vh - 60px);
+    background: #ffffff;
+    box-shadow: -4px 0 24px rgba(0, 0, 0, 0.1);
+    transition: right 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.google-calendar-sidebar.open {
+    right: 0;
+}
+
+/* 캘린더 헤더 */
+.google-calendar-header {
+    padding: 20px;
+    background: linear-gradient(135deg, #f8f9fa, #ffffff);
+    border-bottom: 1px solid #e0e0e0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.google-calendar-header h2 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #1a73e8;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.google-calendar-close-btn {
+    background: transparent;
+    border: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    cursor: pointer;
+    color: #5f6368;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    font-size: 1.5rem;
+}
+
+.google-calendar-close-btn:hover {
+    background: #f1f3f4;
+    color: #202124;
+}
+
+/* 캘린더 내용 영역 */
+.google-calendar-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* 설정 영역 */
+.calendar-settings {
+    padding: 16px 20px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.setting-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.setting-group label {
+    font-size: 0.9rem;
+    color: #5f6368;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.setting-group input {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid #dadce0;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    transition: border-color 0.2s;
+}
+
+.setting-group input:focus {
+    outline: none;
+    border-color: #1a73e8;
+    box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.1);
+}
+
+.setting-group button {
+    padding: 8px 16px;
+    background: #1a73e8;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.setting-group button:hover {
+    background: #1557b0;
+}
+
+/* 설정 도움말 */
+.setting-help {
+    margin-top: 8px;
+}
+
+.setting-help details {
+    background: white;
+    border: 1px solid #dadce0;
+    border-radius: 4px;
+    padding: 8px 12px;
+}
+
+.setting-help summary {
+    cursor: pointer;
+    font-size: 0.85rem;
+    color: #5f6368;
+    font-weight: 500;
+    user-select: none;
+}
+
+.setting-help summary:hover {
+    color: #1a73e8;
+}
+
+.setting-help ol {
+    margin: 12px 0 4px 20px;
+    padding: 0;
+    font-size: 0.85rem;
+    color: #5f6368;
+    line-height: 1.6;
+}
+
+.setting-help li {
+    margin-bottom: 6px;
+}
+
+/* iframe 컨테이너 */
+.calendar-iframe-container {
+    flex: 1;
+    padding: 20px;
+    background: #ffffff;
+    overflow: auto;
+}
+
+.calendar-iframe-container iframe {
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* 캘린더 액션 */
+.calendar-actions {
+    padding: 16px 20px;
+    background: #f8f9fa;
+    border-top: 1px solid #e0e0e0;
+    text-align: center;
+}
+
+.calendar-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 20px;
+    background: white;
+    color: #1a73e8;
+    border: 1px solid #dadce0;
+    border-radius: 4px;
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.calendar-link:hover {
+    background: #f8f9fa;
+    border-color: #1a73e8;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* 토스트 알림 */
+.google-calendar-toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: #323232;
+    color: white;
+    padding: 12px 20px;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: all 0.3s ease;
+    z-index: 10000;
+    pointer-events: none;
+}
+
+.google-calendar-toast.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* 캘린더 버튼 스타일 (floating button) */
+#calendarBtn {
+    transition: all 0.3s ease;
+}
+
+#calendarBtn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(26, 115, 232, 0.3);
+}
+
+/* 반응형 디자인 */
+@media (max-width: 768px) {
+    .google-calendar-sidebar {
+        width: 100%;
+        right: -100%;
+    }
+
+    .google-calendar-sidebar.open {
+        right: 0;
+    }
+
+    .calendar-iframe-container {
+        padding: 10px;
+    }
+
+    .setting-group {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .setting-group label {
+        margin-bottom: 4px;
+    }
+
+    .setting-group button {
+        width: 100%;
+        margin-top: 8px;
+    }
+}
+
+/* 로딩 상태 */
+.calendar-loading {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 400px;
+    color: #5f6368;
+}
+
+.calendar-loading::after {
+    content: '캘린더 로딩 중...';
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+/* 구글 캘린더 iframe 스타일 보정 */
+.calendar-iframe-container iframe {
+    background: white;
+    min-height: 600px;
+}
+
+/* 다크 모드 감지 시 */
+@media (prefers-color-scheme: dark) {
+    .google-calendar-sidebar {
+        background: #202124;
+    }
+
+    .google-calendar-header {
+        background: linear-gradient(135deg, #303134, #202124);
+        border-bottom-color: #5f6368;
+    }
+
+    .google-calendar-header h2 {
+        color: #8ab4f8;
+    }
+
+    .google-calendar-close-btn {
+        color: #e8eaed;
+    }
+
+    .google-calendar-close-btn:hover {
+        background: #303134;
+    }
+
+    .calendar-settings {
+        background: #303134;
+        border-bottom-color: #5f6368;
+    }
+
+    .setting-group label {
+        color: #e8eaed;
+    }
+
+    .setting-group input {
+        background: #202124;
+        border-color: #5f6368;
+        color: #e8eaed;
+    }
+
+    .setting-help details {
+        background: #202124;
+        border-color: #5f6368;
+    }
+
+    .setting-help summary {
+        color: #e8eaed;
+    }
+
+    .calendar-actions {
+        background: #303134;
+        border-top-color: #5f6368;
+    }
+}
