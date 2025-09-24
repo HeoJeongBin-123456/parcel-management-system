@@ -406,7 +406,6 @@ function formatJibun(properties) {
     
     let dong = '';
     let jibun = '';
-    let san = '';
     
     // 디버깅용 로그
     // console.log('📋 formatJibun 입력 properties:', properties);
@@ -473,15 +472,7 @@ function formatJibun(properties) {
         }
     }
     
-    // 4. 산 여부 확인
-    if (properties.SAN || properties.san) {
-        const sanValue = properties.SAN || properties.san;
-        if (sanValue === '2' || sanValue === 2 || sanValue === '산') {
-            san = '산';
-        }
-    }
-    
-    // 5. 본번-부번 추출 (지번이 아직 없는 경우에만)
+    // 4. 본번-부번 추출 (지번이 아직 없는 경우에만)
     if (!jibun) {
         const bonbun = properties.BONBUN || properties.bonbun || 
                        properties.JIBUN_BONBUN || properties.jibun_bonbun || '';
@@ -503,7 +494,7 @@ function formatJibun(properties) {
         }
     }
     
-    // 6. 여전히 지번이 없으면 ADDR에서 추출
+    // 5. 여전히 지번이 없으면 ADDR에서 추출
     if (!jibun && (properties.ADDR || properties.addr)) {
         const fullAddr = properties.ADDR || properties.addr;
         // 숫자와 하이픈 패턴 찾기 (예: 344, 344-1, 344-12)
@@ -513,23 +504,27 @@ function formatJibun(properties) {
         }
     }
     
+    // 6. PNU 기반 지번 추출 (최후의 수단)
+    if ((!jibun || jibun === '0') && (properties.PNU || properties.pnu)) {
+        const rawPnu = String(properties.PNU || properties.pnu).replace(/[^0-9]/g, '');
+        if (rawPnu.length >= 19) {
+            const bonbunFromPnu = rawPnu.slice(11, 15);
+            const bubunFromPnu = rawPnu.slice(15, 19);
+            const bonbunNum = parseInt(bonbunFromPnu, 10);
+            const bubunNum = parseInt(bubunFromPnu, 10);
+
+            if (!Number.isNaN(bonbunNum) && bonbunNum > 0) {
+                jibun = String(bonbunNum);
+                if (!Number.isNaN(bubunNum) && bubunNum > 0) {
+                    jibun += '-' + bubunNum;
+                }
+            }
+        }
+    }
+    
     // 7. 지번에서 한글(지목: 단, 답, 전 등) 제거
     if (jibun) {
         jibun = jibun.replace(/[가-힣]/g, '').trim();
-    }
-    
-    // 8. PNU에서 동 정보 추출 시도 (최후의 수단)
-    if (!dong && (properties.PNU || properties.pnu)) {
-        const pnu = properties.PNU || properties.pnu;
-        // PNU는 일반적으로 법정동코드(10자리) + 구분(1) + 본번(4) + 부번(4) 형태
-        // 하지만 동 이름은 포함하지 않으므로 이 방법은 제한적
-        
-        // ADDR이나 다른 필드에서 시군구 정보와 함께 사용
-        if (properties.SGG_NM || properties.sgg_nm) {
-            // 시군구명이 있으면 그것을 참고
-            const sgg = properties.SGG_NM || properties.sgg_nm;
-            // 종로구 -> 종로, 강남구 -> 강남 등으로 간략화는 하지 않음
-        }
     }
     
     // console.log('🏠 추출 결과 - 동:', dong || '없음', ', 지번:', jibun || '없음');
@@ -537,29 +532,17 @@ function formatJibun(properties) {
     // console.log('   ADDR 필드:', properties.ADDR || properties.addr);
     }
     
-    // 최종 포맷팅
+    // 최종 포맷팅 (산/지목 정보 제거, 동 + 숫자 패턴 유지)
     let result = '';
-    if (dong) {
+    if (dong && jibun) {
+        result = `${dong} ${jibun}`;
+    } else if (dong) {
         result = dong;
-        if (san) {
-            result += ' ' + san;
-        }
-        if (jibun) {
-            result += ' ' + jibun;
-        }
     } else if (jibun) {
-        // 동 정보가 없으면 지번만이라도 표시
-        if (san) {
-            result = san + ' ' + jibun;
-        } else {
-            result = jibun;
-        }
-    } else {
-        // 아무 정보도 없으면 빈 문자열
-        result = '';
+        result = jibun;
     }
     
-    return result;
+    return result.trim();
 }
 
 // 주소 포맷팅
@@ -1241,9 +1224,33 @@ function removeParcelFromAllStorage(primaryPnu, options = {}) {
     return totalRemoved;
 }
 
+/**
+ * 삭제된 필지 목록 초기화 (디버깅용)
+ */
+function clearAllDeletedParcels() {
+    try {
+        localStorage.removeItem('deletedParcels');
+        console.log('✅ 모든 삭제 기록이 초기화되었습니다.');
+        return true;
+    } catch (error) {
+        console.error('❌ 삭제 기록 초기화 실패:', error);
+        return false;
+    }
+}
+
+/**
+ * 삭제된 필지 목록 크기 확인
+ */
+function getDeletedParcelsCount() {
+    const deleted = getDeletedParcels();
+    return deleted.length;
+}
+
 // 전역으로 노출
 window.getDeletedParcels = getDeletedParcels;
 window.addToDeletedParcels = addToDeletedParcels;
 window.removeFromDeletedParcels = removeFromDeletedParcels;
 window.isParcelDeleted = isParcelDeleted;
 window.removeParcelFromAllStorage = removeParcelFromAllStorage;
+window.clearAllDeletedParcels = clearAllDeletedParcels;
+window.getDeletedParcelsCount = getDeletedParcelsCount;

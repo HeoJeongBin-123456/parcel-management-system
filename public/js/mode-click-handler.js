@@ -3,6 +3,8 @@
  * 필지 클릭, 색칠, 정보 저장 등 클릭 모드만의 로직 처리
  */
 
+/* global displayParcelInfo */
+
 // Geometry 중심점 계산 함수
 function getGeometryCenter(geometry) {
     if (!geometry) {
@@ -74,6 +76,12 @@ let clickModeDebounceTimer = null;
  */
 function setupClickModeEventListeners() {
     if (!window.mapClick) return;
+
+    if (window.__clickModeListenersInitialized) {
+        console.log('🎯 클릭 모드 이벤트 리스너가 이미 설정되어 있습니다.');
+        return;
+    }
+    window.__clickModeListenersInitialized = true;
 
     console.log('🎯 클릭 모드 이벤트 리스너 설정');
 
@@ -152,6 +160,18 @@ async function getParcelInfoViaProxyForClickMode(lat, lng) {
         if (features && features.length > 0) {
             const feature = features[0];
                 const pnu = feature.properties.PNU || feature.properties.pnu;
+
+                // 삭제된 필지인지 확인
+                const deletedParcels = window.getDeletedParcels ? window.getDeletedParcels() : [];
+                console.log('📋 삭제된 필지 목록:', deletedParcels);
+                console.log('🔍 현재 필지 PNU:', pnu);
+                if (deletedParcels.includes(pnu)) {
+                    console.log(`♻️ 삭제된 필지(${pnu})를 클릭으로 복원 시도`);
+                    if (typeof window.removeFromDeletedParcels === 'function') {
+                        window.removeFromDeletedParcels(pnu);
+                    }
+                }
+
                 const parcelData = {
                     pnu: pnu,  // PNU를 최상위에 추가
                     properties: feature.properties,
@@ -313,7 +333,6 @@ async function drawClickModeParcelPolygon(parcelData, isRestored = false) {
  */
 async function toggleClickModeParcelSelection(parcel, polygon) {
     const pnu = parcel.properties.PNU || parcel.properties.pnu;
-    const jibun = formatJibun(parcel.properties);
 
     console.log(`🖱️ 클릭 모드 필지 선택: ${pnu}`);
 
@@ -325,16 +344,6 @@ async function toggleClickModeParcelSelection(parcel, polygon) {
 
     // UI 업데이트
     updateParcelFormForClickMode(parcel);
-}
-
-/**
- * 🎨 클릭 모드 색상 적용
- */
-async function applyClickModeColor(parcelData, polygon) {
-    const currentColor = getCurrentSelectedColor();
-    if (!currentColor) return;
-
-    await applyClickModeColorToParcel(parcelData, currentColor, polygon);
 }
 
 /**
@@ -388,36 +397,106 @@ async function saveClickModeParcelData(parcelData) {
     const pnu = parcelData.properties.PNU || parcelData.properties.pnu;
 
     try {
-        // Supabase 저장 (새로운 스키마 필드 포함)
+        const savedData = JSON.parse(localStorage.getItem('parcelData') || '[]');
+        const existingIndex = savedData.findIndex(item => item.pnu === pnu);
+        const existingEntry = existingIndex >= 0 ? savedData[existingIndex] : null;
+
+        let clickParcelList = [];
+        let existingClickIndex = -1;
+        let existingClickEntry = null;
+        if (typeof window.getClickParcelData === 'function') {
+            clickParcelList = window.getClickParcelData();
+            existingClickIndex = clickParcelList.findIndex(item => item.pnu === pnu);
+            existingClickEntry = existingClickIndex >= 0 ? clickParcelList[existingClickIndex] : null;
+        }
+
+        const selectString = (...values) => {
+            for (const value of values) {
+                if (typeof value === 'string' && value.trim() !== '') {
+                    return value.trim();
+                }
+            }
+            return '';
+        };
+
+        const coalesceNumber = (...values) => {
+            for (const value of values) {
+                if (value !== undefined && value !== null && value !== '') {
+                    const numeric = typeof value === 'number' ? value : parseFloat(value);
+                    if (!Number.isNaN(numeric)) {
+                        return numeric;
+                    }
+                }
+            }
+            return null;
+        };
+
+        const mergedProperties = {
+            ...(existingEntry?.properties || existingClickEntry?.properties || {}),
+            ...(parcelData.properties || {})
+        };
+        const mergedGeometry = parcelData.geometry || existingEntry?.geometry || existingClickEntry?.geometry || null;
+
+        let lat = coalesceNumber(parcelData.lat, existingEntry?.lat, existingClickEntry?.lat);
+        let lng = coalesceNumber(parcelData.lng, existingEntry?.lng, existingClickEntry?.lng);
+
+        if ((lat === null || lng === null) && mergedGeometry) {
+            const [centerLng, centerLat] = getGeometryCenter(mergedGeometry);
+            if ((centerLat || centerLat === 0) && (centerLng || centerLng === 0)) {
+                lat = coalesceNumber(centerLat, lat);
+                lng = coalesceNumber(centerLng, lng);
+            }
+        }
+
+        const baseData = existingEntry ? { ...existingEntry } : existingClickEntry ? { ...existingClickEntry } : {};
+
+        const mergedParcel = {
+            ...baseData,
+            ...parcelData,
+            pnu: pnu,
+            properties: mergedProperties,
+            geometry: mergedGeometry,
+            lat: lat,
+            lng: lng,
+            memo: selectString(parcelData.memo, baseData.memo, existingClickEntry?.memo),
+            ownerName: selectString(parcelData.ownerName, baseData.ownerName, existingClickEntry?.ownerName),
+            ownerAddress: selectString(parcelData.ownerAddress, baseData.ownerAddress, existingClickEntry?.ownerAddress),
+            ownerContact: selectString(parcelData.ownerContact, baseData.ownerContact, existingClickEntry?.ownerContact),
+            color: parcelData.color ?? baseData.color ?? null,
+            source: 'click',
+            mode: 'click',
+            parcel_type: baseData.parcel_type || parcelData.parcel_type || 'click',
+            updatedAt: Date.now()
+        };
+
+        const jibun = selectString(
+            formatJibun(mergedProperties),
+            parcelData.parcelNumber,
+            baseData.parcelNumber,
+            existingClickEntry?.parcelNumber
+        );
+
+        mergedParcel.parcelNumber = jibun;
+        mergedParcel.parcel_name = selectString(mergedParcel.parcel_name, jibun);
+
+        // Supabase 저장 (병합 데이터 사용)
         if (window.SupabaseManager) {
-            const jibun = formatJibun(parcelData.properties);
             await window.SupabaseManager.saveParcel(pnu, {
-                parcelNumber: jibun,         // 🔺 supabase-config.js와 호환
+                parcelNumber: jibun,
                 parcel_name: jibun,
-                data: parcelData,
-                geometry: parcelData.geometry,
-                source: 'click',            // 🆕 기존 호환용
-                mode: 'click',              // 🆕 기존 호환용
-                mode_source: 'click',       // 🆕 새 스키마: 생성 모드
-                current_mode: 'click',      // 🆕 새 스키마: 현재 활성 모드
-                color: parcelData.color,
+                data: mergedParcel,
+                geometry: mergedParcel.geometry,
+                source: 'click',
+                mode: 'click',
+                mode_source: 'click',
+                current_mode: 'click',
+                color: mergedParcel.color,
                 created_at: new Date().toISOString()
             });
         }
 
-        // LocalStorage 백업 - pnu를 포함한 완전한 데이터 구조 저장
-        const savedData = JSON.parse(localStorage.getItem('parcelData') || '[]');
-        const saveData = {
-            pnu: pnu,
-            properties: parcelData.properties,
-            geometry: parcelData.geometry,
-            color: parcelData.color,
-            source: 'click',
-            mode: 'click',
-            updatedAt: Date.now()
-        };
+        const saveData = { ...mergedParcel };
 
-        const existingIndex = savedData.findIndex(item => item.pnu === pnu);
         if (existingIndex >= 0) {
             savedData[existingIndex] = saveData;
         } else {
@@ -426,8 +505,85 @@ async function saveClickModeParcelData(parcelData) {
 
         localStorage.setItem('parcelData', JSON.stringify(savedData));
 
+        if (typeof window.setClickParcelDataToStorage === 'function') {
+            if (existingClickIndex >= 0) {
+                clickParcelList[existingClickIndex] = {
+                    ...clickParcelList[existingClickIndex],
+                    ...saveData
+                };
+            } else {
+                clickParcelList.push({ ...saveData });
+            }
+
+            window.setClickParcelDataToStorage(clickParcelList);
+        }
+
+        if (clickModeParcelData) {
+            const existingParcelData = clickModeParcelData.get(pnu) || {};
+            clickModeParcelData.set(pnu, {
+                ...existingParcelData,
+                ...saveData
+            });
+        }
+
+        if (window.clickParcels) {
+            const entry = window.clickParcels.get(pnu) || {};
+            window.clickParcels.set(pnu, {
+                ...entry,
+                parcel: {
+                    ...(entry.parcel || {}),
+                    ...saveData
+                },
+                data: {
+                    ...(entry.data || {}),
+                    ...saveData
+                },
+                color: saveData.color ?? entry.color ?? null
+            });
+        }
+
+        if (window.selectedParcel) {
+            const selectedPnu = window.selectedParcel.pnu || window.selectedParcel.properties?.PNU || window.selectedParcel.properties?.pnu;
+            if (selectedPnu === pnu) {
+                window.selectedParcel = {
+                    ...window.selectedParcel,
+                    ...saveData
+                };
+            }
+        }
+
+        if (window.currentSelectedParcel) {
+            const currentPnu = window.currentSelectedParcel.pnu || window.currentSelectedParcel.properties?.PNU || window.currentSelectedParcel.properties?.pnu;
+            if (currentPnu === pnu) {
+                window.currentSelectedParcel = {
+                    ...window.currentSelectedParcel,
+                    ...saveData
+                };
+            }
+        }
+
+        if (Array.isArray(window.parcelsData)) {
+            const parcelsIndex = window.parcelsData.findIndex(item => item.pnu === pnu || item.id === pnu);
+            if (parcelsIndex >= 0) {
+                window.parcelsData[parcelsIndex] = {
+                    ...window.parcelsData[parcelsIndex],
+                    ...saveData
+                };
+            } else if (saveData.pnu) {
+                window.parcelsData.push({ ...saveData });
+            }
+        } else if (saveData.pnu) {
+            window.parcelsData = [{ ...saveData }];
+        }
+
+        Object.assign(parcelData, saveData);
+        parcelData.properties = mergedProperties;
+        parcelData.geometry = mergedGeometry;
+        if (lat !== null) parcelData.lat = lat;
+        if (lng !== null) parcelData.lng = lng;
+
         // 색상 정보 저장
-        ParcelColorStorage.setHex(pnu, parcelData.color);
+        ParcelColorStorage.setHex(pnu, saveData.color);
 
         // 삭제 목록에서 제거 (재색칠 = 활성화)
         if (window.removeFromDeletedParcels) {
@@ -588,7 +744,6 @@ async function handleClickModeLeftClick(lat, lng) {
 
     try {
         // 먼저 클릭한 위치에 이미 필지가 있는지 확인
-        const clickedPoint = new naver.maps.LatLng(lat, lng);
         let existingPNU = null;
         let existingPolygon = null;
         let existingParcelData = null;
@@ -693,44 +848,280 @@ async function handleClickModeLeftClick(lat, lng) {
 }
 
 /**
- * 🗑️ 클릭 모드 오른쪽 클릭 처리 (삭제)
+ * 🧭 클릭 모드에서 좌표로 필지 찾기
  */
-async function handleClickModeRightClick(lat, lng) {
-    console.log('🗑️ 클릭 모드 오른쪽 클릭: 삭제 처리');
+function findClickModeParcelAtLocation(lat, lng) {
+    if (!window.isPointInPolygon) {
+        console.warn('⚠️ 클릭 모드: isPointInPolygon 헬퍼를 찾을 수 없습니다.');
+        return null;
+    }
+
+    if (window.clickParcels && window.clickParcels.size > 0) {
+        for (const [pnu, info] of window.clickParcels) {
+            const polygon = info?.polygon;
+            if (!polygon || !polygon.getMap) {
+                continue;
+            }
+
+            if (!polygon.getMap()) {
+                continue;
+            }
+
+            const paths = typeof polygon.getPaths === 'function' ? polygon.getPaths() : null;
+            if (!paths) {
+                continue;
+            }
+
+            let path = null;
+            if (typeof paths.getLength === 'function' && paths.getLength() > 0) {
+                path = paths.getAt(0);
+            } else if (paths.length > 0) {
+                path = paths[0];
+            }
+
+            if (path && window.isPointInPolygon(lat, lng, path)) {
+                return {
+                    pnu,
+                    polygon,
+                    parcel: info.parcel || info.data || clickModeParcelData.get(pnu) || null
+                };
+            }
+        }
+    }
+
+    for (const [pnu, polygon] of clickModePolygons) {
+        if (!polygon || !polygon.getMap || !polygon.getMap()) {
+            continue;
+        }
+
+        const paths = typeof polygon.getPaths === 'function' ? polygon.getPaths() : null;
+        if (!paths) {
+            continue;
+        }
+
+        let path = null;
+        if (typeof paths.getLength === 'function' && paths.getLength() > 0) {
+            path = paths.getAt(0);
+        } else if (paths.length > 0) {
+            path = paths[0];
+        }
+
+        if (path && window.isPointInPolygon(lat, lng, path)) {
+            return {
+                pnu,
+                polygon,
+                parcel: clickModeParcelData.get(pnu) || null
+            };
+        }
+    }
+
+    return null;
+}
+
+/**
+ * 🧼 클릭 모드 필지 색상만 제거
+ */
+async function clearClickModeParcelColor(pnu, parcelContext = {}) {
+    const polygon = parcelContext.polygon || (window.clickParcels?.get(pnu)?.polygon) || clickModePolygons.get(pnu) || null;
+
+    if (polygon && typeof polygon.setOptions === 'function') {
+        polygon.setOptions({
+            fillColor: 'transparent',
+            fillOpacity: 0,
+            strokeColor: 'transparent',
+            strokeOpacity: 0,
+            strokeWeight: 0
+        });
+    }
+
+    const storedEntry = window.clickParcels ? window.clickParcels.get(pnu) : null;
+    const storedParcelData = parcelContext.parcel || parcelContext.data || clickModeParcelData.get(pnu) || storedEntry?.parcel || storedEntry?.data || null;
+
+    let normalizedParcel = null;
+    if (storedParcelData) {
+        normalizedParcel = {
+            ...storedParcelData,
+            color: 'transparent',
+            updatedAt: Date.now()
+        };
+
+        if (!normalizedParcel.properties && storedEntry?.parcel?.properties) {
+            normalizedParcel.properties = storedEntry.parcel.properties;
+        }
+        if (!normalizedParcel.geometry && storedEntry?.parcel?.geometry) {
+            normalizedParcel.geometry = storedEntry.parcel.geometry;
+        }
+
+        const properties = normalizedParcel.properties || {};
+        const resolvedPnu = properties.PNU || properties.pnu || normalizedParcel.pnu || pnu;
+        normalizedParcel.pnu = resolvedPnu;
+        if (!normalizedParcel.properties) {
+            normalizedParcel.properties = {};
+        }
+        if (!normalizedParcel.properties.PNU) {
+            normalizedParcel.properties.PNU = resolvedPnu;
+        }
+        if (!normalizedParcel.properties.pnu) {
+            normalizedParcel.properties.pnu = resolvedPnu;
+        }
+    }
+
+    if (window.clickParcels) {
+        const existingEntry = window.clickParcels.get(pnu) || {};
+        window.clickParcels.set(pnu, {
+            ...existingEntry,
+            polygon: polygon || existingEntry.polygon || null,
+            parcel: normalizedParcel || existingEntry.parcel || existingEntry.data || null,
+            data: normalizedParcel || existingEntry.data || existingEntry.parcel || null,
+            color: 'transparent'
+        });
+    }
+
+    if (normalizedParcel) {
+        clickModeParcelData.set(pnu, normalizedParcel);
+    } else if (clickModeParcelData.has(pnu)) {
+        const existing = {
+            ...clickModeParcelData.get(pnu),
+            color: 'transparent',
+            updatedAt: Date.now()
+        };
+        clickModeParcelData.set(pnu, existing);
+        normalizedParcel = existing;
+    }
 
     try {
-        // 클릭한 위치의 필지 찾기
-        const clickedPoint = new naver.maps.LatLng(lat, lng);
-        let targetPNU = null;
-        let targetPolygon = null;
+        ParcelColorStorage.remove(pnu);
+    } catch (error) {
+        console.warn('⚠️ ParcelColorStorage에서 색상 제거 실패:', error);
+    }
 
-        // 저장된 모든 폴리곤 확인
-        for (const [pnu, polygon] of clickModePolygons) {
-            if (polygon && polygon.getMap()) {
-                const paths = polygon.getPaths();
-                const path = paths.getAt(0);
-
-                // 폴리곤 내부 클릭 확인 - 자체 구현 함수 사용
-                if (window.isPointInPolygon && window.isPointInPolygon(lat, lng, path)) {
-                    targetPNU = pnu;
-                    targetPolygon = polygon;
-                    break;
+    // clickParcelData 업데이트
+    if (typeof window.getClickParcelData === 'function' && typeof window.setClickParcelDataToStorage === 'function') {
+        try {
+            const clickData = window.getClickParcelData();
+            let updated = false;
+            const refreshed = clickData.map(item => {
+                if ((item.pnu && item.pnu === pnu) || (item.properties?.PNU === pnu) || (item.properties?.pnu === pnu)) {
+                    updated = true;
+                    return {
+                        ...item,
+                        color: 'transparent'
+                    };
                 }
+                return item;
+            });
+            if (updated) {
+                window.setClickParcelDataToStorage(refreshed);
             }
+        } catch (error) {
+            console.warn('⚠️ clickParcelData 색상 초기화 실패:', error);
         }
+    }
 
-        // 필지를 찾았으면 삭제
-        if (targetPNU && targetPolygon) {
-            const confirmDelete = confirm('이 필지를 삭제하시겠습니까?');
-            if (confirmDelete) {
-                await deleteClickModeParcel(targetPNU, targetPolygon);
-                console.log(`✅ 클릭 모드 필지 삭제 완료: ${targetPNU}`);
+    // parcelData 업데이트
+    try {
+        const raw = localStorage.getItem('parcelData');
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            let dirty = false;
+            const updatedParcels = parsed.map(item => {
+                if ((item.pnu && item.pnu === pnu) || (item.properties?.PNU === pnu) || (item.properties?.pnu === pnu)) {
+                    dirty = true;
+                    const next = {
+                        ...item,
+                        color: 'transparent'
+                    };
+                    if (next.data && typeof next.data === 'object') {
+                        next.data = { ...next.data, color: 'transparent' };
+                    }
+                    return next;
+                }
+                return item;
+            });
+            if (dirty) {
+                localStorage.setItem('parcelData', JSON.stringify(updatedParcels));
             }
-        } else {
-            console.log('⚠️ 클릭한 위치에 필지가 없습니다.');
         }
     } catch (error) {
-        console.error('❌ 클릭 모드 삭제 실패:', error);
+        console.warn('⚠️ parcelData 색상 초기화 실패:', error);
+    }
+
+    if (typeof window.getClickParcelColors === 'function' && typeof window.saveClickParcelColors === 'function') {
+        try {
+            const colors = window.getClickParcelColors();
+            if (colors && Object.prototype.hasOwnProperty.call(colors, pnu)) {
+                delete colors[pnu];
+                window.saveClickParcelColors(colors);
+            }
+        } catch (error) {
+            console.warn('⚠️ 클릭 필지 색상 캐시 제거 실패:', error);
+        }
+    }
+
+    if (normalizedParcel && window.SupabaseManager && typeof window.SupabaseManager.saveParcel === 'function') {
+        try {
+            const jibun = formatJibun(normalizedParcel.properties || {});
+            await window.SupabaseManager.saveParcel(pnu, {
+                parcelNumber: jibun,
+                parcel_name: jibun,
+                data: normalizedParcel,
+                geometry: normalizedParcel.geometry,
+                source: 'click',
+                mode: 'click',
+                mode_source: 'click',
+                current_mode: 'click',
+                color: null,
+                updated_at: new Date().toISOString()
+            });
+        } catch (error) {
+            console.warn('⚠️ Supabase 색상 초기화 실패:', error);
+        }
+    }
+
+    if (window.parcelManager && typeof window.parcelManager.renderParcelList === 'function') {
+        try {
+            window.parcelManager.renderParcelList();
+        } catch (error) {
+            console.warn('⚠️ 필지 목록 갱신 실패:', error);
+        }
+    }
+
+    if (normalizedParcel && window.currentSelectedPNU === pnu) {
+        updateParcelFormForClickMode(normalizedParcel);
+    }
+
+    if (window.autoSaveEnabled && typeof window.triggerAutoSave === 'function') {
+        try {
+            window.triggerAutoSave('parcel_color_clear');
+        } catch (error) {
+            console.warn('⚠️ 자동 저장 트리거 실패:', error);
+        }
+    }
+}
+
+/**
+ * 🗑️ 클릭 모드 오른쪽 클릭 처리 (색상 제거)
+ */
+async function handleClickModeRightClick(lat, lng) {
+    console.log('🧼 클릭 모드 오른쪽 클릭: 색상 제거 처리');
+
+    try {
+        const target = findClickModeParcelAtLocation(lat, lng);
+
+        if (!target) {
+            console.log('⚠️ 클릭한 위치에 색칠된 필지가 없습니다.');
+            return;
+        }
+
+        const confirmClear = confirm('이 필지의 색상을 지우시겠습니까?');
+        if (!confirmClear) {
+            return;
+        }
+
+        await clearClickModeParcelColor(target.pnu, target);
+        console.log(`✅ 클릭 모드 필지 색상 제거 완료: ${target.pnu}`);
+    } catch (error) {
+        console.error('❌ 클릭 모드 색상 제거 실패:', error);
     }
 }
 
