@@ -12,6 +12,8 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@eslint/json": "^0.13.2",
+    "@eslint/markdown": "^7.3.0",
     "@playwright/test": "^1.55.0",
     "eslint": "^9"
   },

@@ -834,7 +834,6 @@ async function applyColorToParcel(parcel, color) {
         if (window.SupabaseManager && window.SupabaseManager.isConnected) {
             try {
                 const parcelToSave = {
-                    id: pnu,
                     pnu: pnu,
                     color: newColor,
                     is_colored: true,

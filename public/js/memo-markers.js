@@ -702,11 +702,13 @@ class MemoMarkerManager {
 
         console.log('📍 메모 마커 클릭:', parcelData.parcelNumber);
 
-        // 선택적: 해당 필지로 지도 이동
+        // 해당 필지로 지도 이동 (줌 레벨은 변경하지 않음)
         const { lat, lng } = this.getParcelCoordinates(parcelData);
         if (lat && lng) {
+            // 현재 줌 레벨 유지하며 중심점만 이동
             window.map.setCenter(new naver.maps.LatLng(lat, lng));
-            window.map.setZoom(18);
+            // setZoom을 제거하여 현재 줌 레벨 유지
+            console.log('📍 마커 위치로 이동 (줌 유지)');
         }
     }
 

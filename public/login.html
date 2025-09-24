@@ -5,9 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>네이버 지도 필지 관리 - 로그인</title>
 
-    <!-- Google Sign-In API -->
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
-
     <style>
         * {
             margin: 0;
@@ -48,42 +45,67 @@
             color: #64748b;
         }
 
-        /* Google Sign-In 영역 */
-        .google-signin-area {
+        /* 로그인 폼 영역 */
+        .login-form-area {
             margin: 2rem 0;
             padding: 1.5rem 0;
             border-top: 1px solid #e2e8f0;
             border-bottom: 1px solid #e2e8f0;
         }
-        .signin-label {
+        .form-label {
             font-size: 0.9rem;
             color: #475569;
             margin-bottom: 1rem;
             display: block;
-        }
-        #googleSigninDiv {
-            display: flex;
-            justify-content: center;
-            margin: 1rem 0;
-        }
-
-        /* 혜택 리스트 */
-        .benefits {
-            margin: 1.5rem 0;
             text-align: left;
         }
-        .benefit-item {
-            display: flex;
-            align-items: center;
-            margin: 0.8rem 0;
-            font-size: 0.9rem;
-            color: #475569;
+        .password-input {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            font-size: 1rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            transition: all 0.3s ease;
         }
-        .benefit-item::before {
-            content: '✓';
-            margin-right: 0.8rem;
-            color: #10b981;
-            font-weight: bold;
+        .password-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        .login-btn {
+            width: 100%;
+            padding: 0.875rem;
+            font-size: 1rem;
+            font-weight: 600;
+            color: #fff;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .login-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+        .login-btn:active {
+            transform: translateY(0);
+        }
+
+        /* 정보 안내 */
+        .info-text {
+            margin: 1.5rem 0;
+            padding: 1rem;
+            background: #f8fafc;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            color: #64748b;
+        }
+        .info-text strong {
+            color: #334155;
+            display: block;
+            margin-bottom: 0.5rem;
         }
 
         /* 개발자 모드 버튼 */
@@ -111,27 +133,28 @@
             border-color: rgba(255,255,255,0.5);
         }
 
-        /* 로딩 스피너 */
-        .loading-spinner {
-            display: none;
-            width: 40px;
-            height: 40px;
-            border: 4px solid #f3f4f6;
-            border-top: 4px solid #667eea;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 2rem auto;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
         /* 에러 메시지 */
         .error-message {
             display: none;
             background: #fef2f2;
             color: #dc2626;
+            padding: 0.75rem;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            margin: 1rem 0;
+            animation: shake 0.5s;
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+            20%, 40%, 60%, 80% { transform: translateX(5px); }
+        }
+
+        /* 성공 메시지 */
+        .success-message {
+            display: none;
+            background: #f0fdf4;
+            color: #16a34a;
             padding: 0.75rem;
             border-radius: 8px;
             font-size: 0.9rem;
@@ -146,154 +169,101 @@
             <p>네이버 지도 기반 스마트 필지 관리</p>
         </div>
 
-        <div class="google-signin-area">
-            <span class="signin-label">Google 계정으로 로그인하세요</span>
-            <div id="googleSigninDiv"></div>
-            <div class="loading-spinner" id="loadingSpinner"></div>
+        <div class="login-form-area">
+            <form id="loginForm" onsubmit="return handleLogin(event)">
+                <label class="form-label">비밀번호를 입력하세요</label>
+                <input
+                    type="password"
+                    id="passwordInput"
+                    class="password-input"
+                    placeholder="비밀번호 입력"
+                    autocomplete="current-password"
+                    required
+                >
+                <button type="submit" class="login-btn">로그인</button>
+            </form>
             <div class="error-message" id="errorMessage"></div>
+            <div class="success-message" id="successMessage"></div>
         </div>
 
-        <div class="benefits">
-            <div class="benefit-item">Google Calendar 자동 연동</div>
-            <div class="benefit-item">Google Drive 자동 백업</div>
-            <div class="benefit-item">Google Sheets 데이터 동기화</div>
-            <div class="benefit-item">모든 기기에서 접속 가능</div>
-        </div>
-
-        <div class="dev-mode-area">
-            <button class="dev-mode-btn" id="devModeBtn">개발자 모드로 들어가기 (로그인 건너뛰기)</button>
-        </div>
     </div>
 
     <script>
-        // Google Sign-In 초기화
+        // 페이지 로드 시 포커스
         window.onload = function() {
-            google.accounts.id.initialize({
-                client_id: '1006610066972-6nqfmk0634uuv70f8gov48q37p06nvl3.apps.googleusercontent.com',
-                callback: handleGoogleSignIn,
-                auto_select: false,
-                cancel_on_tap_outside: true,
-            });
-
-            // Google Sign-In 버튼 렌더링
-            google.accounts.id.renderButton(
-                document.getElementById('googleSigninDiv'),
-                {
-                    theme: 'filled_blue',
-                    size: 'large',
-                    type: 'standard',
-                    text: 'sign_in_with',
-                    shape: 'rectangular',
-                    logo_alignment: 'left',
-                    width: 280
-                }
-            );
+            document.getElementById('passwordInput').focus();
         };
 
-        // Google 로그인 성공 핸들러
-        function handleGoogleSignIn(response) {
-            console.log('Google Sign-In 성공');
+        // 로그인 처리
+        function handleLogin(event) {
+            event.preventDefault();
 
-            // 로딩 표시
-            document.getElementById('loadingSpinner').style.display = 'block';
-            document.getElementById('googleSigninDiv').style.display = 'none';
+            const password = document.getElementById('passwordInput').value;
+            const correctPassword = '123456';
 
-            // JWT 토큰 디코드
-            const credential = response.credential;
-            const payload = parseJwt(credential);
+            // 비밀번호 검증
+            if (password === correctPassword) {
+                // 로그인 성공
+                showSuccess('로그인 성공! 잠시 후 이동합니다...');
 
-            // 사용자 정보 저장
-            const userInfo = {
-                email: payload.email,
-                name: payload.name,
-                picture: payload.picture,
-                sub: payload.sub
-            };
+                // 사용자 정보 저장
+                const userInfo = {
+                    email: 'user@test.com',
+                    name: '관리자',
+                    loginTime: new Date().toISOString(),
+                    authType: 'password'
+                };
 
-            // localStorage에 저장
-            localStorage.setItem('googleToken', credential);
-            localStorage.setItem('userInfo', JSON.stringify(userInfo));
-            localStorage.setItem('authProvider', 'google');
-            localStorage.setItem('tokenExpiry', new Date(payload.exp * 1000).getTime().toString());
+                // 세션 정보 저장
+                localStorage.setItem('isLoggedIn', 'true');
+                localStorage.setItem('userInfo', JSON.stringify(userInfo));
+                localStorage.setItem('authProvider', 'password');
+                localStorage.setItem('loginToken', 'pwd_' + Date.now());
+                localStorage.setItem('tokenExpiry', new Date(Date.now() + 24 * 60 * 60 * 1000).getTime().toString());
 
-            // 토큰을 액세스 토큰으로 교환 (OAuth2 플로우)
-            requestAccessToken(userInfo);
-        }
+                // 메인 페이지로 이동
+                setTimeout(() => {
+                    window.location.href = '/index.html';
+                }, 1000);
+            } else {
+                // 로그인 실패
+                showError('비밀번호가 틀렸습니다.');
+                document.getElementById('passwordInput').value = '';
+                document.getElementById('passwordInput').focus();
+            }
 
-        // JWT 토큰 파싱
-        function parseJwt(token) {
-            const base64Url = token.split('.')[1];
-            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-            const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
-                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-            }).join(''));
-            return JSON.parse(jsonPayload);
-        }
-
-        // OAuth2 액세스 토큰 요청
-        function requestAccessToken(userInfo) {
-            // Google OAuth2 토큰 클라이언트 초기화
-            const tokenClient = google.accounts.oauth2.initTokenClient({
-                client_id: '1006610066972-6nqfmk0634uuv70f8gov48q37p06nvl3.apps.googleusercontent.com',
-                scope: [
-                    'https://www.googleapis.com/auth/spreadsheets',
-                    'https://www.googleapis.com/auth/calendar',
-                    'https://www.googleapis.com/auth/drive.file'
-                ].join(' '),
-                callback: (tokenResponse) => {
-                    // 액세스 토큰 저장
-                    localStorage.setItem('accessToken', tokenResponse.access_token);
-                    localStorage.setItem('tokenExpiry',
-                        new Date(Date.now() + tokenResponse.expires_in * 1000).getTime().toString()
-                    );
-
-                    console.log('액세스 토큰 획득 성공');
-
-                    // 메인 페이지로 이동
-                    setTimeout(() => {
-                        window.location.href = '/index.html';
-                    }, 500);
-                },
-                error_callback: (error) => {
-                    console.error('토큰 요청 실패:', error);
-                    showError('로그인 중 오류가 발생했습니다. 다시 시도해주세요.');
-                }
-            });
-
-            // 토큰 요청
-            tokenClient.requestAccessToken();
+            return false;
         }
 
         // 에러 메시지 표시
         function showError(message) {
             const errorDiv = document.getElementById('errorMessage');
+            const successDiv = document.getElementById('successMessage');
+            successDiv.style.display = 'none';
             errorDiv.textContent = message;
             errorDiv.style.display = 'block';
-            document.getElementById('loadingSpinner').style.display = 'none';
-            document.getElementById('googleSigninDiv').style.display = 'flex';
+
+            // 3초 후 자동으로 숨기기
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 3000);
         }
 
-        // 개발자 모드 버튼 클릭
-        document.getElementById('devModeBtn').addEventListener('click', () => {
-            console.log('개발자 모드 활성화');
+        // 성공 메시지 표시
+        function showSuccess(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            const successDiv = document.getElementById('successMessage');
+            errorDiv.style.display = 'none';
+            successDiv.textContent = message;
+            successDiv.style.display = 'block';
+        }
 
-            // 개발자 모드 토큰 생성
-            const devToken = 'dev_' + Date.now();
-            const devUserInfo = {
-                email: 'developer@test.com',
-                name: '개발자',
-                picture: '',
-                sub: 'dev_user'
-            };
 
-            // 개발자 모드 정보 저장
-            localStorage.setItem('devLoginToken', devToken);
-            localStorage.setItem('devLoginExpiry', new Date(Date.now() + 24 * 60 * 60 * 1000).getTime().toString());
-            localStorage.setItem('userInfo', JSON.stringify(devUserInfo));
-            localStorage.setItem('authProvider', 'dev');
-
-            // 메인 페이지로 이동
-            window.location.href = '/index.html';
+        // Enter 키로 로그인
+        document.getElementById('passwordInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                handleLogin(e);
+            }
         });
     </script>
 </body>

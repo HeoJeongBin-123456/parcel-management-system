@@ -8,6 +8,7 @@ class SupabaseManager {
         this.isConnected = false;
         this.initializationAttempts = 0;
         this.maxInitializationAttempts = 5; // 최대 시도 제한
+        this.supportsIsColored = true; // Supabase parcels 테이블에 is_colored 컬럼 존재 여부
         
         // 무한 루프 방지 강화
         this._loadCallCount = 0;
@@ -29,21 +30,26 @@ class SupabaseManager {
         this.initializationAttempts++;
 
         try {
-            // Supabase 클라이언트 초기화
-            if (typeof window !== 'undefined' && window.supabase) {
-                this.supabase = window.supabase.createClient(this.supabaseUrl, this.supabaseKey);
-                
+            // Supabase 클라이언트 초기화 - 글로벌 supabase 객체 확인
+            if (typeof window !== 'undefined' && (window.supabase || window.supabaseClient || typeof supabase !== 'undefined')) {
+                // Supabase 라이브러리가 로드된 경우
+                const supabaseLib = window.supabase || window.supabaseClient || supabase;
+                this.supabase = supabaseLib.createClient(this.supabaseUrl, this.supabaseKey);
+
+                // window.supabase에도 할당하여 호환성 유지
+                window.supabase = this.supabase;
+
                 // 테이블 존재 여부 확인
                 await this.checkAndCreateTables();
-                
+
                 this.isConnected = true;
                 console.log('✅ Supabase 연결 완료 - 시도:', this.initializationAttempts);
-                
+
                 this.updateConnectionStatus(true);
                 return; // 성공 시 즉시 반환
             } else {
                 console.log(`⏳ Supabase 라이브러리 로드 대기 중... (${this.initializationAttempts}/${this.maxInitializationAttempts})`);
-                
+
                 // 🎯 지수적 백오프 적용 - 재시도 간격 증가
                 const delay = Math.min(1000 * Math.pow(2, this.initializationAttempts - 1), 5000);
                 setTimeout(() => this.initializeSupabase(), delay);
@@ -77,6 +83,31 @@ class SupabaseManager {
             }
 
             console.log('✅ parcels 테이블 확인 완료');
+
+            // is_colored 컬럼 지원 여부 확인 (스키마 불일치 대응)
+            try {
+                const { error: isColoredError } = await this.supabase
+                    .from('parcels')
+                    .select('is_colored')
+                    .limit(1);
+
+                if (isColoredError) {
+                    if (['PGRST204', '42703'].includes(isColoredError.code) ||
+                        (isColoredError.message && isColoredError.message.includes('is_colored'))) {
+                        this.supportsIsColored = false;
+                        console.log('ℹ️ is_colored 컬럼이 없어 Supabase 저장 시 해당 필드를 제외합니다.');
+                        console.log('   필요 시 supabase_schema.sql의 컬럼 추가 스크립트를 적용하세요.');
+                    } else {
+                        console.log('📝 is_colored 컬럼 확인 중 예상치 못한 오류 - 계속 진행:', isColoredError.message);
+                    }
+                } else {
+                    this.supportsIsColored = true;
+                    console.log('✅ is_colored 컬럼 확인 완료');
+                }
+            } catch (isColoredCheckError) {
+                this.supportsIsColored = false;
+                console.log('📝 is_colored 컬럼 확인 실패 - 필드를 제외하고 진행:', isColoredCheckError.message);
+            }
 
             // Phase 1: parcel_type 필드 확인 및 추가 안내
             try {
@@ -273,6 +304,45 @@ class SupabaseManager {
         return sessionId;
     }
 
+    isValidUUID(value) {
+        if (typeof value !== 'string') {
+            return false;
+        }
+        const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
+        return uuidRegex.test(value.trim());
+    }
+
+    prepareParcelRecord(parcel) {
+        const sanitized = { ...parcel };
+
+        if (sanitized.id && !this.isValidUUID(sanitized.id)) {
+            delete sanitized.id;
+        }
+
+        if (!this.supportsIsColored) {
+            delete sanitized.is_colored;
+        }
+
+        if (sanitized.color) {
+            const appliedAt = new Date().toISOString();
+            if (!sanitized.color_info) {
+                sanitized.color_info = {
+                    color: sanitized.color,
+                    isColored: parcel && parcel.is_colored !== undefined ? !!parcel.is_colored : true,
+                    applied_at: appliedAt
+                };
+            } else if (sanitized.color_info.color !== sanitized.color) {
+                sanitized.color_info = {
+                    ...sanitized.color_info,
+                    color: sanitized.color,
+                    applied_at: appliedAt
+                };
+            }
+        }
+
+        return sanitized;
+    }
+
     async saveParcels(parcels) {
         if (!this.isConnected) {
             localStorage.setItem('parcels', JSON.stringify(parcels));
@@ -281,13 +351,16 @@ class SupabaseManager {
         }
 
         try {
+            const parcelsArray = Array.isArray(parcels) ? parcels : [parcels];
+            const sanitizedParcels = parcelsArray.map(parcel => this.prepareParcelRecord(parcel));
+
             const { data, error } = await this.supabase
                 .from('parcels')
-                .upsert(parcels, { onConflict: 'pnu' });
+                .upsert(sanitizedParcels, { onConflict: 'pnu' });
 
             if (error) throw error;
 
-            console.log('✅ Supabase 저장 완료:', data?.length || parcels.length, '개 필지');
+            console.log('✅ Supabase 저장 완료:', data?.length || sanitizedParcels.length, '개 필지');
             return true;
         } catch (error) {
             console.error('❌ Supabase 저장 실패:', error);
@@ -383,13 +456,14 @@ class SupabaseManager {
 
         try {
             const parcelsArray = Array.isArray(parcelData) ? parcelData : [parcelData];
+            const sanitizedParcels = parcelsArray.map(parcel => this.prepareParcelRecord(parcel));
             const { data, error } = await this.supabase
                 .from('parcels')
-                .upsert(parcelsArray, { onConflict: 'pnu' });
+                .upsert(sanitizedParcels, { onConflict: 'pnu' });
 
             if (error) throw error;
 
-            console.log('✅ 클릭 필지 Supabase 저장 완료:', parcelsArray.length, '개');
+            console.log('✅ 클릭 필지 Supabase 저장 완료:', sanitizedParcels.length, '개');
             return true;
         } catch (error) {
             console.error('❌ 클릭 필지 Supabase 저장 실패:', error);
@@ -444,13 +518,14 @@ class SupabaseManager {
 
         try {
             const parcelsArray = Array.isArray(parcelData) ? parcelData : [parcelData];
+            const sanitizedParcels = parcelsArray.map(parcel => this.prepareParcelRecord(parcel));
             const { data, error } = await this.supabase
                 .from('parcels')
-                .upsert(parcelsArray, { onConflict: 'pnu' });
+                .upsert(sanitizedParcels, { onConflict: 'pnu' });
 
             if (error) throw error;
 
-            console.log('✅ 검색 필지 Supabase 저장 완료:', parcelsArray.length, '개');
+            console.log('✅ 검색 필지 Supabase 저장 완료:', sanitizedParcels.length, '개');
             return true;
         } catch (error) {
             console.error('❌ 검색 필지 Supabase 저장 실패:', error);
@@ -727,7 +802,7 @@ class SupabaseManager {
                     polygon_data: polygonData,
                     updated_at: new Date().toISOString()
                 })
-                .eq('id', parcelId);
+                .eq('pnu', parcelId);
 
             if (error) throw error;
             console.log('✅ 필지 폴리곤 저장 완료:', parcelId);
@@ -753,7 +828,7 @@ class SupabaseManager {
                     marker_type: markerType,
                     updated_at: new Date().toISOString()
                 })
-                .eq('id', parcelId);
+                .eq('pnu', parcelId);
 
             if (error) throw error;
             console.log('✅ 필지 마커 저장 완료:', parcelId, markerType);
@@ -772,20 +847,32 @@ class SupabaseManager {
         }
 
         try {
+            const appliedAt = new Date().toISOString();
+            const payload = {
+                color_info: {
+                    ...(colorInfo || {}),
+                    applied_at: appliedAt
+                },
+                updated_at: appliedAt
+            };
+
+            const colorHex = colorInfo && (colorInfo.color || colorInfo.selectedColor);
+            if (colorHex) {
+                payload.color = colorHex;
+                payload.color_info.color = colorHex;
+            }
+
+            if (this.supportsIsColored) {
+                payload.is_colored = true;
+            }
+
             const { data, error } = await this.supabase
                 .from('parcels')
-                .update({
-                    color_info: {
-                        ...colorInfo,
-                        applied_at: new Date().toISOString()
-                    },
-                    is_colored: true,
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', parcelId);
+                .update(payload)
+                .eq('pnu', parcelId);
 
             if (error) throw error;
-            console.log('✅ 필지 색상 저장 완료:', parcelId, colorInfo.color);
+            console.log('✅ 필지 색상 저장 완료:', parcelId, colorHex);
             return true;
         } catch (error) {
             console.error('❌ 필지 색상 저장 실패:', error);
@@ -815,7 +902,7 @@ class SupabaseManager {
             const { data, error } = await this.supabase
                 .from('parcels')
                 .update(updateData)
-                .eq('id', parcelId);
+                .eq('pnu', parcelId);
 
             if (error) throw error;
             console.log('✅ 필지 고급 정보 저장 완료:', parcelId);
@@ -1128,8 +1215,8 @@ class SupabaseManager {
 
             const candidateList = Array.from(candidateSet);
             const deletedRows = [];
-            // pnu_code 컬럼은 실제로 존재하지 않으므로 제거
-            const targetColumns = ['id', 'parcel_name'];
+            // pnu를 반드시 포함해야 함 - 필지의 주요 식별자
+            const targetColumns = ['pnu', 'id', 'parcel_name'];
 
             for (const column of targetColumns) {
                 try {
@@ -1137,7 +1224,7 @@ class SupabaseManager {
                         .from('parcels')
                         .delete()
                         .in(column, candidateList)
-                        .select('id, parcel_name');
+                        .select('id, pnu, parcel_name');
 
                     if (error) {
                         if (error.code && error.code !== 'PGRST116') {
@@ -1155,11 +1242,13 @@ class SupabaseManager {
             }
 
             if (deletedRows.length === 0) {
-                console.warn('⚠️ Supabase에서 삭제된 필지가 없습니다.', candidateList);
+                console.warn('⚠️ Supabase에서 삭제된 필지가 없습니다. 대상 후보:', candidateList);
                 // 이미 삭제되었거나 존재하지 않는 경우도 성공으로 처리
                 console.log('📝 필지가 이미 삭제되었거나 존재하지 않음 - 정상 처리');
                 return true; // false 대신 true 반환 (이미 없으면 삭제 목적 달성)
             }
+
+            console.log(`✅ Supabase에서 ${deletedRows.length}개 필지 삭제 성공:`, deletedRows.map(r => r.pnu || r.id));
 
             const polygonCandidates = new Set(candidateList);
             deletedRows.forEach(row => {
@@ -1176,10 +1265,11 @@ class SupabaseManager {
 
             if (polygonCandidates.size > 0) {
                 const polygonList = Array.from(polygonCandidates);
+                // parcel_polygons 테이블도 parcel_id 또는 pnu로 삭제
                 const { error: polygonError } = await this.supabase
                     .from('parcel_polygons')
                     .delete()
-                    .in('pnu', polygonList);
+                    .or(`parcel_id.in.(${polygonList.map(id => `"${id}"`).join(',')}),pnu.in.(${polygonList.map(id => `"${id}"`).join(',')})`);
 
                 if (polygonError && polygonError.code !== 'PGRST116') {
                     console.error('❌ parcel_polygons 테이블 삭제 실패:', polygonError);

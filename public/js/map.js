@@ -272,6 +272,19 @@ async function initMap_DISABLED() {
             const lat = coord.lat();
             const lng = coord.lng();
             
+            const currentMode = (window.ModeManager && typeof window.ModeManager.getCurrentMode === 'function')
+                ? window.ModeManager.getCurrentMode()
+                : (window.currentMode || 'click');
+
+            if (currentMode === 'click') {
+                window.RightClickDebugger.log('EVENT', '클릭 모드 우클릭 - 기본 삭제 로직 건너뜀', {
+                    latitude: lat,
+                    longitude: lng
+                });
+                console.log('👉 우클릭 이벤트 (클릭 모드) - 기본 삭제 로직 생략');
+                return false;
+            }
+            
             // 디버깅 로그: 좌표 정보
             window.RightClickDebugger.log('COORDINATE', '클릭 좌표 추출 완료', {
                 latitude: lat,

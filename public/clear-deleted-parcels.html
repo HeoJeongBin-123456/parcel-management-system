@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>삭제된 필지 목록 초기화</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #1a73e8;
+            padding-bottom: 10px;
+        }
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            margin: 10px 5px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .btn-primary {
+            background: #1a73e8;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #1557b0;
+        }
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+        .btn-danger:hover {
+            background: #c82333;
+        }
+        .btn-info {
+            background: #17a2b8;
+            color: white;
+        }
+        .btn-info:hover {
+            background: #138496;
+        }
+        .status {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+        }
+        .status.info {
+            background: #e3f2fd;
+            border: 1px solid #90caf9;
+        }
+        .status.success {
+            background: #e8f5e9;
+            border: 1px solid #81c784;
+        }
+        .status.error {
+            background: #ffebee;
+            border: 1px solid #ef5350;
+        }
+        .log-area {
+            background: #263238;
+            color: #aed581;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 20px;
+        }
+        .log-line {
+            margin: 5px 0;
+        }
+        .log-line.success { color: #4caf50; }
+        .log-line.error { color: #f44336; }
+        .log-line.warning { color: #ff9800; }
+        .log-line.info { color: #2196f3; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 삭제된 필지 목록 관리 도구</h1>
+
+        <div class="status info" id="currentStatus">
+            로딩 중...
+        </div>
+
+        <div>
+            <h2>작업 선택</h2>
+
+            <button class="btn-info" onclick="checkStatus()">
+                📊 현재 상태 확인
+            </button>
+
+            <button class="btn-primary" onclick="clearDeletedParcels()">
+                ✅ 삭제 목록 초기화
+            </button>
+
+            <button class="btn-danger" onclick="clearAllData()">
+                ⚠️ 모든 데이터 초기화
+            </button>
+
+            <button class="btn-info" onclick="exportData()">
+                💾 데이터 백업
+            </button>
+        </div>
+
+        <div class="log-area" id="logArea"></div>
+    </div>
+
+    <script>
+        let logs = [];
+
+        function addLog(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] ${message}`;
+            logs.push({ message: logEntry, type });
+            updateLogArea();
+        }
+
+        function updateLogArea() {
+            const logArea = document.getElementById('logArea');
+            logArea.innerHTML = logs.map(log =>
+                `<div class="log-line ${log.type}">${log.message}</div>`
+            ).join('');
+            logArea.scrollTop = logArea.scrollHeight;
+        }
+
+        function updateStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('currentStatus');
+            statusDiv.className = `status ${type}`;
+            statusDiv.innerHTML = message;
+        }
+
+        // 현재 상태 확인
+        function checkStatus() {
+            addLog('========== 상태 확인 시작 ==========', 'info');
+
+            try {
+                // 1. 삭제된 필지 목록
+                const deleted = localStorage.getItem('deletedParcels');
+                const deletedList = deleted ? JSON.parse(deleted) : [];
+                addLog(`삭제된 필지: ${deletedList.length}개`, deletedList.length > 0 ? 'warning' : 'success');
+
+                if (deletedList.length > 0) {
+                    addLog(`예시: ${deletedList.slice(0, 3).join(', ')}...`, 'warning');
+                }
+
+                // 2. 저장된 필지 데이터
+                const parcelData = localStorage.getItem('parcelData');
+                const parcels = parcelData ? JSON.parse(parcelData) : [];
+                addLog(`저장된 필지: ${parcels.length}개`, 'info');
+
+                // 3. 클릭 모드 필지
+                const clickData = localStorage.getItem('clickParcelData');
+                const clickParcels = clickData ? JSON.parse(clickData) : [];
+                addLog(`클릭 모드 필지: ${clickParcels.length}개`, 'info');
+
+                // 4. 색상 데이터
+                const colors = localStorage.getItem('parcelColors');
+                const colorMap = colors ? JSON.parse(colors) : {};
+                addLog(`색상 적용 필지: ${Object.keys(colorMap).length}개`, 'info');
+
+                // 5. 전체 localStorage 크기
+                let totalSize = 0;
+                for (let key in localStorage) {
+                    totalSize += localStorage[key].length;
+                }
+                addLog(`전체 저장소 크기: ${(totalSize / 1024).toFixed(2)} KB`, 'info');
+
+                updateStatus(`
+                    <strong>현재 상태</strong><br>
+                    • 삭제된 필지: ${deletedList.length}개<br>
+                    • 저장된 필지: ${parcels.length}개<br>
+                    • 클릭 필지: ${clickParcels.length}개<br>
+                    • 색상 적용: ${Object.keys(colorMap).length}개
+                `, deletedList.length > 0 ? 'error' : 'success');
+
+                addLog('========== 상태 확인 완료 ==========', 'success');
+            } catch (error) {
+                addLog(`오류: ${error.message}`, 'error');
+                updateStatus('상태 확인 실패', 'error');
+            }
+        }
+
+        // 삭제 목록만 초기화
+        function clearDeletedParcels() {
+            if (!confirm('삭제된 필지 목록을 초기화하시겠습니까?\n모든 필지를 다시 생성할 수 있게 됩니다.')) {
+                return;
+            }
+
+            try {
+                addLog('========== 삭제 목록 초기화 ==========', 'info');
+
+                // 백업
+                const backup = localStorage.getItem('deletedParcels');
+                if (backup) {
+                    sessionStorage.setItem('deletedParcels_backup', backup);
+                    addLog('기존 데이터 백업 완료', 'success');
+                }
+
+                // 삭제
+                localStorage.removeItem('deletedParcels');
+                addLog('삭제 목록 제거 완료', 'success');
+
+                // 확인
+                const check = localStorage.getItem('deletedParcels');
+                if (!check) {
+                    addLog('✅ 초기화 성공!', 'success');
+                    updateStatus('삭제 목록이 초기화되었습니다. 페이지를 새로고침하세요.', 'success');
+                } else {
+                    addLog('❌ 초기화 실패', 'error');
+                    updateStatus('초기화 실패', 'error');
+                }
+
+                addLog('========== 작업 완료 ==========', 'success');
+
+                // 3초 후 메인 페이지로 이동
+                setTimeout(() => {
+                    if (confirm('메인 페이지로 이동하시겠습니까?')) {
+                        window.location.href = '/index.html';
+                    }
+                }, 2000);
+
+            } catch (error) {
+                addLog(`오류: ${error.message}`, 'error');
+                updateStatus('초기화 실패', 'error');
+            }
+        }
+
+        // 모든 데이터 초기화 (위험!)
+        function clearAllData() {
+            if (!confirm('⚠️ 경고: 모든 필지 데이터가 삭제됩니다!\n정말로 계속하시겠습니까?')) {
+                return;
+            }
+
+            if (!confirm('⚠️ 마지막 확인: 이 작업은 되돌릴 수 없습니다!\n모든 데이터가 삭제됩니다.')) {
+                return;
+            }
+
+            try {
+                addLog('========== 전체 초기화 시작 ==========', 'warning');
+
+                const keysToRemove = [
+                    'deletedParcels',
+                    'parcelData',
+                    'clickParcelData',
+                    'parcelColors',
+                    'parcels',
+                    'parcels_current_session',
+                    'markerStates'
+                ];
+
+                keysToRemove.forEach(key => {
+                    if (localStorage.getItem(key)) {
+                        localStorage.removeItem(key);
+                        addLog(`${key} 제거됨`, 'warning');
+                    }
+                });
+
+                addLog('✅ 모든 데이터 초기화 완료', 'success');
+                updateStatus('모든 데이터가 초기화되었습니다.', 'success');
+
+            } catch (error) {
+                addLog(`오류: ${error.message}`, 'error');
+                updateStatus('초기화 실패', 'error');
+            }
+        }
+
+        // 데이터 내보내기
+        function exportData() {
+            try {
+                const exportData = {
+                    timestamp: new Date().toISOString(),
+                    deletedParcels: JSON.parse(localStorage.getItem('deletedParcels') || '[]'),
+                    parcelData: JSON.parse(localStorage.getItem('parcelData') || '[]'),
+                    clickParcelData: JSON.parse(localStorage.getItem('clickParcelData') || '[]'),
+                    parcelColors: JSON.parse(localStorage.getItem('parcelColors') || '{}')
+                };
+
+                const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `parcel-backup-${Date.now()}.json`;
+                a.click();
+
+                addLog('✅ 데이터 백업 완료', 'success');
+                updateStatus('백업 파일이 다운로드되었습니다.', 'success');
+
+            } catch (error) {
+                addLog(`백업 실패: ${error.message}`, 'error');
+                updateStatus('백업 실패', 'error');
+            }
+        }
+
+        // 페이지 로드 시 상태 확인
+        window.onload = () => {
+            checkStatus();
+        };
+    </script>
+</body>
+</html>

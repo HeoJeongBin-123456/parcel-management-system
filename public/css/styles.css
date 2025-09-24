@@ -270,8 +270,8 @@ body {
 .search-input-container {
     position: absolute;
     top: 1.4rem;
-    left: calc(var(--sidebar-width-desktop, 350px) + 1.2rem);
-    right: 1.2rem;
+    left: calc(var(--sidebar-width-desktop, 350px) + 2rem);
+    right: 0.4rem;
     max-width: 720px;
     background: rgba(15, 23, 42, 0.75);
     border-radius: 999px;

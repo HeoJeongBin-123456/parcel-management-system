@@ -27,6 +27,15 @@ const GoogleAuth = {
     // 로그인 상태 확인
     isAuthenticated() {
         const authProvider = localStorage.getItem('authProvider');
+        const isLoggedIn = localStorage.getItem('isLoggedIn');
+
+        // 비밀번호 로그인 확인
+        if (authProvider === 'password' && isLoggedIn === 'true') {
+            const tokenExpiry = localStorage.getItem('tokenExpiry');
+            if (tokenExpiry && new Date().getTime() < parseInt(tokenExpiry)) {
+                return true;
+            }
+        }
 
         // 개발자 모드 확인
         if (authProvider === 'dev') {
@@ -105,6 +114,8 @@ const GoogleAuth = {
         localStorage.removeItem('devLoginToken');
         localStorage.removeItem('devLoginExpiry');
         localStorage.removeItem('authProvider');
+        localStorage.removeItem('isLoggedIn');
+        localStorage.removeItem('loginToken');
         console.log('🗑️ 만료된 토큰 삭제 완료');
     },
     
