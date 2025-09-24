@@ -1385,6 +1385,29 @@ async function saveClickParcelData() {
             };
         }
 
+        const isHandMode = window.currentMode === 'hand';
+
+        let effectiveColor = currentColor;
+        if (isHandMode) {
+            const selected = window.selectedParcel || window.currentSelectedParcel || {};
+            effectiveColor = selected.color || effectiveColor;
+
+            if (!effectiveColor && window.clickParcels && currentPNU) {
+                const entry = window.clickParcels.get(currentPNU);
+                if (entry) {
+                    effectiveColor = entry.color || entry.parcel?.color || entry.data?.color || effectiveColor;
+                }
+            }
+
+            if (!effectiveColor && typeof ParcelColorStorage !== 'undefined' && typeof ParcelColorStorage.getHex === 'function') {
+                effectiveColor = ParcelColorStorage.getHex(currentPNU) || null;
+            }
+
+            if (!effectiveColor) {
+                effectiveColor = null;
+            }
+        }
+
         const formData = {
             parcelNumber: parcelNumber,
             pnu: currentPNU,
@@ -1392,7 +1415,7 @@ async function saveClickParcelData() {
             ownerAddress: document.getElementById('ownerAddress').value,
             ownerContact: document.getElementById('ownerContact').value,
             memo: document.getElementById('memo').value,
-            color: currentColor,
+            color: effectiveColor,
             geometry: geometry,
             properties: properties,  // 🆕 drawClickModeParcelPolygon에서 필요
             timestamp: new Date().toISOString(),
@@ -2369,7 +2392,8 @@ async function removeParcelAtLocation(lat, lng) {
 
             // 3. 모든 저장소에서 완전 제거 (utils.js의 유틸 함수 사용)
             if (window.removeParcelFromAllStorage) {
-                await window.removeParcelFromAllStorage(pnu, { removeColor: true }); // 색상도 제거
+                // await 제거 - 이 함수는 동기 함수임
+                window.removeParcelFromAllStorage(pnu, { removeColor: true }); // 색상도 제거
                 console.log('✅ 모든 저장소에서 필지 완전 제거:', pnu);
             } else {
                 // 폴백: removeParcelFromAllStorage 함수가 없는 경우
@@ -2387,10 +2411,22 @@ async function removeParcelAtLocation(lat, lng) {
                 );
             }
 
-            // 5. 색상 정보도 완전 제거
+            // 5. 색상 정보도 완전 제거 - 더 철저한 삭제
             const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
-            delete parcelColors[pnu];
+            // PNU를 다양한 형태로 시도
+            const keysToDelete = [pnu, String(pnu), pnu.toString()];
+            let colorDeleted = false;
+            keysToDelete.forEach(key => {
+                if (parcelColors[key]) {
+                    delete parcelColors[key];
+                    colorDeleted = true;
+                    console.log(`🎨 parcelColors에서 ${key} 삭제`);
+                }
+            });
             localStorage.setItem('parcelColors', JSON.stringify(parcelColors));
+            if (colorDeleted) {
+                console.log('🎨 색상 정보도 함께 삭제 완료');
+            }
 
             // 5-1. clickParcels Map에서도 제거
             if (window.clickParcels && window.clickParcels.has(pnu)) {
@@ -2398,32 +2434,16 @@ async function removeParcelAtLocation(lat, lng) {
                 console.log('✅ clickParcels Map에서 제거:', pnu);
             }
 
-            // 6. Supabase에서도 삭제 (id로 삭제)
-            if (window.SupabaseManager && window.SupabaseManager.client) {
+            // 6. Supabase에서도 삭제 (deleteParcel 메서드 사용)
+            if (window.SupabaseManager && window.SupabaseManager.deleteParcel) {
                 try {
-                    // parcels 테이블에서 삭제 (id로 삭제)
-                    const { error } = await window.SupabaseManager.client
-                        .from('parcels')
-                        .delete()
-                        .eq('id', pnu);
-
-                    if (error) {
-                        console.warn('Supabase parcels 삭제 실패:', error);
-                    } else {
-                        console.log('☁️ Supabase parcels에서 삭제 완료');
-                    }
-
-                    // parcel_polygons 테이블에서도 삭제
-                    const { error: polyError } = await window.SupabaseManager.client
-                        .from('parcel_polygons')
-                        .delete()
-                        .eq('parcel_id', pnu);
-
-                    if (polyError) {
-                        console.warn('Supabase parcel_polygons 삭제 실패:', polyError);
-                    } else {
-                        console.log('☁️ Supabase parcel_polygons에서 삭제 완료');
-                    }
+                    // SupabaseManager.deleteParcel 메서드는 pnu, parcel_number, id 등 다양한 조건으로 삭제 시도
+                    await window.SupabaseManager.deleteParcel(pnu, {
+                        pnu: pnu,
+                        parcelNumber: data.data?.PNU || data.data?.parcelNumber,
+                        parcelName: data.data?.PNU || data.data?.parcelNumber
+                    });
+                    console.log('☁️ Supabase에서 필지 완전 삭제 완료:', pnu);
                 } catch (err) {
                     console.warn('Supabase 삭제 중 오류:', err);
                 }
@@ -2457,9 +2477,15 @@ async function removeParcelAtLocation(lat, lng) {
             }
 
             // 9. 삭제 추적 시스템에 추가 (새로고침 후 복원 방지)
+            console.log('🔍 삭제 추적 시스템 체크:', {
+                hasFunction: !!window.addToDeletedParcels,
+                pnu: pnu
+            });
             if (window.addToDeletedParcels) {
                 window.addToDeletedParcels(pnu);
                 console.log('🗑️ 우클릭 삭제 - 삭제 추적 목록에 추가:', pnu);
+            } else {
+                console.warn('⚠️ addToDeletedParcels 함수가 없습니다');
             }
 
             // 10. 실시간 동기화 트리거

@@ -455,13 +455,11 @@ class ModeManager {
                 if (mapMode === mode) {
                     switch(mode) {
                         case 'click':
+                        case 'hand':
                             container.style.cursor = 'crosshair';
                             break;
                         case 'search':
                             container.style.cursor = 'pointer';
-                            break;
-                        case 'hand':
-                            container.style.cursor = 'grab';
                             break;
                     }
                 }

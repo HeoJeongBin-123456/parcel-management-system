@@ -111,7 +111,7 @@ body.mode-hand #map-hand,
 body.mode-hand #map-hand *,
 body.mode-hand .map-instance,
 body.mode-hand .map-instance * {
-    cursor: grab !important;
+    cursor: default !important;
 }
 
 body.mode-hand #map:active,
@@ -119,7 +119,7 @@ body.mode-hand #map-hand:active,
 body.mode-hand #map-hand:active *,
 body.mode-hand .map-instance:active,
 body.mode-hand .map-instance:active * {
-    cursor: grabbing !important;
+    cursor: default !important;
 }
 
 body.mode-hand .interactive-elements {
