@@ -8,10 +8,10 @@
     "dev": "node server.js",
     "deploy": "vercel --prod",
     "deploy:preview": "vercel",
-    "postinstall": "npx playwright install chromium",
     "test": "playwright test",
     "test:fast": "playwright test --project=chromium --workers=1 --reporter=line",
     "test:ci": "playwright test --project=chromium --workers=1 --timeout=60000 --reporter=line",
+    "test:install": "npx playwright install chromium",
     "vercel:build": "echo 'Vercel build complete'",
     "vercel:dev": "vercel dev"
   },

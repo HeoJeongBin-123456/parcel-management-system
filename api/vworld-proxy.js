@@ -1,34 +1,27 @@
-// Vercel Edge Function for VWorld API proxy
-export const config = {
-  runtime: 'edge',
-  regions: ['icn1'], // 서울 리전
-};
+// Vercel Function for VWorld API proxy
+module.exports = async function handler(req, res) {
+  // CORS 헤더 설정
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-export default async function handler(req) {
-  const { searchParams } = new URL(req.url);
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
 
-  const lat = searchParams.get('lat');
-  const lng = searchParams.get('lng');
-  const apikey = searchParams.get('apikey') || process.env.VWORLD_API_KEY;
-  const format = searchParams.get('format') || 'json';
-  const crs = searchParams.get('crs') || 'EPSG:4326';
+  const { lat, lng, apikey, format = 'json', crs = 'EPSG:4326' } = req.query;
 
   if (!lat || !lng) {
-    return new Response(JSON.stringify({
+    return res.status(400).json({
       error: '위도와 경도가 필요합니다'
-    }), {
-      status: 400,
-      headers: {
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-cache',
-        'Access-Control-Allow-Origin': '*'
-      }
     });
   }
 
+  const apiKey = apikey || process.env.VWORLD_API_KEY;
+
   try {
     const params = new URLSearchParams({
-      key: apikey,
+      key: apiKey,
       point: `${lng},${lat}`,
       format,
       crs,
@@ -53,28 +46,14 @@ export default async function handler(req) {
 
     const data = await response.json();
 
-    return new Response(JSON.stringify(data), {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Cache-Control': 'public, s-maxage=300',
-        'Access-Control-Allow-Origin': '*',
-        'X-Cache-Status': 'edge'
-      }
-    });
+    res.setHeader('Cache-Control', 'public, s-maxage=300');
+    return res.status(200).json(data);
   } catch (error) {
     console.error('VWorld API 프록시 오류:', error);
 
-    return new Response(JSON.stringify({
+    return res.status(500).json({
       error: 'VWorld API 호출 실패',
       message: error.message
-    }), {
-      status: 500,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Cache-Control': 'no-cache'
-      }
     });
   }
-}
+};
