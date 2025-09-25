@@ -4,5 +4,14 @@
   Referrer-Policy: no-referrer-when-downgrade
   Permissions-Policy: geolocation=(self), microphone=()
 
+/index.html
+  Content-Type: text/html; charset=utf-8
+
+/*.css
+  Content-Type: text/css; charset=utf-8
+
+/*.js
+  Content-Type: application/javascript; charset=utf-8
+
 /api/*
   Access-Control-Allow-Origin: *
