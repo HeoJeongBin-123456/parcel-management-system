@@ -72,7 +72,19 @@ if (!window.vworldApi) {
             }
 
             const query = searchParams.toString();
-            const endpoint = query.length > 0 ? `/api/vworld?${query}` : '/api/vworld';
+
+            // 프록시 우선순위: Supabase Edge → Cloudflare Functions
+            const SUPABASE_URL_CANDIDATES = [
+                (window.SupabaseManager && window.SupabaseManager.supabaseUrl) || '',
+                'https://cqfszcbifonxpfasodto.supabase.co' // fallback to known project url
+            ].filter(Boolean);
+
+            let endpoint = '';
+            if (SUPABASE_URL_CANDIDATES.length) {
+                endpoint = `${SUPABASE_URL_CANDIDATES[0]}/functions/v1/vworld` + (query ? `?${query}` : '');
+            } else {
+                endpoint = query.length > 0 ? `/api/vworld?${query}` : '/api/vworld';
+            }
 
             let response = await fetch(endpoint, {
                 method: 'GET',
