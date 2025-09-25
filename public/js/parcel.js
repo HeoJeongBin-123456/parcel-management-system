@@ -747,7 +747,6 @@ function createPolygonFromParcel(parcel) {
 async function applyColorToParcel(parcel, color) {
     // 거리뷰 모드에서는 색상 칠하기 비활성화
     if (window.isStreetViewMode) {
-        console.log('🚶 거리뷰 모드에서는 색상 칠하기가 비활성화됩니다.');
         return;
     }
 
@@ -756,7 +755,6 @@ async function applyColorToParcel(parcel, color) {
 
     // 손 모드에서는 색상 적용 비활성화
     if (currentMode === 'hand') {
-        console.log('✋ 손 모드에서는 색상 적용이 비활성화됩니다.');
         return;
     }
 
@@ -903,12 +901,11 @@ async function applyColorToParcel(parcel, color) {
         });
         parcelData.color = newColor;
 
-        // 2. 🚀 성능 최적화: 비동기 큐잉 시스템으로 색상 저장
-        console.log('🎨 색상 적용:', pnu, newColor);
-
-        // 큐에 추가하여 백그라운드 저장 (UI 블로킹 없음)
-        queueColorSave(pnu, newColor, colorIndex);
-        console.log('📥 색상 저장 큐에 추가됨 (100ms 후 일괄 처리)');
+        // 2. 🚀 Optimistic UI: 즉시 UI 업데이트 후 비동기 저장
+        // UI는 즉시 변경되고, 저장은 백그라운드에서 처리
+        requestAnimationFrame(() => {
+            queueColorSave(pnu, newColor, colorIndex);
+        });
 
         // 3. LocalStorage 업데이트 - 모든 관련 키에서 업데이트
         const storageKeys = ['parcelData', 'clickParcelData', 'parcels', 'parcels_current_session'];
@@ -973,7 +970,7 @@ async function applyColorToParcel(parcel, color) {
             const mainSavedData = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEY) || '[]');
             mainSavedData.push(newParcelData);
             localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(mainSavedData));
-            console.log('✅ 새 필지 완전 데이터 저장 완료:', pnu, jibun);
+            // 새 필지 데이터 저장 완료
 
             // 모든 관련 키에 새로운 데이터 추가
             for (const key of ['clickParcelData', 'parcels', 'parcels_current_session']) {
@@ -983,7 +980,7 @@ async function applyColorToParcel(parcel, color) {
                     if (exists < 0) {
                         otherData.push(newParcelData);
                         localStorage.setItem(key, JSON.stringify(otherData));
-                        console.log(`✅ ${key}에도 새 필지 저장: ${pnu}`);
+                        // ${key}에도 새 필지 저장
                     }
                 }
             }

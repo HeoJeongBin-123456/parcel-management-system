@@ -62,7 +62,19 @@ class AppInitializer {
     async waitForDependencies() {
         console.log('⏳ 의존성 로딩 대기 중...');
 
+        // 🇺️ 네이버 지도 API 로드 대기
+        while (!window.naver || !window.naver.maps) {
+            console.log('🇺️ 네이버 지도 API 로듩 대기...');
+            await this.sleep(100);
+            if (++this.dependencyChecks > this.maxDependencyChecks) {
+                console.error('❌ 네이버 지도 API 로드 실패');
+                throw new Error('네이버 지도 API 로드 시간 초과');
+            }
+        }
+        console.log('✅ 네이버 지도 API 로드 완료');
+
         // 🗺️ 3-지도 시스템 로딩 대기 (제한적 체크)
+        this.dependencyChecks = 0; // 카운터 리셋
         while ((!window.mapClick || !window.mapSearch || !window.mapHand) && this.dependencyChecks < this.maxDependencyChecks) {
             console.log('🗺️ 3-지도 시스템 로딩 대기... (mapClick:', !!window.mapClick, ', mapSearch:', !!window.mapSearch, ', mapHand:', !!window.mapHand, ')');
             await this.sleep(500);
@@ -1527,8 +1539,9 @@ document.addEventListener('DOMContentLoaded', async function() {
             await window.appInitializer.initialize();
         }
 
-        // 클릭 모드 저장된 필지 복원
-        if (window.loadSavedClickModeParcels) {
+        // 클릭 모드 저장된 필지 복원 (중복 방지)
+        if (window.loadSavedClickModeParcels && !window.clickModeParcelsLoaded) {
+            window.clickModeParcelsLoaded = true;  // 먼저 플래그 설정
             await window.loadSavedClickModeParcels();
         }
     });
@@ -1544,7 +1557,7 @@ window.addEventListener('load', function() {
             await window.appInitializer.initialize();
         }
 
-        // 클릭 모드 저장된 필지 복원 (백업)
+        // 클릭 모드 저장된 필지 복원 (백업 - 이미 로드된 경우 스킵)
         if (window.loadSavedClickModeParcels && !window.clickModeParcelsLoaded) {
             window.clickModeParcelsLoaded = true;
             await window.loadSavedClickModeParcels();

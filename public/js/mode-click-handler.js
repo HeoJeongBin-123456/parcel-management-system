@@ -1433,17 +1433,18 @@ async function getParcelColorFromStorage(pnu) {
  * 📥 저장된 클릭 모드 필지 데이터 복원
  */
 async function loadSavedClickModeParcels() {
-    console.log('📥 클릭 모드 저장된 필지 복원 시작...');
-    console.error('🚨 [DEBUG] loadSavedClickModeParcels 함수 진입');
+    // 중복 실행 방지
+    if (window._loadingSavedClickModeParcels) {
+        return;
+    }
+    window._loadingSavedClickModeParcels = true;
 
     try {
-        console.error('🚨 [DEBUG] try 블록 진입');
-        console.log('🔍 LocalStorage 접근 시도...');
 
         // 삭제된 필지 목록 가져오기
         const deletedParcels = window.getDeletedParcels ? window.getDeletedParcels() : [];
         if (deletedParcels.length > 0) {
-            console.log(`🗑️ 삭제된 필지 ${deletedParcels.length}개는 복원하지 않음`);
+            // 삭제된 필지 스킵
         }
 
         // LocalStorage에서 데이터 로드 (clickParcelData 우선, parcelData 대체)
@@ -1458,7 +1459,7 @@ async function loadSavedClickModeParcels() {
         for (const parcel of clickParcels) {
             // isMinimalData 플래그가 있는 항목은 건너뛰기 (삭제된 정보)
             if (parcel.isMinimalData === true) {
-                console.log(`⏩ 최소 데이터 필지 복원 제외: ${parcel.pnu}`);
+                // 최소 데이터 필지 스킵
                 continue;
             }
 
@@ -1487,9 +1488,9 @@ async function loadSavedClickModeParcels() {
                         if (centerLng !== 0 && centerLat !== 0) {
                             parcel.lng = centerLng;
                             parcel.lat = centerLat;
-                            console.log(`📍 좌표 추출 성공: ${parcel.pnu} - lat:${parcel.lat}, lng:${parcel.lng}`);
+                            // 좌표 추출 성공
                         } else {
-                            console.warn(`⚠️ 좌표 추출 실패: ${parcel.pnu} - centerLng:${centerLng}, centerLat:${centerLat}`);
+                            // 좌표 추출 실패
                         }
                     }
                 }
@@ -1501,7 +1502,7 @@ async function loadSavedClickModeParcels() {
         for (const parcel of normalParcels) {
             // isMinimalData 플래그가 있는 항목은 건너뛰기 (삭제된 정보)
             if (parcel.isMinimalData === true) {
-                console.log(`⏩ 최소 데이터 필지 복원 제외: ${parcel.pnu}`);
+                // 최소 데이터 필지 스킵
                 continue;
             }
 
@@ -1510,10 +1511,10 @@ async function loadSavedClickModeParcels() {
             // 삭제된 필지 체크 - geometry가 있으면 색상/폴리곤 복원용으로 포함
             if (deletedParcels.includes(pnu)) {
                 if (parcel.geometry && parcel.color) {
-                    console.log(`🎨 삭제된 필지의 색상/폴리곤 복원: ${pnu}`);
+                    // 색상/폴리곤 복원
                     // geometry와 color만 있는 필지는 포함 (정보는 없지만 색상은 유지)
                 } else {
-                    console.log(`⏩ 삭제된 필지 복원 제외 (완전 삭제): ${pnu}`);
+                    // 완전 삭제된 필지 스킵
                     continue;
                 }
             }
@@ -1526,25 +1527,19 @@ async function loadSavedClickModeParcels() {
 
         const parcelColors = ParcelColorStorage.getAll();
 
-        console.log(`📦 LocalStorage에서 ${savedParcels.length}개 필지 로드 (clickParcelData: ${clickParcels.length}, parcelData: ${normalParcels.length})`);
+        // LocalStorage에서 필지 로드 완료
 
         let restoredCount = 0;
         let skippedCount = 0;
 
         for (const parcelData of savedParcels) {
-            console.log(`🔍 필지 확인 중:`, {
-                pnu: parcelData.pnu,
-                mode: parcelData.mode,
-                source: parcelData.source,
-                hasGeometry: !!parcelData.geometry,
-                color: parcelData.color
-            });
+            // 필지 확인 중
 
             // 클릭 모드에서 생성된 필지만 복원
             if (parcelData.mode === 'click' || parcelData.source === 'click') {
                 const pnu = parcelData.properties?.PNU || parcelData.properties?.pnu || parcelData.pnu;
 
-                console.log(`✅ 클릭 모드 필지 발견: ${pnu}`);
+                // 클릭 모드 필지 발견
 
                 if (pnu && parcelData.geometry) {
                     // 저장된 색상 정보를 parcelData에 추가
@@ -1554,7 +1549,7 @@ async function loadSavedClickModeParcels() {
                         : parcelData.color;
                     if (savedColor) {
                         parcelData.color = savedColor;
-                        console.log(`🎨 필지 ${pnu}의 저장된 색상 복원: ${savedColor}`);
+                        // 저장된 색상 복원
                     }
 
                     // drawClickModeParcelPolygon이 properties.PNU를 기대하므로 데이터 구조 조정
@@ -1568,11 +1563,11 @@ async function loadSavedClickModeParcels() {
                     };
 
                     // 폴리곤 그리기 (색상 정보가 포함된 parcelData 전달)
-                    console.log(`🎯 drawClickModeParcelPolygon 호출: ${pnu}, isRestored=true`);
+                    // drawClickModeParcelPolygon 호출
                     const polygon = await drawClickModeParcelPolygon(structuredData, true);
 
                     if (polygon) {
-                        console.log(`✅ 폴리곤 생성 성공: ${pnu}`);
+                        // 폴리곤 생성 성공
                         // 색상은 이미 drawClickModeParcelPolygon에서 적용됨
 
                         // clickParcels Map에 추가 (중요!)
@@ -1623,20 +1618,25 @@ async function loadSavedClickModeParcels() {
                         }
                     }
                 } else {
-                    console.log(`⚠️ 필지 복원 조건 불충족: pnu=${pnu}, hasGeometry=${!!parcelData.geometry}`);
+                    // 필지 복원 조건 불충족
                 }
             } else {
                 skippedCount++;
-                console.log(`⏩ 클릭 모드가 아닌 필지 건너뜀: mode=${parcelData.mode}, source=${parcelData.source}`);
+                // 클릭 모드가 아닌 필지 건너뜀
             }
         }
 
-        console.log(`📥 클릭 모드 필지 복원 완료: ${restoredCount}개 복원, ${skippedCount}개 건너뜀`);
+        if (restoredCount > 0) {
+            console.log(`✅ ${restoredCount}개 필지 복원 완료`);
+        }
         return restoredCount;
 
     } catch (error) {
         console.error('❌ 클릭 모드 필지 복원 실패:', error);
         return 0;
+    } finally {
+        // 중복 실행 방지 플래그 해제
+        window._loadingSavedClickModeParcels = false;
     }
 }
 

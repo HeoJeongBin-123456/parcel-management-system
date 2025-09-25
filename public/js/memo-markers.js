@@ -42,16 +42,7 @@ class MemoMarkerManager {
         // 검색 필지 여부는 로깅용으로만 사용 (조건 동일)
         const isSearchParcel = parcelData.pnu && window.searchParcels && window.searchParcels.has(parcelData.pnu);
 
-        console.log(isSearchParcel ? '🔍 검색 필지 마커 조건 확인:' : '📍 일반 필지 마커 조건 확인:', {
-            pnu: parcelData.pnu,
-            parcelName: parcelData.parcelName || parcelData.parcel_name,
-            parcelNumber: parcelNumber.trim() || '(없음)',
-            hasRealInfo: hasMeaningfulInfo,
-            memo: memo.trim() || '(없음)',
-            ownerName: ownerName.trim() || '(없음)',
-            ownerAddress: ownerAddress.trim() || '(없음)',
-            ownerContact: ownerContact.trim() || '(없음)'
-        });
+        // 마커 조건 확인 (로그 제거 - 성능 개선)
 
         // 실제 정보가 있을 때만 마커 표시
         return hasMeaningfulInfo;
@@ -60,13 +51,13 @@ class MemoMarkerManager {
     // 초기화 (지도 없이도 가능)
     async initialize() {
         if (this.isInitialized) {
-            console.log('📍 MemoMarkerManager 이미 초기화됨');
+            // MemoMarkerManager 이미 초기화됨
             return;
         }
 
         // 초기화 상태 설정 (재진입 방지)
         this.isInitialized = true;
-        console.log('✅ MemoMarkerManager 초기화 완료 (지도 대기 중)');
+        // MemoMarkerManager 초기화 완료
 
         // 지도가 이미 있으면 마커 로드
         if (window.map) {

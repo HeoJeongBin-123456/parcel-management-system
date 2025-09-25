@@ -19,8 +19,9 @@
     "@eslint/eslintrc": "^3",
     "@eslint/json": "^0.13.2",
     "@eslint/markdown": "^7.3.0",
-    "@playwright/test": "^1.55.0",
-    "eslint": "^9"
+    "@playwright/test": "^1.55.1",
+    "eslint": "^9",
+    "playwright": "^1.55.1"
   },
   "author": "권용범",
   "license": "MIT",

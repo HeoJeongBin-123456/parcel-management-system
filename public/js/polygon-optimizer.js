@@ -68,7 +68,7 @@
             }
         });
 
-        console.log(`📊 폴리곤 업데이트: ${visibleCount.updated}개 처리, ${visibleCount.skipped}개 스킵`);
+        // 폴리곤 업데이트 완료
         return visibleCount;
     }
 
@@ -129,7 +129,7 @@
                 // 다음 배치 처리
                 requestAnimationFrame(processBatch);
             } else {
-                console.log(`✅ ${polygonUpdates.length}개 폴리곤 업데이트 완료`);
+                // 폴리곤 업데이트 완료
             }
         }
 
@@ -220,5 +220,5 @@
         applyPerformanceStyles();
     }
 
-    console.log('🚀 폴리곤 최적화 모듈 로드됨');
+    // 폴리곤 최적화 모듈 로드됨
 })();
