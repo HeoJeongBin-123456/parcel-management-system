@@ -58,7 +58,9 @@ export async function onRequest(context) {
           method: 'GET',
           headers: {
             'Accept': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Cloudflare Workers)'
+            'User-Agent': 'Mozilla/5.0 (Cloudflare Workers)',
+            // 일부 API는 Referer 기반 도메인 검증을 수행함
+            'Referer': env?.VWORLD_REFERER || `https://${url.host}`
           }
         });
         const data = await res.json();
