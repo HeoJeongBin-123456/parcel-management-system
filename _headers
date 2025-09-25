@@ -1,0 +1,8 @@
+/*
+  X-Frame-Options: SAMEORIGIN
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer-when-downgrade
+  Permissions-Policy: geolocation=(self), microphone=()
+
+/api/*
+  Access-Control-Allow-Origin: *
