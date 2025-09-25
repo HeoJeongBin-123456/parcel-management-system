@@ -24,6 +24,18 @@ export async function onRequest(context) {
   if (!geomFilter && lat && lng) {
     geomFilter = `POINT(${lng} ${lat})`;
   }
+  // 방어 로직: 이미 인코딩된 geomFilter가 들어오면 한 번 디코딩하여 이중 인코딩 방지
+  if (geomFilter) {
+    try {
+      const decoded = decodeURIComponent(geomFilter);
+      // POINT( … ) 형태가 보이면 디코딩 결과를 사용
+      if (/^POINT\(/.test(decoded)) {
+        geomFilter = decoded;
+      }
+    } catch (_) {
+      // ignore
+    }
+  }
 
   // Key priority: env -> query key -> fallback constant
   const FALLBACK_KEY = 'E5B1657B-9B6F-3A4B-91EF-98512BE931A1';
@@ -65,9 +77,10 @@ export async function onRequest(context) {
           method: 'GET',
           headers: {
             'Accept': 'application/json,text/plain;q=0.9,*/*;q=0.8',
-            'User-Agent': 'Mozilla/5.0 (Cloudflare Workers)',
-            // 일부 API는 Referer 기반 도메인 검증을 수행함
-            'Referer': env?.VWORLD_REFERER || `https://${url.host}`
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0 Safari/537.36',
+            // 일부 API는 Referer/Origin 기반 도메인 검증을 수행함
+            'Referer': env?.VWORLD_REFERER || `https://${url.host}`,
+            'Origin': env?.VWORLD_REFERER || `https://${url.host}`
           }
         });
 
