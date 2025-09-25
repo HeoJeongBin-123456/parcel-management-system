@@ -3,12 +3,17 @@
   "version": "1.0.0",
   "description": "네이버 지도 필지 관리 프로그램",
   "scripts": {
-    "build": "echo 'No build process needed'",
+    "build": "echo 'Build complete'",
     "start": "node server.js",
+    "dev": "node server.js",
+    "deploy": "vercel --prod",
+    "deploy:preview": "vercel",
     "postinstall": "npx playwright install chromium",
     "test": "playwright test",
     "test:fast": "playwright test --project=chromium --workers=1 --reporter=line",
-    "test:ci": "playwright test --project=chromium --workers=1 --timeout=60000 --reporter=line"
+    "test:ci": "playwright test --project=chromium --workers=1 --timeout=60000 --reporter=line",
+    "vercel:build": "echo 'Vercel build complete'",
+    "vercel:dev": "vercel dev"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
