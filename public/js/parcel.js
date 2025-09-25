@@ -1,5 +1,77 @@
 // 필지 관련 기능
 
+// 🚀 성능 최적화: 비동기 저장 큐 시스템
+const colorSaveQueue = new Map();
+let colorSaveTimer = null;
+const COLOR_SAVE_BATCH_DELAY = 100; // 100ms 후 일괄 처리
+
+// 비동기 색상 저장 큐에 추가
+function queueColorSave(pnu, color, colorIndex = null) {
+    colorSaveQueue.set(pnu, {
+        color,
+        colorIndex,
+        timestamp: Date.now()
+    });
+
+    if (colorSaveTimer) clearTimeout(colorSaveTimer);
+    colorSaveTimer = setTimeout(processColorSaveQueue, COLOR_SAVE_BATCH_DELAY);
+}
+
+// 큐에 쌓인 색상 저장 일괄 처리
+async function processColorSaveQueue() {
+    if (colorSaveQueue.size === 0) return;
+
+    const items = Array.from(colorSaveQueue.entries());
+    colorSaveQueue.clear();
+
+    // LocalStorage 즉시 저장 (UI 반응성)
+    try {
+        const colors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
+        items.forEach(([pnu, data]) => {
+            if (data.colorIndex !== null) {
+                colors[pnu] = data.colorIndex;
+            }
+        });
+        localStorage.setItem('parcelColors', JSON.stringify(colors));
+    } catch (error) {
+        console.error('❌ LocalStorage 색상 저장 실패:', error);
+    }
+
+    // Supabase 백그라운드 저장 (await 없이)
+    if (window.SupabaseManager && window.SupabaseManager.isConnected) {
+        const parcelsToSave = items.map(([pnu, data]) => ({
+            pnu,
+            color: data.color,
+            is_colored: true,
+            updated_at: new Date().toISOString()
+        }));
+
+        // 백그라운드에서 실행 (블로킹 없이)
+        window.SupabaseManager.saveParcels(parcelsToSave)
+            .then(() => console.log(`✅ ${parcelsToSave.length}개 필지 색상 백그라운드 저장 완료`))
+            .catch(error => console.error('❌ Supabase 색상 저장 실패:', error));
+    }
+}
+
+// 🚀 성능 최적화: 폴리곤 렌더링 requestAnimationFrame
+let polygonRenderFrame = null;
+const polygonUpdateQueue = [];
+
+function queuePolygonUpdate(updateFn) {
+    polygonUpdateQueue.push(updateFn);
+
+    if (polygonRenderFrame) {
+        cancelAnimationFrame(polygonRenderFrame);
+    }
+
+    polygonRenderFrame = requestAnimationFrame(() => {
+        const updates = [...polygonUpdateQueue];
+        polygonUpdateQueue.length = 0;
+        updates.forEach(fn => fn());
+        polygonRenderFrame = null;
+    });
+}
+
 // 폴리곤 중심점 계산 함수 (메모 마커용)
 function calculatePolygonCenter(coordinates) {
     if (!coordinates) {
@@ -524,14 +596,16 @@ async function clearParcel(parcel, polygon) {
     const jibun = formatJibun(parcel.properties);
     
     if (parcelData) {
-        // 폴리곤 색상 및 테두리 완전히 초기화
+        // 🚀 성능 최적화: requestAnimationFrame으로 폴리곤 초기화
         if (polygon) {
-            polygon.setOptions({
-                fillColor: 'transparent',
-                fillOpacity: 0,
-                strokeColor: '#0000FF',
-                strokeOpacity: 0.6,
-                strokeWeight: 0.5
+            queuePolygonUpdate(() => {
+                polygon.setOptions({
+                    fillColor: 'transparent',
+                    fillOpacity: 0,
+                    strokeColor: '#0000FF',
+                    strokeOpacity: 0.6,
+                    strokeWeight: 0.5
+                });
             });
         }
 
@@ -818,33 +892,23 @@ async function applyColorToParcel(parcel, color) {
         // 색상 적용 (토글 없이 항상 적용)
         const newColor = expectedColor;
 
-        // 1. UI 즉시 업데이트
-        parcelData.polygon.setOptions({
-            fillColor: newColor,
-            fillOpacity: 0.5,
-            strokeColor: newColor,
-            strokeOpacity: 0.7
+        // 1. 🚀 성능 최적화: requestAnimationFrame으로 UI 업데이트
+        queuePolygonUpdate(() => {
+            parcelData.polygon.setOptions({
+                fillColor: newColor,
+                fillOpacity: 0.5,
+                strokeColor: newColor,
+                strokeOpacity: 0.7
+            });
         });
         parcelData.color = newColor;
 
-        // 2. 색상 즉시 저장 (Supabase와 LocalStorage만 사용)
+        // 2. 🚀 성능 최적화: 비동기 큐잉 시스템으로 색상 저장
         console.log('🎨 색상 적용:', pnu, newColor);
 
-        // Supabase에 색상 저장
-        if (window.SupabaseManager && window.SupabaseManager.isConnected) {
-            try {
-                const parcelToSave = {
-                    pnu: pnu,
-                    color: newColor,
-                    is_colored: true,
-                    updated_at: new Date().toISOString()
-                };
-                await window.SupabaseManager.saveParcels([parcelToSave]);
-                console.log('✅ Supabase에 색상 저장 완료');
-            } catch (error) {
-                console.error('❌ Supabase 색상 저장 실패:', error);
-            }
-        }
+        // 큐에 추가하여 백그라운드 저장 (UI 블로킹 없음)
+        queueColorSave(pnu, newColor, colorIndex);
+        console.log('📥 색상 저장 큐에 추가됨 (100ms 후 일괄 처리)');
 
         // 3. LocalStorage 업데이트 - 모든 관련 키에서 업데이트
         const storageKeys = ['parcelData', 'clickParcelData', 'parcels', 'parcels_current_session'];

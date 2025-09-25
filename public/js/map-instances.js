@@ -28,6 +28,15 @@ const MAP_POSITION_KEY = 'mapPosition';
 const MODE_POSITION_PREFIX = 'mapPosition_';
 let mapPositionSaveTimer = null;
 
+// 🚀 성능 최적화를 위한 설정
+const IDLE_DEBOUNCE_DELAY = 2000; // idle 이벤트 디바운싱 (600ms → 2000ms)
+const POSITION_SAVE_DEBOUNCE = 1000; // Supabase 저장 디바운싱
+let idleTimers = {
+    click: null,
+    search: null,
+    hand: null
+};
+
 function saveMapViewState(mode, mapInstance) {
     if (!mapInstance) {
         console.warn('⚠️ saveMapViewState: mapInstance가 null');
@@ -71,23 +80,37 @@ function saveMapViewState(mode, mapInstance) {
         console.warn('⚠️ 지도 위치 로컬 저장 실패:', error);
     }
 
-    // Supabase 저장 (디바운싱 적용)
+    // Supabase 저장 (디바운싱 적용 - 성능 최적화)
     if (window.SupabaseManager && window.SupabaseManager.isConnected) {
         if (mapPositionSaveTimer) {
             clearTimeout(mapPositionSaveTimer);
         }
         mapPositionSaveTimer = setTimeout(() => {
+            // 백그라운드에서 저장 (await 없이)
             window.SupabaseManager.saveMapPosition(position.lat, position.lng, position.zoom)
-                .then(() => console.log('☁️ 지도 위치 클라우드 저장 완료:', position))
+                .then(() => console.log('☁️ 지도 위치 클라우드 저장 완료'))
                 .catch(error => console.warn('⚠️ 지도 위치 클라우드 저장 실패:', error));
-        }, 600);
+        }, POSITION_SAVE_DEBOUNCE);
     }
 }
 
 function attachMapViewPersistence(mapInstance, mode) {
     if (!mapInstance || mapInstance.__hasViewPersistence) return;
 
-    naver.maps.Event.addListener(mapInstance, 'idle', () => saveMapViewState(mode, mapInstance));
+    // 🚀 성능 최적화: idle 이벤트 강화된 디바운싱
+    naver.maps.Event.addListener(mapInstance, 'idle', () => {
+        // 기존 타이머 취소
+        if (idleTimers[mode]) {
+            clearTimeout(idleTimers[mode]);
+        }
+
+        // 2초 후에 저장 (기존 600ms에서 증가)
+        idleTimers[mode] = setTimeout(() => {
+            saveMapViewState(mode, mapInstance);
+            idleTimers[mode] = null;
+        }, IDLE_DEBOUNCE_DELAY);
+    });
+
     mapInstance.__hasViewPersistence = true;
 }
 
