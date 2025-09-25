@@ -100,7 +100,12 @@
       "Bash(fi)",
       "Bash(if [ $? -eq 0 ])",
       "Bash(then echo \"✅ 성공 (실행 $i)\")",
-      "Bash(else echo \"❌ 실패 (실행 $i)\")"
+      "Bash(else echo \"❌ 실패 (실행 $i)\")",
+      "Bash(supabase:*)",
+      "Bash(brew install:*)",
+      "WebFetch(domain:parcel-management-system.pages.dev)",
+      "Bash(vercel:*)",
+      "Bash(git restore:*)"
     ],
     "deny": [],
     "ask": []

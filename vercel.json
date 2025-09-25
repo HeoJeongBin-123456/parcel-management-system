@@ -11,11 +11,11 @@
     },
     {
       "source": "/api/(.*)",
-      "destination": "/server.js"
+      "destination": "/api/index.js"
     },
     {
       "source": "/(.*)",
-      "destination": "/server.js"
+      "destination": "/api/index.js"
     }
   ],
   "headers": [
@@ -68,7 +68,7 @@
     "icn1"
   ],
   "functions": {
-    "server.js": {
+    "api/index.js": {
       "memory": 1024,
       "maxDuration": 30
     },
