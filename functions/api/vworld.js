@@ -1,5 +1,11 @@
 export async function onRequest(context) {
   const { request, env } = context;
+
+  // CORS preflight
+  if (request.method === 'OPTIONS') {
+    return withCORS(new Response(null, { status: 204 }));
+  }
+
   const url = new URL(request.url);
   const q = url.searchParams;
 
@@ -57,13 +63,26 @@ export async function onRequest(context) {
         const res = await fetch(apiUrl, {
           method: 'GET',
           headers: {
-            'Accept': 'application/json',
+            'Accept': 'application/json,text/plain;q=0.9,*/*;q=0.8',
             'User-Agent': 'Mozilla/5.0 (Cloudflare Workers)',
             // 일부 API는 Referer 기반 도메인 검증을 수행함
             'Referer': env?.VWORLD_REFERER || `https://${url.host}`
           }
         });
-        const data = await res.json();
+
+        let data;
+        try {
+          data = await res.clone().json();
+        } catch {
+          const text = await res.text();
+          data = { _raw: text };
+        }
+
+        // 상태 코드 200이 아니면 그대로 전달(디버깅 편의)
+        if (!res.ok) {
+          lastErr = { status: res.status, data };
+          continue;
+        }
 
         const ok = (data?.response?.status === 'OK') || (Array.isArray(data?.features) && data.features.length > 0);
         if (ok) {
@@ -74,14 +93,14 @@ export async function onRequest(context) {
           await cache.put(cacheKey, cfRes.clone());
           return withCORS(cfRes);
         }
-        lastErr = data;
+        lastErr = { status: res.status, data };
       } catch (e) {
-        lastErr = e;
+        lastErr = { error: stringifyErr(e) };
       }
     }
 
-    return withCORS(new Response(JSON.stringify({ error: 'All API keys failed', lastError: stringifyErr(lastErr) }), {
-      status: 502,
+    return withCORS(new Response(JSON.stringify({ error: 'All API keys failed', detail: lastErr }), {
+      status: typeof lastErr?.status === 'number' ? lastErr.status : 502,
       headers: { 'Content-Type': 'application/json; charset=utf-8' }
     }));
   } catch (err) {
