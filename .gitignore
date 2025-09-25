@@ -30,6 +30,9 @@ temp/
 *.png
 *.jpg
 
+# Supabase
+supabase/.temp/
+
 # 임시 테스트 파일
 test-*.html
 test-*.js
