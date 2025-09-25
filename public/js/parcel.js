@@ -1233,11 +1233,12 @@ async function saveParcelData() {
         // 이벤트 발생
         window.dispatchEvent(new Event('refreshParcelList'));
         
-        // 메모 마커 업데이트 (실제 정보만 확인: 소유자명, 주소, 연락처, 메모)
-        const hasRealInfo = (formData.ownerName && formData.ownerName.trim() !== '') ||
-                           (formData.ownerAddress && formData.ownerAddress.trim() !== '') ||
-                           (formData.ownerContact && formData.ownerContact.trim() !== '') ||
-                           (formData.memo && formData.memo.trim() !== '');
+        // 메모 마커 업데이트 (실제 정보만 확인: 지번, 소유자명, 주소, 연락처, 메모)
+        const hasRealInfo = (formData.parcelNumber && formData.parcelNumber.trim() !== '' && formData.parcelNumber.trim() !== '자동입력') ||
+                           (formData.ownerName && formData.ownerName.trim() !== '' && formData.ownerName.trim() !== '홍길동') ||
+                           (formData.ownerAddress && formData.ownerAddress.trim() !== '' && formData.ownerAddress.trim() !== '서울시 강남구...') ||
+                           (formData.ownerContact && formData.ownerContact.trim() !== '' && formData.ownerContact.trim() !== '010-1234-5678') ||
+                           (formData.memo && formData.memo.trim() !== '' && formData.memo.trim() !== '(메모 없음)' && formData.memo.trim() !== '추가 메모...');
 
         // 실제 정보가 있을 때만 마커 생성/유지
         const shouldCreateMarker = hasRealInfo;
@@ -1247,12 +1248,30 @@ async function saveParcelData() {
                 // 좌표를 포함한 전체 데이터 전달 (formData에서 좌표 가져오기)
                 const markerData = {
                     ...formData,
+                    // memo-markers.js가 기대하는 필드명으로 매핑
+                    parcelMemo: formData.memo,
+                    parcel_number: formData.parcelNumber,
+                    parcel_name: formData.parcelNumber,
+                    owner_name: formData.ownerName,
+                    owner: formData.ownerName,
+                    owner_address: formData.ownerAddress,
+                    owner_contact: formData.ownerContact,
+                    contact: formData.ownerContact,
                     lat: formData.lat,
                     lng: formData.lng,
                     geometry: formData.geometry
                 };
+                console.log('📍 마커 생성 요청 데이터:', {
+                    pnu: markerData.pnu,
+                    memo: markerData.memo,
+                    parcelMemo: markerData.parcelMemo,
+                    ownerName: markerData.ownerName,
+                    owner_name: markerData.owner_name,
+                    lat: markerData.lat,
+                    lng: markerData.lng
+                });
                 await window.MemoMarkerManager.createMemoMarker(markerData);
-                console.log('📍 마커 생성/업데이트 (필지 정보 존재):', formData.parcelNumber);
+                console.log('📍 마커 생성/업데이트 완료:', formData.parcelNumber);
 
                 // 마커 상태 저장
                 if (window.DataPersistenceManager) {
