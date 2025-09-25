@@ -74,7 +74,7 @@ if (!window.vworldApi) {
             const query = searchParams.toString();
             const endpoint = query.length > 0 ? `/api/vworld?${query}` : '/api/vworld';
 
-            const response = await fetch(endpoint, {
+            let response = await fetch(endpoint, {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json'
@@ -82,7 +82,39 @@ if (!window.vworldApi) {
             });
 
             if (!response.ok) {
-                throw new Error(`VWorld 프록시 호출 실패: HTTP ${response.status}`);
+                console.warn(`[vworldApi] 프록시 실패: HTTP ${response.status}. 직접 호출 폴백 시도`);
+
+                // 프록시 실패 시 직접 VWorld 호출 폴백(범용 키 → 새 키 순서)
+                const fallbackKeys = [
+                    'E5B1657B-9B6F-3A4B-91EF-98512BE931A1',
+                    '84A41D3D-D128-3240-B52F-BE7A562D50F2'
+                ];
+
+                // geomFilter 이중 인코딩 방지를 위해 한 번 디코딩 시도
+                const paramsCloned = new URLSearchParams(searchParams);
+                const gf = paramsCloned.get('geomFilter');
+                if (gf) {
+                    try {
+                        const decoded = decodeURIComponent(gf);
+                        if (/^POINT\(/.test(decoded)) paramsCloned.set('geomFilter', decoded);
+                    } catch (_) {}
+                }
+
+                for (const key of fallbackKeys) {
+                    const direct = new URLSearchParams(paramsCloned);
+                    direct.set('key', key);
+                    const directUrl = `https://api.vworld.kr/req/data?${direct.toString()}`;
+                    try {
+                        response = await fetch(directUrl, { headers: { 'Accept': 'application/json' } });
+                        if (response.ok) break;
+                    } catch (e) {
+                        console.warn('[vworldApi] 직접 호출 실패:', e);
+                    }
+                }
+
+                if (!response.ok) {
+                    throw new Error(`VWorld 직접 호출도 실패: HTTP ${response.status}`);
+                }
             }
 
             return await response.json();
