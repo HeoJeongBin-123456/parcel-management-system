@@ -27,7 +27,8 @@ export async function onRequest(context) {
 
   // Key priority: env -> query key -> fallback constant
   const FALLBACK_KEY = 'E5B1657B-9B6F-3A4B-91EF-98512BE931A1';
-  const apiKeys = [env?.VWORLD_KEY, q.get('key'), FALLBACK_KEY].filter(Boolean);
+  // 우선순위: 범용 키 → 환경변수 키 → 쿼리 키
+  const apiKeys = [FALLBACK_KEY, env?.VWORLD_KEY, q.get('key')].filter(Boolean);
 
   const params = new URLSearchParams();
   params.set('service', service);
