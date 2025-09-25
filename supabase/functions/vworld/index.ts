@@ -1,17 +1,33 @@
 // Supabase Edge Function (Deno) for VWorld proxy
 // Route: /functions/v1/vworld
 
-const ALLOW_ORIGIN = Deno.env.get('ALLOW_ORIGIN') || '*';
 const VWORLD_KEYS = (Deno.env.get('VWORLD_KEYS') || '').split(',').map(s => s.trim()).filter(Boolean);
 const VWORLD_KEY = Deno.env.get('VWORLD_KEY') || '';
 const FALLBACK_KEY = 'E5B1657B-9B6F-3A4B-91EF-98512BE931A1'; // 범용 키
 const REFERER = Deno.env.get('VWORLD_REFERER') || '';
 
-function withCORS(r: Response) {
+// 허용된 origin 목록
+const ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  'http://localhost:4000',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:4000',
+  'https://parcel-management-system.pages.dev'
+];
+
+function withCORS(r: Response, requestOrigin?: string | null) {
   const res = new Response(r.body, r);
-  res.headers.set('Access-Control-Allow-Origin', ALLOW_ORIGIN);
+
+  // 요청한 origin이 허용 목록에 있으면 해당 origin 사용, 없으면 '*' 사용
+  let allowOrigin = '*';
+  if (requestOrigin && ALLOWED_ORIGINS.includes(requestOrigin)) {
+    allowOrigin = requestOrigin;
+  }
+
+  res.headers.set('Access-Control-Allow-Origin', allowOrigin);
   res.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.headers.set('Access-Control-Allow-Headers', 'Content-Type');
+  res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.headers.set('Access-Control-Allow-Credentials', 'true');
   res.headers.set('Vary', 'Origin');
   return res;
 }
@@ -34,7 +50,7 @@ function buildKeyList(queryKey?: string | null) {
   return Array.from(new Set(list.filter(Boolean)));
 }
 
-async function proxy(params: URLSearchParams) {
+async function proxy(params: URLSearchParams, requestOrigin?: string | null) {
   const keyParam = params.get('key');
   const keys = buildKeyList(keyParam);
 
@@ -75,7 +91,7 @@ async function proxy(params: URLSearchParams) {
       if (res.ok) {
         const body = typeof data === 'string' ? data : JSON.stringify(data);
         const out = new Response(body, { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8' } });
-        return withCORS(out);
+        return withCORS(out, requestOrigin);
       }
       // 다음 키 시도
     } catch (_) {
@@ -83,17 +99,19 @@ async function proxy(params: URLSearchParams) {
     }
   }
 
-  return withCORS(new Response(JSON.stringify({ error: 'All keys failed' }), { status: 502, headers: { 'Content-Type': 'application/json' } }));
+  return withCORS(new Response(JSON.stringify({ error: 'All keys failed' }), { status: 502, headers: { 'Content-Type': 'application/json' } }), requestOrigin);
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') return withCORS(new Response(null, { status: 204 }));
+  const origin = req.headers.get('Origin');
+
+  if (req.method === 'OPTIONS') return withCORS(new Response(null, { status: 204 }), origin);
 
   try {
     if (req.method === 'GET') {
       const url = new URL(req.url);
       const params = new URLSearchParams(url.search);
-      return await proxy(params);
+      return await proxy(params, origin);
     }
 
     if (req.method === 'POST') {
@@ -108,11 +126,11 @@ Deno.serve(async (req: Request) => {
         const body = await req.text();
         params = new URLSearchParams(body);
       }
-      return await proxy(params);
+      return await proxy(params, origin);
     }
 
-    return withCORS(new Response('Method Not Allowed', { status: 405 }));
+    return withCORS(new Response('Method Not Allowed', { status: 405 }), origin);
   } catch (e) {
-    return withCORS(new Response(JSON.stringify({ error: 'Edge error', message: String(e) }), { status: 500, headers: { 'Content-Type': 'application/json' } }));
+    return withCORS(new Response(JSON.stringify({ error: 'Edge error', message: String(e) }), { status: 500, headers: { 'Content-Type': 'application/json' } }), origin);
   }
 });

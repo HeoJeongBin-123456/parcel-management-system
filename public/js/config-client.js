@@ -86,10 +86,15 @@ if (!window.vworldApi) {
                 endpoint = query.length > 0 ? `/api/vworld?${query}` : '/api/vworld';
             }
 
+            // Supabase Anon Key 가져오기
+            const supabaseAnonKey = (window.SupabaseManager && window.SupabaseManager.supabaseKey) ||
+                'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNxZnN6Y2JpZm9ueHBmYXNvZHRvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc0MTM2NzUsImV4cCI6MjA3Mjk4OTY3NX0.gaEIzHhU8d7e1T8WDzxK-YDW7DPU2aLkD3XBU7TtncI';
+
             let response = await fetch(endpoint, {
                 method: 'GET',
                 headers: {
-                    'Accept': 'application/json'
+                    'Accept': 'application/json',
+                    'Authorization': `Bearer ${supabaseAnonKey}`
                 }
             });
 
