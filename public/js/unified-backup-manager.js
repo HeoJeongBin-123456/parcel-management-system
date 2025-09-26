@@ -557,6 +557,236 @@ class UnifiedBackupManager {
             console.warn('알림 표시 실패:', error);
         }
     }
+
+    async uploadExcel(file) {
+        try {
+            console.log('📥 Excel 파일 업로드 시작:', file.name);
+
+            if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+                throw new Error('Excel 파일(.xlsx, .xls)만 업로드 가능합니다.');
+            }
+
+            if (!window.XLSX) {
+                console.log('⏳ SheetJS 라이브러리 로딩 중...');
+                await this.loadSheetJSLibrary();
+            }
+
+            const arrayBuffer = await file.arrayBuffer();
+
+            const parsedData = await this.parseExcelFile(arrayBuffer);
+
+            const validation = this.validateRestoreData(parsedData);
+
+            console.log('✅ Excel 파일 파싱 완료:', validation);
+            return validation;
+
+        } catch (error) {
+            console.error('❌ Excel 업로드 실패:', error);
+            throw error;
+        }
+    }
+
+    async parseExcelFile(arrayBuffer) {
+        try {
+            const workbook = window.XLSX.read(arrayBuffer, { type: 'array' });
+
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+
+            const jsonData = window.XLSX.utils.sheet_to_json(worksheet);
+
+            const parcels = jsonData.map(row => {
+                return {
+                    parcelNumber: row['지번'] || row['parcelNumber'] || '',
+                    parcel_name: row['지번'] || row['parcelNumber'] || '',
+                    ownerName: row['소유자명'] || row['ownerName'] || '',
+                    owner_name: row['소유자명'] || row['ownerName'] || '',
+                    ownerAddress: row['소유자주소'] || row['ownerAddress'] || '',
+                    owner_address: row['소유자주소'] || row['ownerAddress'] || '',
+                    ownerContact: row['연락처'] || row['ownerContact'] || '',
+                    owner_contact: row['연락처'] || row['ownerContact'] || '',
+                    memo: row['메모'] || row['memo'] || '',
+                    color: this.parseColorFromName(row['색상']),
+                    colorIndex: this.getColorIndexFromName(row['색상']),
+                    lat: row['위도'] || row['lat'] || null,
+                    lng: row['경도'] || row['lng'] || null,
+                    created_at: row['생성일시'] || row['created_at'] || new Date().toISOString(),
+                    pnu: row['PNU'] || row['pnu'] || this.generatePNU(row)
+                };
+            });
+
+            console.log(`📊 파싱 완료: ${parcels.length}개 필지`);
+            return parcels;
+
+        } catch (error) {
+            console.error('❌ Excel 파싱 실패:', error);
+            throw new Error('Excel 파일 형식이 올바르지 않습니다.');
+        }
+    }
+
+    parseColorFromName(colorName) {
+        const colorMap = {
+            '빨강': '#FF0000',
+            '주황': '#FFA500',
+            '노랑': '#FFFF00',
+            '연두': '#90EE90',
+            '파랑': '#0000FF',
+            '검정': '#000000',
+            '흰색': '#FFFFFF',
+            '하늘색': '#87CEEB'
+        };
+
+        return colorMap[colorName] || null;
+    }
+
+    getColorIndexFromName(colorName) {
+        const indexMap = {
+            '빨강': 0,
+            '주황': 1,
+            '노랑': 2,
+            '연두': 3,
+            '파랑': 4,
+            '검정': 5,
+            '흰색': 6,
+            '하늘색': 7
+        };
+
+        return indexMap[colorName] !== undefined ? indexMap[colorName] : null;
+    }
+
+    generatePNU(row) {
+        const timestamp = Date.now();
+        const random = Math.floor(Math.random() * 10000);
+        return `RESTORED_${timestamp}_${random}`;
+    }
+
+    validateRestoreData(parcels) {
+        if (!Array.isArray(parcels) || parcels.length === 0) {
+            return {
+                isValid: false,
+                total: 0,
+                valid: 0,
+                invalid: 0,
+                validParcels: [],
+                invalidParcels: [],
+                error: '복원할 데이터가 없습니다.'
+            };
+        }
+
+        const validParcels = window.ParcelValidationUtils
+            ? window.ParcelValidationUtils.filterValidParcels(parcels)
+            : parcels;
+
+        const invalidParcels = parcels.filter(p =>
+            !validParcels.some(vp => vp.pnu === p.pnu)
+        );
+
+        return {
+            isValid: validParcels.length > 0,
+            total: parcels.length,
+            valid: validParcels.length,
+            invalid: invalidParcels.length,
+            validParcels: validParcels,
+            invalidParcels: invalidParcels,
+            error: validParcels.length === 0 ? '유효한 필지가 없습니다.' : null
+        };
+    }
+
+    async restoreFromExcel(validationResult, options = {}) {
+        const {
+            showProgress = true,
+            createBackup = true
+        } = options;
+
+        try {
+            console.log('🔄 Excel 파일 복원 시작...');
+
+            if (!validationResult.isValid) {
+                throw new Error(validationResult.error || '유효하지 않은 데이터입니다.');
+            }
+
+            if (createBackup) {
+                console.log('💾 복원 전 현재 데이터 백업 중...');
+                const currentData = await this.loadFromCloud().catch(() => []);
+                if (currentData && currentData.length > 0) {
+                    const emergencyBackup = {
+                        timestamp: new Date().toISOString(),
+                        data: currentData,
+                        reason: 'excel_restore_backup'
+                    };
+                    localStorage.setItem('backup_before_excel_restore', JSON.stringify(emergencyBackup));
+                    console.log('✅ 복원 전 백업 완료');
+                    this.showNotification('✅ 현재 데이터 백업 완료', 'success');
+                }
+            }
+
+            if (showProgress) {
+                this.showRestoreProgress(0, validationResult.valid);
+            }
+
+            const result = await this.saveToCloud(validationResult.validParcels, {
+                skipCache: false,
+                showNotification: false
+            });
+
+            if (!result.success) {
+                throw new Error(result.error || '복원 실패');
+            }
+
+            if (showProgress) {
+                this.showRestoreProgress(validationResult.valid, validationResult.valid);
+            }
+
+            console.log(`✅ 복원 완료: ${validationResult.valid}개 필지`);
+
+            if (validationResult.invalid > 0) {
+                console.warn(`⚠️ ${validationResult.invalid}개 무효 필지 제외됨`);
+            }
+
+            return {
+                success: true,
+                restored: validationResult.valid,
+                skipped: validationResult.invalid
+            };
+
+        } catch (error) {
+            console.error('❌ 복원 실패:', error);
+
+            const rollbackData = localStorage.getItem('backup_before_excel_restore');
+            if (rollbackData && createBackup) {
+                try {
+                    const parsed = JSON.parse(rollbackData);
+                    await this.saveToCloud(parsed.data, { showNotification: false });
+                    console.log('↩️ 이전 데이터로 롤백 완료');
+                    this.showNotification('↩️ 복원 실패. 이전 상태로 되돌렸습니다.', 'warning');
+                } catch (rollbackError) {
+                    console.error('❌ 롤백 실패:', rollbackError);
+                }
+            }
+
+            throw error;
+        }
+    }
+
+    showRestoreProgress(current, total) {
+        const percentage = Math.round((current / total) * 100);
+
+        let progressBar = document.getElementById('restoreProgressBar');
+        if (!progressBar) {
+            const progressContainer = document.getElementById('restoreProgressContainer');
+            if (progressContainer) {
+                progressContainer.style.display = 'block';
+                progressBar = progressContainer.querySelector('.progress-bar-fill');
+                const progressText = progressContainer.querySelector('.progress-text');
+                if (progressBar) {
+                    progressBar.style.width = `${percentage}%`;
+                }
+                if (progressText) {
+                    progressText.textContent = `${current} / ${total} (${percentage}%)`;
+                }
+            }
+        }
+    }
 }
 
 window.UnifiedBackupManager = new UnifiedBackupManager();

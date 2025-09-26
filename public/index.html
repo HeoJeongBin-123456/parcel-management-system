@@ -303,23 +303,123 @@
         });
     </script>
 
-    <!-- 백업 목록 모달 -->
+    <!-- 백업/복원 모달 -->
     <div id="backupModal" class="modal" style="display: none;">
-        <div class="modal-content">
+        <div class="modal-content backup-restore-modal">
             <div class="modal-header">
-                <h2>백업 관리</h2>
+                <h2>백업 및 복원 관리</h2>
                 <span class="close" onclick="closeBackupModal()">&times;</span>
             </div>
-            <div class="modal-body">
-                <div class="backup-modal-actions">
-                    <button onclick="runManualBackup()" class="backup-action-btn">
-                        💾 수동 백업 실행
-                    </button>
+
+            <!-- 탭 메뉴 -->
+            <div class="backup-tabs">
+                <button class="backup-tab active" onclick="switchBackupTab('backup')">
+                    💾 백업
+                </button>
+                <button class="backup-tab" onclick="switchBackupTab('restore')">
+                    🔄 복원
+                </button>
+            </div>
+
+            <!-- 백업 탭 내용 -->
+            <div id="backupTabContent" class="tab-content active">
+                <div class="modal-body">
+                    <div class="backup-modal-actions">
+                        <button onclick="runManualBackup()" class="backup-action-btn">
+                            💾 Excel 백업 다운로드
+                        </button>
+                    </div>
+                    <hr style="margin: 20px 0;">
+                    <h3>백업 목록</h3>
+                    <div id="backupList">
+                        <!-- 백업 목록이 여기 표시됩니다 -->
+                    </div>
                 </div>
-                <hr style="margin: 20px 0;">
-                <h3>백업 목록</h3>
-                <div id="backupList">
-                    <!-- 백업 목록이 여기 표시됩니다 -->
+            </div>
+
+            <!-- 복원 탭 내용 (NEW!) -->
+            <div id="restoreTabContent" class="tab-content">
+                <div class="modal-body">
+                    <!-- 복원 가이드 -->
+                    <div class="restore-guide">
+                        <h3>📖 복원 방법 (간단 3단계)</h3>
+                        <ol class="restore-steps">
+                            <li>
+                                <strong>1단계: 백업 파일 준비</strong>
+                                <small>백업 탭에서 다운로드한 Excel 파일 (.xlsx)</small>
+                            </li>
+                            <li>
+                                <strong>2단계: 파일 선택</strong>
+                                <small>아래 버튼을 클릭하거나 파일을 드래그해서 올리세요</small>
+                            </li>
+                            <li>
+                                <strong>3단계: 복원 시작</strong>
+                                <small>미리보기 확인 후 "복원 시작" 버튼 클릭</small>
+                            </li>
+                        </ol>
+
+                        <div class="safety-notice">
+                            <h4>⚠️ 안전 보장</h4>
+                            <ul>
+                                <li>✅ 복원 전 현재 데이터 자동 백업</li>
+                                <li>✅ 실패 시 자동으로 이전 상태로 되돌림</li>
+                                <li>✅ 빈 필지는 자동으로 제거됨</li>
+                                <li>✅ 유효한 필지만 안전하게 복원</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <hr style="margin: 20px 0;">
+
+                    <!-- 파일 업로드 영역 -->
+                    <div class="file-upload-area" id="fileUploadArea">
+                        <input type="file" id="restoreFileInput" accept=".xlsx,.xls" style="display: none;" onchange="handleFileSelect(event)">
+                        <div class="upload-zone" onclick="document.getElementById('restoreFileInput').click()">
+                            <div class="upload-icon">📁</div>
+                            <p class="upload-text">클릭하거나 Excel 파일을 여기에 드래그하세요</p>
+                            <small class="upload-hint">.xlsx 또는 .xls 파일만 가능</small>
+                        </div>
+                    </div>
+
+                    <!-- 미리보기 영역 -->
+                    <div id="restorePreview" class="restore-preview" style="display: none;">
+                        <h3>📊 복원 데이터 미리보기</h3>
+                        <div class="preview-stats">
+                            <div class="stat-item">
+                                <span class="stat-label">총 필지</span>
+                                <span class="stat-value" id="previewTotal">0</span>
+                            </div>
+                            <div class="stat-item stat-valid">
+                                <span class="stat-label">✅ 유효한 필지</span>
+                                <span class="stat-value" id="previewValid">0</span>
+                            </div>
+                            <div class="stat-item stat-invalid">
+                                <span class="stat-label">❌ 무효한 필지</span>
+                                <span class="stat-value" id="previewInvalid">0</span>
+                            </div>
+                        </div>
+
+                        <div id="previewMessage" class="preview-message"></div>
+
+                        <div class="restore-actions">
+                            <button onclick="cancelRestore()" class="btn-secondary">
+                                취소
+                            </button>
+                            <button onclick="startRestore()" class="btn-primary" id="startRestoreBtn">
+                                🔄 복원 시작
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 진행 상황 표시 -->
+                    <div id="restoreProgressContainer" class="restore-progress" style="display: none;">
+                        <h3>🔄 복원 진행 중...</h3>
+                        <div class="progress-bar">
+                            <div class="progress-bar-fill" id="restoreProgressBar" style="width: 0%;"></div>
+                        </div>
+                        <p class="progress-text" id="progressText">0 / 0 (0%)</p>
+                        <small class="progress-hint">잠시만 기다려주세요. 복원이 완료될 때까지 창을 닫지 마세요.</small>
+                    </div>
                 </div>
             </div>
         </div>
@@ -407,9 +507,158 @@
             listContainer.innerHTML = html;
         }
 
-        // 백업 복원 (현재는 Excel 업로드 기능 없음)
+        let currentValidationResult = null;
+
+        function switchBackupTab(tabName) {
+            const backupTab = document.querySelector('.backup-tab:nth-child(1)');
+            const restoreTab = document.querySelector('.backup-tab:nth-child(2)');
+            const backupContent = document.getElementById('backupTabContent');
+            const restoreContent = document.getElementById('restoreTabContent');
+
+            if (tabName === 'backup') {
+                backupTab.classList.add('active');
+                restoreTab.classList.remove('active');
+                backupContent.classList.add('active');
+                restoreContent.classList.remove('active');
+                loadBackupList();
+            } else {
+                backupTab.classList.remove('active');
+                restoreTab.classList.add('active');
+                backupContent.classList.remove('active');
+                restoreContent.classList.add('active');
+                setupDragAndDrop();
+            }
+        }
+
+        function setupDragAndDrop() {
+            const uploadZone = document.querySelector('.upload-zone');
+            if (!uploadZone) return;
+
+            uploadZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadZone.style.borderColor = '#667eea';
+                uploadZone.style.background = 'rgba(102, 126, 234, 0.05)';
+            });
+
+            uploadZone.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                uploadZone.style.borderColor = '#ccc';
+                uploadZone.style.background = '';
+            });
+
+            uploadZone.addEventListener('drop', async (e) => {
+                e.preventDefault();
+                uploadZone.style.borderColor = '#ccc';
+                uploadZone.style.background = '';
+
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    await handleFileUpload(files[0]);
+                }
+            });
+        }
+
+        async function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                await handleFileUpload(file);
+            }
+        }
+
+        async function handleFileUpload(file) {
+            try {
+                console.log('📁 파일 선택됨:', file.name);
+                document.querySelector('.upload-text').textContent = '파일 분석 중...';
+
+                const validation = await window.UnifiedBackupManager.uploadExcel(file);
+
+                currentValidationResult = validation;
+
+                showPreview(validation);
+
+            } catch (error) {
+                console.error('❌ 파일 업로드 실패:', error);
+                alert(`파일 업로드 실패: ${error.message}`);
+                resetUploadUI();
+            }
+        }
+
+        function showPreview(validation) {
+            document.getElementById('fileUploadArea').style.display = 'none';
+            document.getElementById('restorePreview').style.display = 'block';
+
+            document.getElementById('previewTotal').textContent = validation.total;
+            document.getElementById('previewValid').textContent = validation.valid;
+            document.getElementById('previewInvalid').textContent = validation.invalid;
+
+            const messageEl = document.getElementById('previewMessage');
+            if (validation.isValid) {
+                messageEl.innerHTML = `
+                    <p class="success-message">✅ 복원 가능한 데이터입니다!</p>
+                    <p>유효한 필지 ${validation.valid}개를 복원합니다.</p>
+                    ${validation.invalid > 0 ? `<p class="warning-text">⚠️ ${validation.invalid}개의 무효한 필지는 제외됩니다.</p>` : ''}
+                `;
+                document.getElementById('startRestoreBtn').disabled = false;
+            } else {
+                messageEl.innerHTML = `
+                    <p class="error-message">❌ ${validation.error}</p>
+                `;
+                document.getElementById('startRestoreBtn').disabled = true;
+            }
+        }
+
+        function cancelRestore() {
+            currentValidationResult = null;
+            resetUploadUI();
+        }
+
+        function resetUploadUI() {
+            document.getElementById('fileUploadArea').style.display = 'block';
+            document.getElementById('restorePreview').style.display = 'none';
+            document.getElementById('restoreProgressContainer').style.display = 'none';
+            document.querySelector('.upload-text').textContent = '클릭하거나 Excel 파일을 여기에 드래그하세요';
+            document.getElementById('restoreFileInput').value = '';
+        }
+
+        async function startRestore() {
+            if (!currentValidationResult || !currentValidationResult.isValid) {
+                alert('유효한 데이터가 없습니다.');
+                return;
+            }
+
+            if (!confirm(`⚠️ 중요: 복원을 시작하시겠습니까?\n\n유효한 필지 ${currentValidationResult.valid}개를 복원합니다.\n복원 전 현재 데이터는 자동으로 백업됩니다.`)) {
+                return;
+            }
+
+            try {
+                document.getElementById('restorePreview').style.display = 'none';
+                document.getElementById('restoreProgressContainer').style.display = 'block';
+
+                const result = await window.UnifiedBackupManager.restoreFromExcel(currentValidationResult, {
+                    showProgress: true,
+                    createBackup: true
+                });
+
+                document.getElementById('restoreProgressContainer').style.display = 'none';
+
+                alert(`✅ 복원 완료!\n\n복원된 필지: ${result.restored}개\n제외된 필지: ${result.skipped}개`);
+
+                if (confirm('페이지를 새로고침하여 복원된 데이터를 확인하시겠습니까?')) {
+                    window.location.reload();
+                } else {
+                    closeBackupModal();
+                }
+
+            } catch (error) {
+                console.error('❌ 복원 실패:', error);
+                document.getElementById('restoreProgressContainer').style.display = 'none';
+                alert(`❌ 복원 실패: ${error.message}\n\n이전 상태로 자동 롤백되었습니다.`);
+                resetUploadUI();
+            }
+        }
+
         async function restoreBackup(backupDate) {
-            alert('현재 Excel 업로드 복원 기능은 지원하지 않습니다.\nSupabase에서 자동 백업이 관리됩니다.');
+            switchBackupTab('restore');
         }
 
         // 모달 외부 클릭시 닫기
