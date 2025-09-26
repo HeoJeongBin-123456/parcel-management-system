@@ -534,28 +534,38 @@ class RealtimeAutoSave {
     // 다층 저장 시스템으로 저장
     async saveToMultipleLayers(data, reason) {
         const saveResults = [];
-        
+
         try {
+            // 🔍 필지 검증: 유효한 필지만 저장
+            let filteredData = data;
+            if (Array.isArray(data) && window.ParcelValidationUtils) {
+                filteredData = window.ParcelValidationUtils.filterValidParcels(data);
+                const filtered = data.length - filteredData.length;
+                if (filtered > 0) {
+                    console.log(`🔍 [자동저장] ${filtered}개의 빈 필지 필터링됨`);
+                }
+            }
+
             // 1. DataPersistenceManager 사용 (우선순위)
             if (window.dataPersistenceManager) {
-                const result = await window.dataPersistenceManager.save(data, {
+                const result = await window.dataPersistenceManager.save(filteredData, {
                     priority: 'high',
                     reason: reason,
                     autoSave: true
                 });
                 saveResults.push({ layer: 'persistence_manager', success: result.success });
             }
-            
+
             // 2. migratedSetItem을 통한 통합 저장 (localStorage + Supabase)
             try {
                 const STORAGE_KEY = window.CONFIG?.STORAGE_KEY || 'parcelData';
                 if (window.migratedSetItem && typeof window.migratedSetItem === 'function') {
-                    await window.migratedSetItem(STORAGE_KEY, JSON.stringify(data));
+                    await window.migratedSetItem(STORAGE_KEY, JSON.stringify(filteredData));
                     console.log('💾 migratedSetItem으로 저장 완료');
                     saveResults.push({ layer: 'migratedSetItem', success: true });
                 } else {
                     // 폴백: 직접 localStorage에 저장
-                    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(filteredData));
                     console.log('💾 localStorage 직접 저장 (migratedSetItem 없음)');
                     saveResults.push({ layer: 'localStorage_direct', success: true });
                 }
@@ -564,17 +574,17 @@ class RealtimeAutoSave {
                 console.error('❌ 저장 오류:', error);
                 saveResults.push({ layer: 'integrated_save', success: false, error: error.message });
             }
-            
+
             // 3. sessionStorage 저장 (세션 백업)
             try {
-                sessionStorage.setItem('parcelData_session', JSON.stringify(data));
+                sessionStorage.setItem('parcelData_session', JSON.stringify(filteredData));
                 saveResults.push({ layer: 'sessionStorage', success: true });
             } catch (error) {
                 saveResults.push({ layer: 'sessionStorage', success: false, error: error.message });
             }
-            
+
             // 4. 전역 변수 업데이트
-            window.parcelsData = data;
+            window.parcelsData = filteredData;
             saveResults.push({ layer: 'globalVariable', success: true });
             
             // 결과 평가

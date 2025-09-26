@@ -258,6 +258,16 @@ async function saveSearchModeParcelData(parcelData) {
     const pnu = parcelData.properties?.PNU || parcelData.properties?.pnu || parcelData.pnu;
 
     try {
+        // 🔍 필지 검증: 색칠 또는 필지 정보가 있는지 확인
+        if (window.ParcelValidationUtils && !window.ParcelValidationUtils.isParcelWorthSaving(parcelData)) {
+            console.warn('⚠️ [검색 모드 저장 거부] 색칠도 없고 필지 정보도 없는 빈 필지:', pnu);
+            window.ParcelValidationUtils.updateStats(false);
+            return false;
+        }
+
+        window.ParcelValidationUtils.updateStats(true);
+        console.log('✅ [검색 모드 저장 검증 통과]', pnu);
+
         // Supabase 저장 (새로운 스키마 필드 포함)
         if (window.SupabaseManager) {
             await window.SupabaseManager.saveParcel({

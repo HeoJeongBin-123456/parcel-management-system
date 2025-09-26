@@ -967,6 +967,16 @@ async function saveClickModeParcelData(parcelData) {
         mergedParcel.parcelNumber = jibun;
         mergedParcel.parcel_name = selectString(mergedParcel.parcel_name, jibun);
 
+        // 🔍 필지 검증: 색칠 또는 필지 정보가 있는지 확인
+        if (window.ParcelValidationUtils && !window.ParcelValidationUtils.isParcelWorthSaving(mergedParcel)) {
+            console.warn('⚠️ [클릭 모드 저장 거부] 색칠도 없고 필지 정보도 없는 빈 필지:', pnu);
+            window.ParcelValidationUtils.updateStats(false);
+            return false;
+        }
+
+        window.ParcelValidationUtils.updateStats(true);
+        console.log('✅ [클릭 모드 저장 검증 통과]', pnu);
+
         // Supabase 저장 (병합 데이터 사용)
         if (window.SupabaseManager) {
             await window.SupabaseManager.saveParcel(pnu, {

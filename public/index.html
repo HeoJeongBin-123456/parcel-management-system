@@ -189,6 +189,13 @@
     <script src="/js/map-instances.js"></script>
     <script src="/js/polygon-optimizer.js"></script>
     <script src="/js/map-performance-monitor.js"></script>
+    <!-- 필지 검증 유틸리티 (최우선 로드 - 다른 모듈에서 사용) -->
+    <script src="/js/parcel-validation-utils.js"></script>
+    <!-- 빈 필지 정리 도구 (개발자 도구에서 수동 실행) -->
+    <script src="/js/cleanup-empty-parcels.js"></script>
+    <!-- 새로운 통합 백업 및 실시간 협업 시스템 (parcel.js보다 먼저 로드) -->
+    <script src="/js/unified-backup-manager.js"></script>
+    <script src="/js/realtime-collaboration.js"></script>
     <script src="/js/parcel.js"></script>
     <script src="/js/parcel-manager.js"></script>
     <script src="/js/mode-manager.js"></script>
@@ -196,13 +203,14 @@
     <script src="/js/search-mode.js"></script>
     <script src="/js/search.js"></script>
     <script src="/js/memo-markers.js"></script>
-    <script src="/js/backup-manager.js"></script>
     <script src="/js/mobile-handler.js"></script>
     <!-- data-persistence-manager.js 비활성화 - LocalStorage와 Supabase만 사용 -->
     <!-- <script src="/js/data-persistence-manager.js"></script> -->
     <script src="/js/parcel-restore-helper.js"></script>
-    <script src="/js/advanced-backup-manager.js"></script>
-    <script src="/js/backup-ui.js"></script>
+    <!-- 기존 백업 시스템 제거 (unified-backup-manager.js로 통합) -->
+    <!-- <script src="/js/backup-manager.js"></script> -->
+    <!-- <script src="/js/advanced-backup-manager.js"></script> -->
+    <!-- <script src="/js/backup-ui.js"></script> -->
     <script src="/js/realtime-autosave.js"></script>
     <script src="/js/debug-save-system.js"></script>
     <script src="/js/app-init.js"></script>
@@ -328,23 +336,18 @@
             document.getElementById('backupModal').style.display = 'none';
         }
 
-        // 수동 백업 실행
+        // 수동 백업 실행 (Excel 다운로드)
         async function runManualBackup() {
-            if (confirm('수동 백업을 실행하시겠습니까?')) {
+            if (confirm('Excel 파일로 백업을 다운로드하시겠습니까?')) {
                 try {
-                    const result = await window.BackupManager.runManualBackup('daily');
-                    if (result && result.success) {
-                        alert('백업이 성공적으로 완료되었습니다.');
-                        loadBackupList(); // 백업 목록 새로고침
-                    } else if (result) {
-                        alert('백업 실행 중 오류가 발생했습니다.');
+                    if (window.UnifiedBackupManager) {
+                        await window.UnifiedBackupManager.downloadExcel();
                     } else {
-                        // result가 undefined인 경우에도 처리
-                        loadBackupList(); // 백업 목록 새로고침
+                        alert('백업 매니저를 찾을 수 없습니다.');
                     }
                 } catch (error) {
-                    console.error('백업 실행 실패:', error);
-                    alert('백업 실행에 실패했습니다.');
+                    console.error('백업 다운로드 실패:', error);
+                    alert('백업 다운로드에 실패했습니다.');
                 }
             }
         }
@@ -373,67 +376,40 @@
 
         async function loadBackupList() {
             const listContainer = document.getElementById('backupList');
-            listContainer.innerHTML = '<p>백업 목록을 불러오는 중...</p>';
 
-            try {
-                const backups = await window.BackupManager.getBackupList();
+            // 새로운 백업 시스템 상태 표시
+            const status = window.UnifiedBackupManager?.getStatus();
 
-                if (backups.length === 0) {
-                    listContainer.innerHTML = '<p>백업이 없습니다.</p>';
-                    return;
-                }
+            let html = '<div class="backup-status">';
+            html += '<h4>백업 시스템 상태</h4>';
+            html += `<p>🌐 온라인: ${status?.isOnline ? '✅' : '❌'}</p>`;
+            html += `<p>☁️ Supabase: ${status?.supabaseConnected ? '✅ 연결됨' : '❌ 연결 안됨'}</p>`;
 
-                let html = '<table class="backup-table">';
-                html += '<thead><tr><th>날짜</th><th>필지 수</th><th>크기</th><th>소스</th><th>작업</th></tr></thead>';
-                html += '<tbody>';
-
-                backups.forEach(backup => {
-                    const date = new Date(backup.date).toLocaleString('ko-KR');
-                    const size = (backup.size / 1024).toFixed(2) + ' KB';
-                    html += `
-                        <tr>
-                            <td>${date}</td>
-                            <td>${backup.count}개</td>
-                            <td>${size}</td>
-                            <td>${backup.source}</td>
-                            <td>
-                                <button class="btn-restore" onclick="restoreBackup('${backup.date}')">복원</button>
-                            </td>
-                        </tr>
-                    `;
-                });
-
-                html += '</tbody></table>';
-                listContainer.innerHTML = html;
-            } catch (error) {
-                listContainer.innerHTML = '<p>백업 목록을 불러오는데 실패했습니다.</p>';
-                console.error('백업 목록 로드 실패:', error);
+            if (status?.cache) {
+                const cacheAge = Math.floor((Date.now() - status.cache.timestamp) / 1000 / 60);
+                html += `<p>💾 로컬 캐시: ${status.cache.count}개 필지 (${cacheAge}분 전)</p>`;
             }
+
+            if (status?.pendingSyncCount > 0) {
+                html += `<p>⏳ 동기화 대기: ${status.pendingSyncCount}개</p>`;
+            }
+
+            html += '</div>';
+            html += '<hr style="margin: 20px 0;">';
+            html += '<h4>백업 안내</h4>';
+            html += '<ul style="text-align: left; padding-left: 20px;">';
+            html += '<li>☁️ <strong>자동 백업:</strong> 매일 새벽 2시 Supabase Storage에 자동 저장</li>';
+            html += '<li>📥 <strong>수동 백업:</strong> 위 "수동 백업 실행" 버튼으로 Excel 다운로드</li>';
+            html += '<li>💾 <strong>실시간 저장:</strong> 모든 변경사항이 Supabase에 즉시 저장됨</li>';
+            html += '<li>👥 <strong>팀 협업:</strong> 다른 사용자의 변경사항이 실시간으로 동기화됨</li>';
+            html += '</ul>';
+
+            listContainer.innerHTML = html;
         }
 
+        // 백업 복원 (현재는 Excel 업로드 기능 없음)
         async function restoreBackup(backupDate) {
-            if (confirm('정말로 이 백업을 복원하시겠습니까?\n현재 데이터는 백업됩니다.')) {
-                await window.BackupManager.restoreFromBackup(backupDate);
-                closeBackupModal();
-            }
-        }
-
-        // 백업 상태 업데이트 (헤더용)
-        document.addEventListener('DOMContentLoaded', function() {
-            // 백업 상태 업데이트 - 헤더 백업 버튼과 연동
-            updateBackupStatus();
-            setInterval(updateBackupStatus, 60000); // 1분마다 업데이트
-        });
-
-        function updateBackupStatus() {
-            const status = window.BackupManager?.getBackupStatus();
-            if (status && status.lastDaily) {
-                const lastBackupTime = document.getElementById('lastBackupTime');
-                if (lastBackupTime) {
-                    const date = new Date(status.lastDaily);
-                    lastBackupTime.textContent = date.toLocaleString('ko-KR');
-                }
-            }
+            alert('현재 Excel 업로드 복원 기능은 지원하지 않습니다.\nSupabase에서 자동 백업이 관리됩니다.');
         }
 
         // 모달 외부 클릭시 닫기

@@ -1216,65 +1216,67 @@ async function saveParcelData() {
         }
         
         console.log('📄 저장할 데이터:', formData);
-        
-        // 1단계: localStorage 직접 저장 (백업)
-        let localStorageSuccess = false;
-        try {
-            let savedData = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEY) || '[]');
-            const existingIndex = savedData.findIndex(item =>
-                (item.pnu && item.pnu === currentPNU) ||
-                (item.id && item.id === currentPNU) ||  // ID도 확인
-                item.parcelNumber === formData.parcelNumber
-            );
 
-            if (existingIndex > -1) {
-                // 기존 데이터 업데이트 (ID 일관성 유지)
-                savedData[existingIndex] = {
-                    ...savedData[existingIndex],
-                    ...formData,
-                    id: currentPNU,  // ID를 PNU로 고정
-                    pnu: currentPNU
-                };
-            } else {
-                savedData.push(formData);
-            }
-            
-            localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(savedData));
-            localStorageSuccess = true;
-            console.log('✅ localStorage 저장 성공');
-        } catch (localError) {
-            console.error('❌ localStorage 저장 실패:', localError);
-        }
-        
-        // 2단계: 🌟 새로운 Supabase 올인원 저장 시도
+        // 1단계: 🌟 Supabase 우선 저장 (팀 협업을 위한 Single Source of Truth)
         let supabaseSuccess = false;
         try {
             if (window.SupabaseManager && window.SupabaseManager.isConnected) {
-                // 🎯 개별 필지 데이터를 Supabase에 저장 (확장된 parcels 테이블 활용)
                 const supabaseData = {
                     ...formData,
-                    // 🔺 폴리곤 데이터 JSONB 필드로 저장
                     polygon_data: geometry ? {
                         type: geometry.type,
                         coordinates: geometry.coordinates,
                         center: { lat: formData.lat, lng: formData.lng }
                     } : null,
-                    // 🎨 색상 정보 JSONB 필드로 저장
                     color_info: formData.color ? {
                         color: formData.color,
                         applied_at: new Date().toISOString(),
                         mode: isSearchParcel ? 'search' : 'click'
-                    } : null
+                    } : null,
+                    updated_by: window.RealtimeCollaborationManager?.userSession || 'unknown'
                 };
 
                 await window.SupabaseManager.saveParcel(currentPNU, supabaseData);
                 supabaseSuccess = true;
-                console.log('✅ Supabase 올인원 저장 성공:', currentPNU);
+                console.log('✅ Supabase 우선 저장 성공:', currentPNU);
             } else {
-                console.warn('⚠️ SupabaseManager 연결 없음 - localStorage만 사용');
+                throw new Error('SupabaseManager 연결 없음');
             }
         } catch (supabaseError) {
             console.error('❌ Supabase 저장 실패:', supabaseError);
+
+            if (window.UnifiedBackupManager) {
+                window.UnifiedBackupManager.addToPendingSync(formData);
+                console.log('📋 오프라인 동기화 큐에 추가');
+            }
+        }
+
+        // 2단계: localStorage 캐싱 (빠른 로딩 및 오프라인 대비)
+        let localStorageSuccess = false;
+        try {
+            let savedData = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEY) || '[]');
+            const existingIndex = savedData.findIndex(item =>
+                (item.pnu && item.pnu === currentPNU) ||
+                (item.id && item.id === currentPNU) ||
+                item.parcelNumber === formData.parcelNumber
+            );
+
+            if (existingIndex > -1) {
+                savedData[existingIndex] = {
+                    ...savedData[existingIndex],
+                    ...formData,
+                    id: currentPNU,
+                    pnu: currentPNU
+                };
+            } else {
+                savedData.push(formData);
+            }
+
+            localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(savedData));
+            localStorageSuccess = true;
+            console.log('✅ localStorage 캐시 저장 성공');
+        } catch (localError) {
+            console.error('❌ localStorage 캐시 저장 실패:', localError);
         }
         
         // 3단계: 지도 업데이트
@@ -1555,7 +1557,43 @@ async function saveClickParcelData() {
 
         console.log('📄 클릭 필지 저장할 데이터:', formData);
 
-        // 1단계: 새로운 분리된 localStorage 저장
+        // 🔍 필지 검증: 색칠 또는 필지 정보가 있는지 확인
+        if (window.ParcelValidationUtils && !window.ParcelValidationUtils.isParcelWorthSaving(formData)) {
+            console.warn('⚠️ [저장 거부] 색칠도 없고 필지 정보도 없는 빈 필지입니다');
+            alert('저장할 내용이 없습니다.\n\n다음 중 하나를 입력해주세요:\n- 색상 선택\n- 지번, 소유자명, 주소, 연락처, 메모 중 하나 이상');
+
+            window.ParcelValidationUtils.updateStats(false);
+            return false;
+        }
+
+        window.ParcelValidationUtils.updateStats(true);
+        console.log('✅ [저장 검증 통과] 유효한 필지 데이터');
+
+        // 1단계: 🌟 Supabase 우선 저장 (팀 협업을 위한 Single Source of Truth)
+        let supabaseSuccess = false;
+        try {
+            if (window.SupabaseManager && window.SupabaseManager.isConnected) {
+                const supabaseData = {
+                    ...formData,
+                    updated_by: window.RealtimeCollaborationManager?.userSession || 'unknown'
+                };
+
+                await window.SupabaseManager.saveClickParcel(supabaseData);
+                supabaseSuccess = true;
+                console.log('✅ 클릭 필지 Supabase 우선 저장 성공:', currentPNU);
+            } else {
+                throw new Error('SupabaseManager 연결 없음');
+            }
+        } catch (supabaseError) {
+            console.error('❌ 클릭 필지 Supabase 저장 실패:', supabaseError);
+
+            if (window.UnifiedBackupManager) {
+                window.UnifiedBackupManager.addToPendingSync(formData);
+                console.log('📋 오프라인 동기화 큐에 추가');
+            }
+        }
+
+        // 2단계: localStorage 캐싱 (빠른 로딩 및 오프라인 대비)
         let localStorageSuccess = false;
         try {
             let savedData = window.getClickParcelData();
@@ -1570,32 +1608,28 @@ async function saveClickParcelData() {
                 savedData.push(formData);
             }
 
-            // localStorage에 직접 저장 (재귀 호출 방지)
             localStorage.setItem(window.STORAGE_KEYS.CLICK_PARCEL_DATA, JSON.stringify(savedData));
 
-            // 🆕 일반 parcelData에도 저장 (새로고침 시 복원을 위해)
-            // formData를 그대로 사용하여 모든 필드가 포함되도록 함
             let generalParcels = JSON.parse(localStorage.getItem('parcelData') || '[]');
             const generalIndex = generalParcels.findIndex(item =>
                 (item.pnu && item.pnu === currentPNU) ||
                 item.parcelNumber === formData.parcelNumber
             );
 
-            // 완전한 데이터 구조로 저장 (필지 정보 및 좌표 포함)
             const completeData = {
-                ...formData,  // 모든 필드 포함 (ownerName, ownerAddress, ownerContact, memo 등)
+                ...formData,
                 pnu: currentPNU,
                 parcelNumber: formData.parcelNumber,
                 ownerName: formData.ownerName,
                 ownerAddress: formData.ownerAddress,
                 ownerContact: formData.ownerContact,
                 memo: formData.memo,
-                lat: formData.lat,  // 좌표 정보 명시적 포함
-                lng: formData.lng,  // 좌표 정보 명시적 포함
-                geometry: formData.geometry,  // 폴리곤 복원용 geometry 포함
-                properties: formData.properties,  // 필지 속성 정보 포함
-                mode: 'click',  // 클릭 모드 명시
-                source: 'click'  // 소스 명시
+                lat: formData.lat,
+                lng: formData.lng,
+                geometry: formData.geometry,
+                properties: formData.properties,
+                mode: 'click',
+                source: 'click'
             };
 
             if (generalIndex > -1) {
@@ -1607,23 +1641,9 @@ async function saveClickParcelData() {
             localStorage.setItem('parcelData', JSON.stringify(generalParcels));
 
             localStorageSuccess = true;
-            console.log('✅ 클릭 필지 localStorage 저장 성공 (clickParcelData + parcelData)');
+            console.log('✅ 클릭 필지 localStorage 캐시 저장 성공');
         } catch (localError) {
-            console.error('❌ 클릭 필지 localStorage 저장 실패:', localError);
-        }
-
-        // 2단계: Supabase에 클릭 필지로 저장
-        let supabaseSuccess = false;
-        try {
-            if (window.SupabaseManager && window.SupabaseManager.isConnected) {
-                await window.SupabaseManager.saveClickParcel(formData);
-                supabaseSuccess = true;
-                console.log('✅ 클릭 필지 Supabase 저장 성공:', currentPNU);
-            } else {
-                console.warn('⚠️ SupabaseManager 연결 없음 - localStorage만 사용');
-            }
-        } catch (supabaseError) {
-            console.error('❌ 클릭 필지 Supabase 저장 실패:', supabaseError);
+            console.error('❌ 클릭 필지 localStorage 캐시 저장 실패:', localError);
         }
 
         // 3단계: clickParcels Map 업데이트
@@ -1790,6 +1810,18 @@ async function saveSearchParcelData() {
         }
 
         console.log('📄 검색 필지 저장할 데이터:', formData);
+
+        // 🔍 필지 검증: 색칠 또는 필지 정보가 있는지 확인
+        if (window.ParcelValidationUtils && !window.ParcelValidationUtils.isParcelWorthSaving(formData)) {
+            console.warn('⚠️ [저장 거부] 색칠도 없고 필지 정보도 없는 빈 필지입니다');
+            alert('저장할 내용이 없습니다.\n\n다음 중 하나를 입력해주세요:\n- 색상 선택 (검색 필지는 보라색 자동)\n- 지번, 소유자명, 주소, 연락처, 메모 중 하나 이상');
+
+            window.ParcelValidationUtils.updateStats(false);
+            return false;
+        }
+
+        window.ParcelValidationUtils.updateStats(true);
+        console.log('✅ [저장 검증 통과] 유효한 필지 데이터');
 
         // 1단계: 새로운 분리된 localStorage 저장
         let localStorageSuccess = false;

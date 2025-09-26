@@ -355,7 +355,17 @@ class SupabaseManager {
             const rawParcels = Array.isArray(parcels) ? parcels : [parcels];
             const cleanedParcels = window.sanitizeObject ? window.sanitizeObject(rawParcels) : rawParcels;
 
-            const sanitizedParcels = cleanedParcels.map(parcel => this.prepareParcelRecord(parcel));
+            // 🔍 필지 검증: 유효한 필지만 저장
+            const validParcels = window.ParcelValidationUtils
+                ? window.ParcelValidationUtils.filterValidParcels(cleanedParcels)
+                : cleanedParcels;
+
+            if (validParcels.length === 0) {
+                console.warn('⚠️ [Supabase] 저장할 유효한 필지가 없습니다');
+                return false;
+            }
+
+            const sanitizedParcels = validParcels.map(parcel => this.prepareParcelRecord(parcel));
 
             const { data, error } = await this.supabase
                 .from('parcels')
@@ -459,7 +469,18 @@ class SupabaseManager {
 
         try {
             const parcelsArray = Array.isArray(parcelData) ? parcelData : [parcelData];
-            const sanitizedParcels = parcelsArray.map(parcel => this.prepareParcelRecord(parcel));
+
+            // 🔍 필지 검증: 유효한 필지만 저장
+            const validParcels = window.ParcelValidationUtils
+                ? window.ParcelValidationUtils.filterValidParcels(parcelsArray)
+                : parcelsArray;
+
+            if (validParcels.length === 0) {
+                console.warn('⚠️ [Supabase] 클릭 필지: 저장할 유효한 필지가 없습니다');
+                return false;
+            }
+
+            const sanitizedParcels = validParcels.map(parcel => this.prepareParcelRecord(parcel));
             const { data, error } = await this.supabase
                 .from('parcels')
                 .upsert(sanitizedParcels, { onConflict: 'pnu' });
@@ -521,7 +542,18 @@ class SupabaseManager {
 
         try {
             const parcelsArray = Array.isArray(parcelData) ? parcelData : [parcelData];
-            const sanitizedParcels = parcelsArray.map(parcel => this.prepareParcelRecord(parcel));
+
+            // 🔍 필지 검증: 유효한 필지만 저장
+            const validParcels = window.ParcelValidationUtils
+                ? window.ParcelValidationUtils.filterValidParcels(parcelsArray)
+                : parcelsArray;
+
+            if (validParcels.length === 0) {
+                console.warn('⚠️ [Supabase] 검색 필지: 저장할 유효한 필지가 없습니다');
+                return false;
+            }
+
+            const sanitizedParcels = validParcels.map(parcel => this.prepareParcelRecord(parcel));
             const { data, error } = await this.supabase
                 .from('parcels')
                 .upsert(sanitizedParcels, { onConflict: 'pnu' });
