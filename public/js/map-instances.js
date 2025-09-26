@@ -28,6 +28,23 @@ const MAP_POSITION_KEY = 'mapPosition';
 const MODE_POSITION_PREFIX = 'mapPosition_';
 let mapPositionSaveTimer = null;
 
+// 🧹 기존 모드별 위치 데이터 정리 (최초 1회 실행)
+function cleanupModeSpecificPositions() {
+    const modesToClean = ['click', 'search', 'hand'];
+    modesToClean.forEach(mode => {
+        const key = `${MODE_POSITION_PREFIX}${mode}`;
+        if (localStorage.getItem(key)) {
+            localStorage.removeItem(key);
+            console.log(`🧹 모드별 위치 데이터 삭제: ${key}`);
+        }
+    });
+}
+
+// 페이지 로드 시 1회 실행
+if (typeof window !== 'undefined') {
+    cleanupModeSpecificPositions();
+}
+
 // 🚀 성능 최적화를 위한 설정
 const IDLE_DEBOUNCE_DELAY = 2000; // idle 이벤트 디바운싱 (600ms → 2000ms)
 const POSITION_SAVE_DEBOUNCE = 1000; // Supabase 저장 디바운싱
@@ -66,11 +83,9 @@ function saveMapViewState(mode, mapInstance) {
     }
 
     try {
+        // 🔄 모든 모드가 같은 위치 공유: 공통 키만 저장
         localStorage.setItem(MAP_POSITION_KEY, JSON.stringify(position));
-        if (mode) {
-            localStorage.setItem(`${MODE_POSITION_PREFIX}${mode}`, JSON.stringify(position));
-        }
-        console.log('💾 지도 위치 localStorage 저장 완료:', {
+        console.log('💾 지도 위치 localStorage 저장 완료 (모든 모드 공유):', {
             mode,
             lat: position.lat.toFixed(6),
             lng: position.lng.toFixed(6),
@@ -119,24 +134,14 @@ function restoreMapViewForMode(mode, mapInstance) {
 
     let stored = null;
 
+    // 🔄 모든 모드가 같은 위치 공유: 공통 키만 사용
     try {
-        const modeSpecific = localStorage.getItem(`${MODE_POSITION_PREFIX}${mode}`);
-        if (modeSpecific) {
-            stored = JSON.parse(modeSpecific);
+        const generic = localStorage.getItem(MAP_POSITION_KEY);
+        if (generic) {
+            stored = JSON.parse(generic);
         }
     } catch (error) {
-        console.warn('⚠️ 모드별 지도 위치 파싱 실패:', error);
-    }
-
-    if (!stored) {
-        try {
-            const generic = localStorage.getItem(MAP_POSITION_KEY);
-            if (generic) {
-                stored = JSON.parse(generic);
-            }
-        } catch (error) {
-            console.warn('⚠️ 지도 위치 파싱 실패:', error);
-        }
+        console.warn('⚠️ 지도 위치 파싱 실패:', error);
     }
 
     if (stored && typeof stored.lat === 'number' && typeof stored.lng === 'number') {
@@ -151,6 +156,12 @@ function restoreMapViewForMode(mode, mapInstance) {
         if (stored.zoom && currentZoom !== stored.zoom) {
             mapInstance.setZoom(stored.zoom);
         }
+
+        console.log(`📍 ${mode} 모드 위치 복원 (공유 위치):`, {
+            lat: stored.lat.toFixed(6),
+            lng: stored.lng.toFixed(6),
+            zoom: stored.zoom
+        });
     }
 }
 

@@ -351,8 +351,11 @@ class SupabaseManager {
         }
 
         try {
-            const parcelsArray = Array.isArray(parcels) ? parcels : [parcels];
-            const sanitizedParcels = parcelsArray.map(parcel => this.prepareParcelRecord(parcel));
+            // 🔒 데이터 정제: 잘못된 UTF-16 문자 제거
+            const rawParcels = Array.isArray(parcels) ? parcels : [parcels];
+            const cleanedParcels = window.sanitizeObject ? window.sanitizeObject(rawParcels) : rawParcels;
+
+            const sanitizedParcels = cleanedParcels.map(parcel => this.prepareParcelRecord(parcel));
 
             const { data, error } = await this.supabase
                 .from('parcels')

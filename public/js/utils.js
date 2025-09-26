@@ -1,6 +1,37 @@
 /* eslint-disable */
 // 유틸리티 함수들
 
+function sanitizeString(str) {
+    if (!str || typeof str !== 'string') return str;
+
+    return str.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|[\uDC00-\uDFFF](?<![\uD800-\uDBFF])/g, '')
+              .replace(/[\u0000-\u001F\u007F-\u009F]/g, '')
+              .trim();
+}
+
+function sanitizeObject(obj) {
+    if (!obj || typeof obj !== 'object') return obj;
+
+    if (Array.isArray(obj)) {
+        return obj.map(item => sanitizeObject(item));
+    }
+
+    const sanitized = {};
+    for (const [key, value] of Object.entries(obj)) {
+        if (typeof value === 'string') {
+            sanitized[key] = sanitizeString(value);
+        } else if (typeof value === 'object' && value !== null) {
+            sanitized[key] = sanitizeObject(value);
+        } else {
+            sanitized[key] = value;
+        }
+    }
+    return sanitized;
+}
+
+window.sanitizeString = sanitizeString;
+window.sanitizeObject = sanitizeObject;
+
 const COLOR_PALETTE_DEFINITION = [
     { index: 0, hex: '#FF0000', name: '빨강' },
     { index: 1, hex: '#FFA500', name: '주황' },

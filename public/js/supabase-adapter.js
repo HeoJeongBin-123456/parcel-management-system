@@ -75,8 +75,11 @@ class SupabaseAdapter {
 
     async saveParcels(parcels) {
         try {
+            // 🔒 데이터 정제: 잘못된 UTF-16 문자 제거
+            const sanitizedParcels = window.sanitizeObject ? window.sanitizeObject(parcels) : parcels;
+
             // localStorage 형식을 Supabase 형식으로 변환
-            const supabaseParcels = parcels.map(localData => this.convertToSupabaseFormat(localData));
+            const supabaseParcels = sanitizedParcels.map(localData => this.convertToSupabaseFormat(localData));
             return await this.supabaseManager.saveParcels(supabaseParcels);
         } catch (error) {
             console.error('❌ 필지 데이터 저장 실패:', error);
@@ -562,15 +565,19 @@ window.migratedGetItem = async function(key) {
 window.migratedSetItem = async function(key, value) {
     if (key === CONFIG.STORAGE_KEY) {
         const parcels = JSON.parse(value);
-        
+
+        // 🔒 데이터 정제: 잘못된 UTF-16 문자 제거
+        const sanitizedParcels = window.sanitizeObject ? window.sanitizeObject(parcels) : parcels;
+        const sanitizedValue = JSON.stringify(sanitizedParcels);
+
         // ✅ 중요: localStorage에도 저장해야 새로고침 시 복원 가능
-        localStorage.setItem(key, value);
-        console.log('💾 localStorage 저장 완료:', parcels.length, '개 항목');
-        
+        localStorage.setItem(key, sanitizedValue);
+        console.log('💾 localStorage 저장 완료:', sanitizedParcels.length, '개 항목');
+
         // Supabase에도 저장 (실패해도 localStorage는 유지됨)
         try {
-            await window.supabaseAdapter.saveParcels(parcels);
-            console.log('☁️ Supabase 저장 완료:', parcels.length, '개 항목');
+            await window.supabaseAdapter.saveParcels(sanitizedParcels);
+            console.log('☁️ Supabase 저장 완료:', sanitizedParcels.length, '개 항목');
         } catch (error) {
             console.warn('⚠️ Supabase 저장 실패 (localStorage는 성공):', error);
         }
