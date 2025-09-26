@@ -128,17 +128,15 @@ class SupabaseAdapter {
         }
         if (resolvedPnu) {
             supabaseData.pnu = resolvedPnu;
-            supabaseData.pnu_code = resolvedPnu;
+            // ⚠️ pnu_code 컬럼 없음 - pnu만 사용
+            // supabaseData.pnu_code = resolvedPnu;
             normalizedData.pnu = resolvedPnu;
             if (!supabaseData.id) {
                 supabaseData.id = resolvedPnu;
             }
         }
 
-        // ✅ geometry 정보 보존 - 폴리곤 복원에 필요
-        if (normalizedData.geometry) {
-            supabaseData.geometry = normalizedData.geometry;
-        }
+        // ⚠️ geometry는 Supabase에 저장하지 않음 (컬럼 없음, 필요시 VWorld API로 재조회)
 
         // ✅ 색상 인덱스 보존 - 8색 팔레트 시스템
         if (normalizedData.colorIndex !== undefined) {
@@ -155,16 +153,17 @@ class SupabaseAdapter {
         supabaseData.owner_address = normalizedData.ownerAddress || null;
         supabaseData.owner_contact = normalizedData.ownerContact || null;
 
-        if (normalizedData.ownerName || normalizedData.ownerAddress || normalizedData.ownerContact) {
-            supabaseData.owner_info = {
-                name: normalizedData.ownerName || '',
-                address: normalizedData.ownerAddress || '',
-                contact: normalizedData.ownerContact || '',
-                updated_at: new Date().toISOString()
-            };
-        } else {
-            supabaseData.owner_info = null;
-        }
+        // ⚠️ owner_info는 Supabase에 저장하지 않음 (컬럼 없음, 개별 필드 사용)
+        // if (normalizedData.ownerName || normalizedData.ownerAddress || normalizedData.ownerContact) {
+        //     supabaseData.owner_info = {
+        //         name: normalizedData.ownerName || '',
+        //         address: normalizedData.ownerAddress || '',
+        //         contact: normalizedData.ownerContact || '',
+        //         updated_at: new Date().toISOString()
+        //     };
+        // } else {
+        //     supabaseData.owner_info = null;
+        // }
 
         return supabaseData;
     }
@@ -275,7 +274,7 @@ class SupabaseAdapter {
             colorIndex: supabaseData.colorIndex || 0,
             mode: supabaseData.mode || 'click',
             visitDate: '',
-            isSearchParcel: supabaseData.color_type === 'search',
+            isSearchParcel: supabaseData.parcel_type === 'search',
             pnu: resolvedPnu || supabaseData.id,
             // ✅ Supabase에 저장된 geometry가 있으면 사용, 없으면 Point로 생성
             geometry: supabaseData.geometry || {

@@ -12,7 +12,8 @@ class ColorPaletteManager {
             { index: 4, hex: '#0000FF', name: '파랑', isActive: false, usageCount: 0 },
             { index: 5, hex: '#000000', name: '검정', isActive: false, usageCount: 0 },
             { index: 6, hex: '#FFFFFF', name: '흰색', isActive: false, usageCount: 0 },
-            { index: 7, hex: '#87CEEB', name: '하늘색', isActive: false, usageCount: 0 }
+            { index: 7, hex: '#87CEEB', name: '하늘색', isActive: false, usageCount: 0 },
+            { index: 8, hex: '#9B59B6', name: '검색', isActive: false, usageCount: 0 }
         ];
 
         this.currentSelection = null;
@@ -22,6 +23,12 @@ class ColorPaletteManager {
         };
 
         this.selectionCallbacks = [];
+
+        this.colorHexToIndexMap = new Map();
+        this.colors.forEach(color => {
+            this.colorHexToIndexMap.set(color.hex, color.index);
+        });
+        console.log('[ColorPalette] 🚀 색상 인덱스 Map 초기화 완료 (O(1) 조회)');
     }
 
     /**
@@ -68,7 +75,13 @@ class ColorPaletteManager {
         }
 
         // 이전 선택 해제
-        if (this.currentSelection !== null) {
+        // 색상 존재 확인
+        if (!this.colors[index]) {
+            console.warn(`[ColorPalette] Invalid color index: ${index}`);
+            return;
+        }
+
+        if (this.currentSelection !== null && this.colors[this.currentSelection]) {
             this.colors[this.currentSelection].isActive = false;
         }
 
@@ -86,9 +99,15 @@ class ColorPaletteManager {
         // 사용자가 같은 색상으로 여러 필지를 칠할 수 있도록 허용
 
         // 콜백 실행
-        this.notifyColorSelection(index, this.colors[index]);
+        const selectedColor = this.colors[index];
+        if (!selectedColor) {
+            console.warn(`[ColorPalette] Invalid color index: ${index}`);
+            return;
+        }
 
-        console.log(`[ColorPalette] Color selected: ${this.colors[index].name} (${index}) - ${this.colors[index].hex}`);
+        this.notifyColorSelection(index, selectedColor);
+
+        console.log(`[ColorPalette] Color selected: ${selectedColor.name} (${index}) - ${selectedColor.hex}`);
     }
 
     /**
@@ -128,6 +147,13 @@ class ColorPaletteManager {
             return this.colors[index];
         }
         return null;
+    }
+
+    /**
+     * 색상 hex 값으로 인덱스 가져오기 (O(1) 최적화)
+     */
+    getIndexByHex(hexColor) {
+        return this.colorHexToIndexMap.get(hexColor) ?? null;
     }
 
     /**
@@ -213,6 +239,10 @@ class ColorPaletteManager {
         }
 
         const color = this.colors[colorIndex];
+        if (!color) {
+            console.warn(`[ColorPalette] Invalid color index for applyColorToParcel: ${colorIndex}`);
+            return false;
+        }
 
         // 색상 사용 카운트 증가
         this.updateUsageCount(colorIndex, 1);

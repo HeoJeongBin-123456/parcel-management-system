@@ -275,7 +275,7 @@ class SupabaseManager {
     }
 
     // 나머지 메서드들은 기존과 동일...
-    createParcelData(lat, lng, parcelName, memo = '', isColored = true, colorType = 'click', parcelType = 'click') {
+    createParcelData(lat, lng, parcelName, memo = '', isColored = true, parcelType = 'click') {
         return {
             id: this.generateId(),
             lat: parseFloat(lat),
@@ -283,8 +283,7 @@ class SupabaseManager {
             parcel_name: parcelName,
             memo: memo,
             is_colored: isColored,
-            color_type: colorType,
-            parcel_type: parcelType, // Phase 1: parcel_type 필드 추가
+            parcel_type: parcelType,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
             user_session: this.getUserSession()
@@ -928,8 +927,10 @@ class SupabaseManager {
             };
 
             // 선택적으로 업데이트할 필드들
-            if (advancedInfo.ownerInfo) updateData.owner_info = advancedInfo.ownerInfo;
-            if (advancedInfo.pnuCode) updateData.pnu_code = advancedInfo.pnuCode;
+            // ⚠️ owner_info 컬럼 없음 - 주석처리
+            // if (advancedInfo.ownerInfo) updateData.owner_info = advancedInfo.ownerInfo;
+            // ⚠️ pnu_code 컬럼 없음 - 주석처리
+            // if (advancedInfo.pnuCode) updateData.pnu_code = advancedInfo.pnuCode;
             if (advancedInfo.addressFull) updateData.address_full = advancedInfo.addressFull;
             if (advancedInfo.addressShort) updateData.address_short = advancedInfo.addressShort;
             if (advancedInfo.metadata) updateData.metadata = advancedInfo.metadata;
