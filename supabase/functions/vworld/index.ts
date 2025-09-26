@@ -12,7 +12,8 @@ const ALLOWED_ORIGINS = [
   'http://localhost:4000',
   'http://127.0.0.1:3000',
   'http://127.0.0.1:4000',
-  'https://parcel-management-system.pages.dev'
+  'https://parcel-management-system.pages.dev',
+  'https://parcel-management-system-wheat.vercel.app'
 ];
 
 function withCORS(r: Response, requestOrigin?: string | null) {
