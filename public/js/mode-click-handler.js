@@ -60,6 +60,249 @@ function getGeometryCenter(geometry) {
 const clickModePolygons = new Map(); // PNU -> polygon 맵핑
 const clickModeParcelData = new Map(); // PNU -> parcel data 맵핑
 
+const clickModeGeometryCache = window.ClickModeGeometryCache || new Map();
+window.ClickModeGeometryCache = clickModeGeometryCache;
+
+const clickModeSaveTimers = window.__clickModeSaveTimers || new Map();
+window.__clickModeSaveTimers = clickModeSaveTimers;
+
+const CLICK_MODE_SAVE_DELAY = 120;
+
+const CLICK_MODE_CACHE_MAX_AGE = 60 * 60 * 1000; // 1시간
+
+const clickModeStorageState = window.__clickModeStorageState || {
+    savedData: null,
+    savedDataIndex: null,
+    lastSync: 0
+};
+window.__clickModeStorageState = clickModeStorageState;
+
+function getClickModeSavedState() {
+    if (!Array.isArray(clickModeStorageState.savedData)) {
+        let parsed = [];
+        try {
+            const raw = localStorage.getItem('parcelData');
+            if (raw) {
+                const candidate = JSON.parse(raw);
+                if (Array.isArray(candidate)) {
+                    parsed = candidate;
+                }
+            }
+        } catch (error) {
+            console.warn('⚠️ parcelData 파싱 실패, 캐시 초기화:', error);
+        }
+        clickModeStorageState.savedData = parsed;
+        clickModeStorageState.savedDataIndex = null;
+    }
+
+    if (!(clickModeStorageState.savedDataIndex instanceof Map)) {
+        const indexMap = new Map();
+        clickModeStorageState.savedData.forEach((item, idx) => {
+            const pnuKey = item?.pnu || item?.properties?.PNU || item?.properties?.pnu;
+            if (pnuKey) {
+                if (!indexMap.has(pnuKey)) {
+                    indexMap.set(pnuKey, idx);
+                }
+            }
+        });
+        clickModeStorageState.savedDataIndex = indexMap;
+    }
+
+    return clickModeStorageState;
+}
+
+function persistClickModeSavedState() {
+    if (!Array.isArray(clickModeStorageState.savedData)) {
+        clickModeStorageState.savedData = [];
+    }
+    try {
+        localStorage.setItem('parcelData', JSON.stringify(clickModeStorageState.savedData));
+    } catch (error) {
+        console.error('❌ parcelData 저장 실패:', error);
+    }
+}
+
+function hasClickModeSavedEntry(pnu) {
+    if (!pnu) {
+        return false;
+    }
+    const state = getClickModeSavedState();
+    return state.savedDataIndex instanceof Map && state.savedDataIndex.has(pnu);
+}
+
+function upsertClickModeSavedEntry(pnu, saveData) {
+    if (!pnu) {
+        return;
+    }
+
+    const state = getClickModeSavedState();
+    const indexMap = state.savedDataIndex;
+    const savedList = state.savedData;
+
+    if (!(indexMap instanceof Map)) {
+        state.savedDataIndex = new Map();
+    }
+
+    const targetIndex = indexMap instanceof Map ? indexMap.get(pnu) : undefined;
+    if (typeof targetIndex === 'number') {
+        savedList[targetIndex] = saveData;
+    } else {
+        const insertIndex = savedList.length;
+        savedList.push(saveData);
+        state.savedDataIndex.set(pnu, insertIndex);
+    }
+
+    persistClickModeSavedState();
+}
+
+function cloneParcelData(parcelData) {
+    if (!parcelData) {
+        return null;
+    }
+
+    if (typeof structuredClone === 'function') {
+        try {
+            return structuredClone(parcelData);
+        } catch (error) {
+            console.warn('⚠️ structuredClone 실패, JSON 기반 복제로 대체:', error);
+        }
+    }
+
+    try {
+        return JSON.parse(JSON.stringify(parcelData));
+    } catch (error) {
+        console.warn('⚠️ JSON 기반 복제 실패, 얕은 복사로 대체:', error);
+        return { ...parcelData };
+    }
+}
+
+function scheduleClickModeParcelPersist(parcelData) {
+    if (!parcelData) {
+        return;
+    }
+
+    const pnu = parcelData.properties?.PNU || parcelData.properties?.pnu || parcelData.pnu;
+    if (!pnu) {
+        return;
+    }
+
+    const existing = clickModeSaveTimers.get(pnu);
+    if (existing) {
+        if (existing.type === 'idle' && typeof window.cancelIdleCallback === 'function') {
+            window.cancelIdleCallback(existing.handle);
+        } else {
+            clearTimeout(existing.handle);
+        }
+    }
+
+    const payload = cloneParcelData(parcelData);
+    const runner = () => {
+        clickModeSaveTimers.delete(pnu);
+        saveClickModeParcelData(payload)
+            .catch(error => console.error('❌ 클릭 모드 지연 저장 실패:', error));
+    };
+
+    if (typeof window.requestIdleCallback === 'function') {
+        const handle = window.requestIdleCallback(() => runner(), { timeout: 500 });
+        clickModeSaveTimers.set(pnu, { type: 'idle', handle });
+    } else {
+        const handle = window.setTimeout(runner, CLICK_MODE_SAVE_DELAY);
+        clickModeSaveTimers.set(pnu, { type: 'timeout', handle });
+    }
+}
+
+function computeSimplePathBounds(simplePath) {
+    let minLat = Infinity;
+    let maxLat = -Infinity;
+    let minLng = Infinity;
+    let maxLng = -Infinity;
+
+    for (const point of simplePath) {
+        if (point.lat < minLat) minLat = point.lat;
+        if (point.lat > maxLat) maxLat = point.lat;
+        if (point.lng < minLng) minLng = point.lng;
+        if (point.lng > maxLng) maxLng = point.lng;
+    }
+
+    return {
+        minLat,
+        maxLat,
+        minLng,
+        maxLng
+    };
+}
+
+function getCachedGeometryEntry(pnu, geometry) {
+    if (!geometry) {
+        return null;
+    }
+
+    const ring = typeof window.getPrimaryRingCoordinates === 'function'
+        ? window.getPrimaryRingCoordinates(geometry)
+        : null;
+
+    if (!ring || ring.length === 0) {
+        return null;
+    }
+
+    const cacheKey = JSON.stringify(ring);
+    const existing = clickModeGeometryCache.get(pnu);
+    if (existing && existing.cacheKey === cacheKey) {
+        return existing;
+    }
+
+    const latLngPath = [];
+    const simplePath = [];
+
+    for (const coord of ring) {
+        if (!Array.isArray(coord) || coord.length < 2) {
+            continue;
+        }
+        const lng = Number(coord[0]);
+        const lat = Number(coord[1]);
+        if (Number.isNaN(lat) || Number.isNaN(lng)) {
+            continue;
+        }
+
+        simplePath.push({ lat, lng });
+        latLngPath.push(new naver.maps.LatLng(lat, lng));
+    }
+
+    if (latLngPath.length === 0) {
+        return null;
+    }
+
+    const bounds = computeSimplePathBounds(simplePath);
+    const entry = {
+        cacheKey,
+        latLngPath,
+        simplePath,
+        bounds
+    };
+
+    clickModeGeometryCache.set(pnu, entry);
+
+    if (typeof window.cacheParcelFeature === 'function') {
+        window.cacheParcelFeature({
+            properties: {
+                PNU: pnu,
+                pnu: pnu
+            },
+            geometry: geometry
+        });
+    }
+
+    return entry;
+}
+
+function getFeatureFromCache(lat, lng) {
+    if (typeof window.findParcelFeatureByPoint !== 'function') {
+        return null;
+    }
+
+    return window.findParcelFeatureByPoint(lat, lng);
+}
+
 function getStoredParcelContext(pnu) {
     if (!pnu) {
         return { parcel: null, color: null };
@@ -119,9 +362,6 @@ if (!window.clickParcels) {
 // 이전 색상 추적을 위한 변수
 let previousSelectedColor = null;
 
-// 디바운싱 타이머
-let clickModeDebounceTimer = null;
-
 /**
  * 🎯 클릭 모드 지도 이벤트 리스너 설정
  */
@@ -147,15 +387,8 @@ function setupClickModeEventListeners() {
             return;
         }
 
-        // 디바운싱 적용 (100ms로 단축 - 성능 개선)
-        if (clickModeDebounceTimer) {
-            clearTimeout(clickModeDebounceTimer);
-        }
-
-        clickModeDebounceTimer = setTimeout(() => {
-            // 왼쪽 클릭: 색칠 기능
-            handleClickModeLeftClick(coord.lat(), coord.lng());
-        }, 100);
+        // 즉시 실행 (디바운스 제거 - 최대 반응 속도)
+        handleClickModeLeftClick(coord.lat(), coord.lng());
     });
 
     // 오른쪽 클릭 이벤트 (필지 삭제)
@@ -227,14 +460,35 @@ async function getParcelInfoViaProxyForClickMode(lat, lng, options = {}) {
     const geometry = `POINT(${lng} ${lat})`;
 
     try {
-        const features = await window.vworldApi.fetchFeatures({
-            geomFilter: geometry,
-            size: '1'
-        });
+        let featureRecord = getFeatureFromCache(lat, lng);
+        let feature = featureRecord ? featureRecord.feature : null;
+        let featureSource = 'cache';
 
-        if (features && features.length > 0) {
-            const feature = features[0];
+        if (!feature) {
+            const features = await window.vworldApi.fetchFeatures({
+                geomFilter: geometry,
+                size: '1'
+            });
+
+            if (features && features.length > 0) {
+                feature = features[0];
+                featureSource = 'network';
+
+                if (typeof window.cacheParcelFeature === 'function') {
+                    window.cacheParcelFeature(feature);
+                }
+            }
+        } else {
+            console.log('⚡️ 캐시된 필지 데이터를 사용합니다.');
+        }
+
+        if (feature) {
+            if (typeof window.cacheParcelFeature === 'function') {
+                window.cacheParcelFeature(feature);
+            }
+
             const pnu = feature.properties.PNU || feature.properties.pnu;
+            console.log(`📦 필지 데이터 소스(${featureSource}):`, pnu);
 
             // 삭제된 필지인지 확인
             const deletedParcels = window.getDeletedParcels ? window.getDeletedParcels() : [];
@@ -327,8 +581,8 @@ async function getParcelInfoViaProxyForClickMode(lat, lng, options = {}) {
                 });
                 clickModeParcelData.set(pnu, { ...selectedParcel, color: storedColorValue });
 
-                await saveClickModeParcelData({ ...selectedParcel, color: storedColorValue });
-                console.log(`💾 클릭 모드 필지 저장 완료: ${pnu}, 색상: ${storedColorValue || '없음'}`);
+                scheduleClickModeParcelPersist({ ...selectedParcel, color: storedColorValue });
+                console.log(`💾 클릭 모드 필지 저장 예약 완료: ${pnu}, 색상: ${storedColorValue || '없음'}`);
             }
 
             return true;
@@ -404,7 +658,7 @@ async function handleHandModeParcelSelection(parcelData, context = {}) {
 
     clickModeParcelData.set(pnu, selectedParcel);
 
-    await saveClickModeParcelData(selectedParcel);
+    scheduleClickModeParcelPersist(selectedParcel);
 
     console.log(`✋ 손 모드 필지 정보 로드 완료: ${pnu}`);
     return true;
@@ -433,45 +687,40 @@ async function drawClickModeParcelPolygon(parcelData, options = {}) {
 
     const pnu = parcelData.properties.PNU || parcelData.properties.pnu;
 
-    const existingPolygon = clickModePolygons.get(pnu);
-    if (existingPolygon) {
-        existingPolygon.setMap(null);
-        clickModePolygons.delete(pnu);
+    const geometryEntry = getCachedGeometryEntry(pnu, parcelData.geometry);
+    if (!geometryEntry || !Array.isArray(geometryEntry.latLngPath) || geometryEntry.latLngPath.length === 0) {
+        console.warn('⚠️ 클릭 모드: 캐시된 폴리곤 경로가 없습니다.');
+        return null;
     }
 
-    try {
-        let coordArray;
-        if (parcelData.geometry.coordinates[0] && parcelData.geometry.coordinates[0][0]) {
-            coordArray = parcelData.geometry.coordinates[0][0];
-        } else if (parcelData.geometry.coordinates[0]) {
-            coordArray = parcelData.geometry.coordinates[0];
+    let polygonColor = colorOverride;
+    if (!polygonColor) {
+        if ((isRestored || skipColoring) && parcelData.color) {
+            polygonColor = parcelData.color;
+            console.log(`🎨 저장된 색상 사용: ${polygonColor}`);
+        } else if (skipColoring) {
+            polygonColor = 'transparent';
+            console.log('🎨 색상 적용 없이 폴리곤을 유지합니다.');
         } else {
-            console.error('좌표 데이터 구조가 올바르지 않습니다');
-            return null;
+            polygonColor = getCurrentSelectedColor() || parcelData.color || '#FF0000';
+            console.log(`🎨 현재 선택된 색상 사용: ${polygonColor}`);
         }
+    }
 
-        const coordinates = coordArray.map(coord => new naver.maps.LatLng(coord[1], coord[0]));
+    const hasVisibleColor = polygonColor && polygonColor !== 'transparent';
+    const activeMap = targetMap !== undefined ? targetMap : (window.map || window.mapClick || null);
 
-        let polygonColor = colorOverride;
-        if (!polygonColor) {
-            if ((isRestored || skipColoring) && parcelData.color) {
-                polygonColor = parcelData.color;
-                console.log(`🎨 저장된 색상 사용: ${polygonColor}`);
-            } else if (skipColoring) {
-                polygonColor = 'transparent';
-                console.log('🎨 색상 적용 없이 폴리곤을 생성합니다.');
-            } else {
-                polygonColor = getCurrentSelectedColor() || '#FF0000';
-                console.log(`🎨 현재 선택된 색상 사용: ${polygonColor}`);
-            }
+    let polygon = clickModePolygons.get(pnu) || null;
+
+    if (polygon && typeof polygon.setPaths === 'function') {
+        polygon.setPaths(geometryEntry.latLngPath);
+        if (polygon.getMap && polygon.getMap() !== activeMap) {
+            polygon.setMap(activeMap);
         }
-
-        const hasVisibleColor = polygonColor && polygonColor !== 'transparent';
-        const activeMap = targetMap !== undefined ? targetMap : (window.map || window.mapClick || null);
-
-        const polygon = new naver.maps.Polygon({
+    } else {
+        polygon = new naver.maps.Polygon({
             map: activeMap,
-            paths: coordinates,
+            paths: geometryEntry.latLngPath,
             fillColor: hasVisibleColor ? polygonColor : 'transparent',
             strokeColor: hasVisibleColor ? polygonColor : '#FF5500',
             strokeWeight: hasVisibleColor ? 2 : 1,
@@ -484,28 +733,44 @@ async function drawClickModeParcelPolygon(parcelData, options = {}) {
             const currentMode = window.ModeManager && typeof window.ModeManager.getCurrentMode === 'function'
                 ? window.ModeManager.getCurrentMode()
                 : 'click';
+            const latestParcel = clickModeParcelData.get(pnu) || parcelData;
 
             if (currentMode === 'hand') {
                 window.currentSelectedPNU = pnu;
-                window.currentSelectedParcel = parcelData;
-                window.selectedParcel = parcelData;
-                displayParcelInfoForClickMode(parcelData);
-                updateParcelFormForClickMode(parcelData);
+                window.currentSelectedParcel = latestParcel;
+                window.selectedParcel = latestParcel;
+                displayParcelInfoForClickMode(latestParcel);
+                updateParcelFormForClickMode(latestParcel);
             } else {
-                await toggleClickModeParcelSelection(parcelData, polygon);
+                await toggleClickModeParcelSelection(latestParcel, polygon);
             }
         });
-
-        clickModePolygons.set(pnu, polygon);
-        const storedColor = polygonColor && polygonColor !== 'transparent' ? polygonColor : null;
-        clickModeParcelData.set(pnu, { ...parcelData, color: storedColor });
-
-        console.log(`🎨 클릭 모드 폴리곤 생성: ${pnu}`);
-        return polygon;
-    } catch (error) {
-        console.error('❌ 클릭 모드 폴리곤 생성 실패:', error);
-        return null;
     }
+
+    const baseOptions = hasVisibleColor ? {
+        fillColor: polygonColor,
+        fillOpacity: 0.5,
+        strokeColor: polygonColor,
+        strokeWeight: 2,
+        strokeOpacity: 0.8
+    } : {
+        fillColor: 'transparent',
+        fillOpacity: 0,
+        strokeColor: '#FF5500',
+        strokeWeight: 1,
+        strokeOpacity: 0
+    };
+
+    polygon.setOptions(baseOptions);
+    polygon.__clickModeFillColor = hasVisibleColor ? polygonColor : 'transparent';
+    polygon.__clickModeCacheKey = geometryEntry.cacheKey;
+
+    clickModePolygons.set(pnu, polygon);
+    const storedColor = hasVisibleColor ? polygonColor : null;
+    clickModeParcelData.set(pnu, { ...parcelData, color: storedColor });
+
+    console.log(`🎨 클릭 모드 폴리곤 준비 완료: ${pnu}`);
+    return polygon;
 }
 
 /**
@@ -532,38 +797,76 @@ async function toggleClickModeParcelSelection(parcel, polygon) {
 async function applyClickModeColorToParcel(parcel, color, polygon) {
     const pnu = parcel.properties?.PNU || parcel.properties?.pnu || parcel.pnu;
 
-    try {
-        // 색상 적용
-        polygon.setOptions({
-            fillColor: color,
-            fillOpacity: 0.5,
-            strokeColor: color,
-            strokeWeight: 2
-        });
+    if (!pnu) {
+        console.warn('⚠️ 색상 적용 대상 PNU를 찾지 못했습니다.');
+        return;
+    }
 
-        // 데이터 저장 (새로운 스키마 필드 포함)
+    if (!polygon || typeof polygon.setOptions !== 'function') {
+        console.warn('⚠️ 색상 적용 대상 폴리곤이 없습니다:', pnu);
+        return;
+    }
+
+    try {
+        const normalizedColor = color || getCurrentSelectedColor() || '#FF0000';
+
+        if (polygon.__clickModeFillColor !== normalizedColor) {
+            polygon.setOptions({
+                fillColor: normalizedColor,
+                fillOpacity: 0.5,
+                strokeColor: normalizedColor,
+                strokeWeight: 2
+            });
+            polygon.__clickModeFillColor = normalizedColor;
+        }
+
         const parcelDataWithSource = {
             ...parcel,
-            source: 'click',           // 🆕 기존 호환용
-            mode: 'click',             // 🆕 기존 호환용
-            mode_source: 'click',      // 🆕 새 스키마: 생성 모드
-            current_mode: 'click',     // 🆕 새 스키마: 현재 활성 모드
-            color: color,
+            source: 'click',
+            mode: 'click',
+            mode_source: 'click',
+            current_mode: 'click',
+            color: normalizedColor,
             updatedAt: Date.now()
         };
 
-        // clickParcels Map에 추가
         if (window.clickParcels) {
+            const existing = window.clickParcels.get(pnu) || {};
             window.clickParcels.set(pnu, {
+                ...existing,
                 parcel: parcelDataWithSource,
-                polygon: polygon,
-                color: color
+                data: parcelDataWithSource,
+                polygon,
+                color: normalizedColor
             });
         }
 
-        await saveClickModeParcelData(parcelDataWithSource);
+        clickModeParcelData.set(pnu, parcelDataWithSource);
 
-        console.log(`🎨 클릭 모드 색상 적용: ${pnu} -> ${color}`);
+        let colorIndex = null;
+        if (window.ColorPaletteManager && Array.isArray(window.ColorPaletteManager.colors)) {
+            const matched = window.ColorPaletteManager.colors.find(item => item && typeof item.hex === 'string' && item.hex.toLowerCase() === normalizedColor.toLowerCase());
+            if (matched) {
+                colorIndex = matched.index;
+                if (typeof window.ColorPaletteManager.applyColorToParcel === 'function') {
+                    window.ColorPaletteManager.applyColorToParcel(pnu, colorIndex);
+                }
+            }
+        }
+
+        if (colorIndex === null) {
+            if (typeof queueColorSave === 'function') {
+                queueColorSave(pnu, normalizedColor, null);
+            } else if (window.ParcelColorStorage && typeof window.ParcelColorStorage.setHex === 'function') {
+                window.ParcelColorStorage.setHex(pnu, normalizedColor);
+            }
+        }
+
+        if (!hasClickModeSavedEntry(pnu)) {
+            scheduleClickModeParcelPersist(parcelDataWithSource);
+        }
+
+        console.log(`🎨 클릭 모드 색상 적용 완료: ${pnu} -> ${normalizedColor}`);
 
     } catch (error) {
         console.error('❌ 클릭 모드 색상 적용 실패:', error);
@@ -577,8 +880,13 @@ async function saveClickModeParcelData(parcelData) {
     const pnu = parcelData.properties.PNU || parcelData.properties.pnu;
 
     try {
-        const savedData = JSON.parse(localStorage.getItem('parcelData') || '[]');
-        const existingIndex = savedData.findIndex(item => item.pnu === pnu);
+        const state = getClickModeSavedState();
+        const savedData = state.savedData;
+        const indexMap = state.savedDataIndex instanceof Map ? state.savedDataIndex : new Map();
+        if (!(state.savedDataIndex instanceof Map)) {
+            state.savedDataIndex = indexMap;
+        }
+        const existingIndex = indexMap.has(pnu) ? indexMap.get(pnu) : -1;
         const existingEntry = existingIndex >= 0 ? savedData[existingIndex] : null;
 
         let clickParcelList = [];
@@ -680,10 +988,14 @@ async function saveClickModeParcelData(parcelData) {
         if (existingIndex >= 0) {
             savedData[existingIndex] = saveData;
         } else {
+            const insertIndex = savedData.length;
             savedData.push(saveData);
+            if (indexMap instanceof Map) {
+                indexMap.set(pnu, insertIndex);
+            }
         }
 
-        localStorage.setItem('parcelData', JSON.stringify(savedData));
+        persistClickModeSavedState();
 
         if (typeof window.setClickParcelDataToStorage === 'function') {
             if (existingClickIndex >= 0) {
@@ -1009,7 +1321,7 @@ async function handleClickModeLeftClick(lat, lng) {
                     hasGeometry: !!parcelToPass.geometry
                 });
 
-                await window.applyColorToParcel(parcelToPass, currentColor);
+                window.applyColorToParcel(parcelToPass, currentColor);
                 console.log('✅ applyColorToParcel 호출 완료');
 
                 // 🆕 UI 업데이트 - 지번을 필지 정보 폼에 자동 입력

@@ -3,7 +3,7 @@
 // 🚀 성능 최적화: 비동기 저장 큐 시스템
 const colorSaveQueue = new Map();
 let colorSaveTimer = null;
-const COLOR_SAVE_BATCH_DELAY = 10; // 10ms 후 일괄 처리 (프로덕션 최적화)
+const COLOR_SAVE_BATCH_DELAY = 0; // 즉시 처리 (최대 성능)
 
 // 비동기 색상 저장 큐에 추가
 function queueColorSave(pnu, color, colorIndex = null) {
@@ -53,11 +53,146 @@ async function processColorSaveQueue() {
     }
 }
 
-// 🚀 프로덕션 최적화: 즉각적인 폴리곤 업데이트 (requestAnimationFrame 제거)
-// 지연 없이 즉시 폴리곤 색상 변경으로 체감 속도 15배 향상
-function updatePolygonImmediate(updateFn) {
-    updateFn();
+// 전역 캐시 (필지 피처 & 기본 링 좌표)
+const parcelFeatureCache = window.ParcelFeatureCache || new Map();
+window.ParcelFeatureCache = parcelFeatureCache;
+
+const IDLE_FALLBACK_DELAY = 32;
+
+function waitForIdleFrame(timeout = IDLE_FALLBACK_DELAY) {
+    return new Promise(resolve => {
+        if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+            window.requestIdleCallback(() => resolve(), { timeout });
+        } else {
+            setTimeout(resolve, 16);
+        }
+    });
 }
+
+function getPrimaryRingCoordinates(geometry) {
+    if (!geometry || !geometry.coordinates) {
+        return [];
+    }
+
+    const coordinates = geometry.coordinates;
+
+    if (geometry.type === 'MultiPolygon') {
+        if (!Array.isArray(coordinates) || coordinates.length === 0) {
+            return [];
+        }
+
+        const firstPolygon = coordinates[0];
+        if (Array.isArray(firstPolygon) && firstPolygon.length > 0) {
+            const firstRing = firstPolygon[0];
+            if (Array.isArray(firstRing) && firstRing.length > 0 && Array.isArray(firstRing[0])) {
+                return firstRing;
+            }
+            return Array.isArray(firstPolygon) ? firstPolygon : [];
+        }
+        return [];
+    }
+
+    if (Array.isArray(coordinates) && coordinates.length > 0) {
+        if (Array.isArray(coordinates[0]) && coordinates[0].length > 0 && Array.isArray(coordinates[0][0])) {
+            return coordinates[0];
+        }
+        return coordinates;
+    }
+
+    return [];
+}
+
+function cacheParcelFeature(feature) {
+    if (!feature || !feature.properties) {
+        return null;
+    }
+
+    const pnu = feature.properties.PNU || feature.properties.pnu;
+    if (!pnu) {
+        return null;
+    }
+
+    const ring = getPrimaryRingCoordinates(feature.geometry);
+    if (!Array.isArray(ring) || ring.length === 0) {
+        return null;
+    }
+
+    const simplePath = [];
+    let minLat = Infinity;
+    let maxLat = -Infinity;
+    let minLng = Infinity;
+    let maxLng = -Infinity;
+
+    for (const coord of ring) {
+        if (!Array.isArray(coord) || coord.length < 2) {
+            continue;
+        }
+        const lng = Number(coord[0]);
+        const lat = Number(coord[1]);
+        if (Number.isNaN(lat) || Number.isNaN(lng)) {
+            continue;
+        }
+        simplePath.push({ lat, lng });
+        if (lat < minLat) minLat = lat;
+        if (lat > maxLat) maxLat = lat;
+        if (lng < minLng) minLng = lng;
+        if (lng > maxLng) maxLng = lng;
+    }
+
+    if (simplePath.length === 0) {
+        return null;
+    }
+
+    const entry = {
+        feature,
+        simplePath,
+        bounds: {
+            minLat,
+            maxLat,
+            minLng,
+            maxLng
+        },
+        updatedAt: Date.now()
+    };
+
+    parcelFeatureCache.set(pnu, entry);
+    return entry;
+}
+
+function findParcelFeatureByPoint(lat, lng) {
+    if (parcelFeatureCache.size === 0) {
+        return null;
+    }
+
+    const epsilon = 0.000002;
+
+    for (const entry of parcelFeatureCache.values()) {
+        const bounds = entry.bounds;
+        if (!bounds) {
+            continue;
+        }
+
+        if (lat < bounds.minLat - epsilon || lat > bounds.maxLat + epsilon ||
+            lng < bounds.minLng - epsilon || lng > bounds.maxLng + epsilon) {
+            continue;
+        }
+
+        if (typeof isPointInPolygon === 'function') {
+            if (!isPointInPolygon(lat, lng, entry.simplePath)) {
+                continue;
+            }
+        }
+
+        return entry;
+    }
+
+    return null;
+}
+
+window.cacheParcelFeature = cacheParcelFeature;
+window.findParcelFeatureByPoint = findParcelFeatureByPoint;
+window.getPrimaryRingCoordinates = getPrimaryRingCoordinates;
+window.waitForIdleFrame = waitForIdleFrame;
 
 // 폴리곤 중심점 계산 함수 (메모 마커용)
 function calculatePolygonCenter(coordinates) {
@@ -324,10 +459,13 @@ async function loadParcelsInBounds(bounds) {
         }
 
         let loadedCount = 0;
+        let processed = 0;
 
         for (let index = 0; index < features.length; index++) {
             const feature = features[index];
             const pnu = feature.properties?.PNU || feature.properties?.pnu || `UNKNOWN_${index}`;
+
+            cacheParcelFeature(feature);
 
             if (window.clickParcels.has(pnu)) {
                 continue;
@@ -340,6 +478,11 @@ async function loadParcelsInBounds(bounds) {
                 }
             } catch (drawError) {
                 console.warn(`⚠️ 필지 ${pnu} 폴리곤 그리기 실패:`, drawError);
+            }
+
+            processed++;
+            if (processed % 8 === 0) {
+                await waitForIdleFrame(48);
             }
         }
 
@@ -884,102 +1027,9 @@ async function applyColorToParcel(parcel, color) {
         });
         parcelData.color = newColor;
 
-        // 2. 🚀 Optimistic UI: 즉시 색상 저장 큐에 추가
+        // 2. 🚀 Optimistic UI: 즉시 색상 저장 큐에 추가 (백그라운드 저장)
         queueColorSave(pnu, newColor, colorIndex);
 
-        // 3. LocalStorage 업데이트 - 모든 관련 키에서 업데이트
-        const storageKeys = ['parcelData', 'clickParcelData', 'parcels', 'parcels_current_session'];
-
-        // 색상 업데이트 처리
-        for (const key of storageKeys) {
-            const savedData = JSON.parse(localStorage.getItem(key) || '[]');
-            const existingIndex = savedData.findIndex(item => item.pnu === pnu);
-
-            if (existingIndex >= 0) {
-                // 색상 정보 업데이트
-                savedData[existingIndex].color = newColor;
-                savedData[existingIndex].is_colored = true;
-                savedData[existingIndex].currentColor = newColor;
-                // geometry 정보가 없으면 추가
-                if (!savedData[existingIndex].geometry && parcel.geometry) {
-                    savedData[existingIndex].geometry = parcel.geometry;
-                }
-                localStorage.setItem(key, JSON.stringify(savedData));
-            }
-        }
-
-        // 새로운 필지를 모든 저장소에 추가해야 하는지 확인
-        const needToAddNew = storageKeys.some(key => {
-            const savedData = JSON.parse(localStorage.getItem(key) || '[]');
-            return savedData.findIndex(item => item.pnu === pnu) < 0;
-        });
-
-        if (needToAddNew) {
-            // 🔥 새로운 필지 데이터 완전 저장 (geometry 포함)
-            const jibun = formatJibun(parcel.properties);
-
-            // 중심 좌표 계산
-            let centerLat;
-            let centerLng;
-            if (parcel.geometry) {
-                [centerLng, centerLat] = getGeometryCenter(parcel.geometry);
-            }
-
-            const newParcelData = {
-                parcelNumber: jibun,
-                pnu: pnu,
-                ownerName: '',
-                ownerAddress: '',
-                ownerContact: '',
-                memo: '',
-                color: newColor,
-                geometry: parcel.geometry,
-                timestamp: new Date().toISOString(),
-                isSearchParcel: false,
-                is_colored: true,
-                currentColor: newColor
-            };
-
-            // 중심 좌표가 계산되었으면 추가
-            if (centerLat && centerLng) {
-                newParcelData.lat = parseFloat(centerLat);
-                newParcelData.lng = parseFloat(centerLng);
-            }
-
-            // CONFIG.STORAGE_KEY에 저장
-            const mainSavedData = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEY) || '[]');
-            mainSavedData.push(newParcelData);
-            localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(mainSavedData));
-            // 새 필지 데이터 저장 완료
-
-            // 모든 관련 키에 새로운 데이터 추가
-            for (const key of ['clickParcelData', 'parcels', 'parcels_current_session']) {
-                if (key !== CONFIG.STORAGE_KEY) {
-                    const otherData = JSON.parse(localStorage.getItem(key) || '[]');
-                    const exists = otherData.findIndex(item => item.pnu === pnu);
-                    if (exists < 0) {
-                        otherData.push(newParcelData);
-                        localStorage.setItem(key, JSON.stringify(otherData));
-                        // ${key}에도 새 필지 저장
-                    }
-                }
-            }
-        }
-
-        // 3-1. parcelColors에도 저장 (색상 전용 저장소)
-        // ColorPaletteManager를 사용하여 색상 인덱스 가져오기
-        let colorIndex = null;
-        if (window.ColorPaletteManager) {
-            const found = window.ColorPaletteManager.colors.find(c => c.hex === newColor);
-            colorIndex = found ? found.index : null;
-        }
-
-        // 색상 인덱스가 있으면 인덱스 저장, 없으면 객체로 저장
-        if (colorIndex !== null) {
-            ParcelColorStorage.setIndex(pnu, colorIndex);
-        } else {
-            ParcelColorStorage.setHex(pnu, newColor);
-        }
 
     }
 }
@@ -2007,11 +2057,29 @@ async function loadSavedParcels() {
 // 지도에 저장된 필지 색상 복원
 async function restoreSavedParcelsOnMap() {
     const savedData = JSON.parse(await window.migratedGetItem(CONFIG.STORAGE_KEY) || '[]');
-    // console.log(`저장된 필지 ${savedData.length}개 복원 시작`);
-    
+    let processed = 0;
+
+    // 🚀 뷰포트 컬링: 현재 지도 범위만 복원
+    const mapBounds = map ? map.getBounds() : null;
+    const inViewport = (lat, lng) => {
+        if (!mapBounds || !lat || !lng) return true;
+        const point = new naver.maps.LatLng(lat, lng);
+        return mapBounds.hasLatLng(point);
+    };
+
     // 저장된 데이터 중 geometry가 있는 항목들 처리
     for (const saved of savedData) {
+        // 🚀 뷰포트 체크: 화면 밖 필지는 건너뛰기
+        if (!inViewport(saved.lat, saved.lng)) continue;
         if (saved.geometry && saved.color && saved.color !== 'transparent') {
+            cacheParcelFeature({
+                properties: {
+                    PNU: saved.pnu,
+                    pnu: saved.pnu
+                },
+                geometry: saved.geometry
+            });
+
             // 검색 필지인지 클릭 필지인지 구분
             const targetMap = saved.isSearchParcel ? window.searchParcels : window.clickParcels;
             
@@ -2093,6 +2161,11 @@ async function restoreSavedParcelsOnMap() {
                     }
                 }
             }
+        }
+
+        processed++;
+        if (processed % 5 === 0) {
+            await waitForIdleFrame(48);
         }
     }
     
@@ -2450,6 +2523,9 @@ async function removeParcelAtLocation(lat, lng) {
             }
 
             // 3. 모든 저장소에서 완전 제거 (utils.js의 유틸 함수 사용)
+            let beforeCount = null;
+            let afterCount = null;
+
             if (window.removeParcelFromAllStorage) {
                 // await 제거 - 이 함수는 동기 함수임
                 window.removeParcelFromAllStorage(pnu, { removeColor: true }); // 색상도 제거
@@ -2457,9 +2533,9 @@ async function removeParcelAtLocation(lat, lng) {
             } else {
                 // 폴백: removeParcelFromAllStorage 함수가 없는 경우
                 const savedData = JSON.parse(await window.migratedGetItem(CONFIG.STORAGE_KEY) || '[]');
-                const beforeCount = savedData.length;
+                beforeCount = savedData.length;
                 const updatedData = savedData.filter(item => item.pnu !== pnu);
-                const afterCount = updatedData.length;
+                afterCount = updatedData.length;
                 await window.migratedSetItem(CONFIG.STORAGE_KEY, JSON.stringify(updatedData));
             }
 
@@ -2508,12 +2584,17 @@ async function removeParcelAtLocation(lat, lng) {
                 }
             }
 
-            window.RightClickDebugger.log('DELETE', 'LocalStorage 및 전체 데이터 제거 완료', {
-                pnu,
-                beforeCount,
-                afterCount,
-                removed: beforeCount - afterCount
-            });
+            const deletionSummary = {
+                pnu
+            };
+
+            if (beforeCount !== null && afterCount !== null) {
+                deletionSummary.beforeCount = beforeCount;
+                deletionSummary.afterCount = afterCount;
+                deletionSummary.removed = beforeCount - afterCount;
+            }
+
+            window.RightClickDebugger.log('DELETE', 'LocalStorage 및 전체 데이터 제거 완료', deletionSummary);
 
             // 7. 필지 목록 업데이트
             if (window.parcelManager && window.parcelManager.renderParcelList) {

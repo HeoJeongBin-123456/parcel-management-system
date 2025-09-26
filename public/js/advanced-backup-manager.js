@@ -904,19 +904,22 @@ class AdvancedBackupManager {
                 console.log(`🗑️ 오래된 월간 백업 삭제: ${monthlyBackupKeys[i]}`);
             }
         }
+    }
 
+    // Google Drive에 CSV 파일 업로드
+    async uploadToGoogleDrive(csvData, backupId) {
         try {
             const now = new Date();
             const dateStr = now.toISOString().split('T')[0];
             const fileName = `필지관리_백업_${dateStr}_${backupId}.csv`;
-            
+
             // Google Drive 백업 폴더 ID 가져오기
             const driveFolderId = localStorage.getItem('google_drive_folder_id') || null;
-            
+
             // CSV 파일 업로드
             const fileMetadata = {
                 name: fileName,
-                parents: driveFolderId ? [driveFolderId] : [] // 폴더 ID가 있으면 지정된 폴더에, 없으면 루트에
+                parents: driveFolderId ? [driveFolderId] : []
             };
 
             const form = new FormData();
@@ -936,9 +939,9 @@ class AdvancedBackupManager {
             }
 
             const result = await response.json();
-            
+
             console.log('✅ Google Drive 업로드 완료:', result.id);
-            
+
             return {
                 success: true,
                 fileId: result.id,

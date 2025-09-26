@@ -105,7 +105,9 @@
       "Bash(brew install:*)",
       "WebFetch(domain:parcel-management-system.pages.dev)",
       "Bash(vercel:*)",
-      "Bash(git restore:*)"
+      "Bash(git restore:*)",
+      "Bash(node:*)",
+      "WebFetch(domain:map.naver.com)"
     ],
     "deny": [],
     "ask": []

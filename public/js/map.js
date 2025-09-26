@@ -4,6 +4,19 @@ let streetLayer = null;
 let cadastralLayer = null;
 let roadviewLayer = null; // 로드뷰 레이어
 
+// 🚀 성능 최적화: 디바운스 유틸리티
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
 // 🔍 실시간 디버깅 로그 시스템
 window.RightClickDebugger = {
     enabled: true,
@@ -323,11 +336,21 @@ async function initMap_DISABLED() {
         }
     });
     
-    // 지도 이동 시 필지 데이터 로드 및 위치 저장
-    naver.maps.Event.addListener(map, 'idle', function() {
+    // 🚀 지도 이동 감지 상태
+    let isMapMoving = false;
+
+    // 지도 드래그 시작: 이동 중 플래그 설정
+    naver.maps.Event.addListener(map, 'dragstart', function() {
+        isMapMoving = true;
+    });
+
+    // 🚀 지도 정지 후 필지 데이터 로드 및 위치 저장 (600ms 디바운스)
+    const debouncedIdleHandler = debounce(function() {
+        isMapMoving = false;
+
         const bounds = map.getBounds();
         loadParcelsInBounds(bounds);
-        
+
         // 현재 위치 저장
         const center = map.getCenter();
         const position = {
@@ -339,9 +362,6 @@ async function initMap_DISABLED() {
         // 🗺️ Supabase에 위치 저장 (비동기, localStorage 백업 포함)
         if (window.SupabaseManager) {
             window.SupabaseManager.saveMapPosition(position.lat, position.lng, position.zoom)
-                .then(() => {
-                    console.log('🗺️ 지도 위치 저장 완료:', position);
-                })
                 .catch(error => {
                     console.error('❌ Supabase 위치 저장 실패:', error);
                 });
@@ -349,19 +369,26 @@ async function initMap_DISABLED() {
 
         // 백업: localStorage에도 저장
         localStorage.setItem('mapPosition', JSON.stringify(position));
-    // console.log('위치 저장:', position);
-        
-        // 지도 이동 후 저장된 필지 색상 복원
-        setTimeout(() => {
-            if (typeof restoreSavedParcelsOnMap === 'function') {
+
+        // 🚀 폴리곤 렌더링 비동기화: 다음 애니메이션 프레임에서 실행
+        requestAnimationFrame(() => {
+            // 지도가 다시 움직이기 시작했다면 폴리곤 복원 건너뛰기
+            if (!isMapMoving && typeof restoreSavedParcelsOnMap === 'function') {
                 restoreSavedParcelsOnMap();
             }
-        }, 500);
-    });
+        });
+    }, 600);
+
+    naver.maps.Event.addListener(map, 'idle', debouncedIdleHandler);
 }
 
 // 지도 타입 변경
 function changeMapType(type) {
+    if (!map) {
+        console.error('🚫 지도가 초기화되지 않았습니다.');
+        return;
+    }
+
     // 다른 지도 타입으로 변경 시 로드뷰 레이어 제거
     if (type !== 'street' && roadviewLayer) {
         roadviewLayer.setMap(null);
@@ -383,11 +410,9 @@ function changeMapType(type) {
             map.setMapTypeId(naver.maps.MapTypeId.HYBRID);
             break;
         case 'cadastral':
-            // 지적편집도 - 한국 고유의 지적도
             map.setMapTypeId(naver.maps.MapTypeId.HYBRID);
             break;
         case 'street':
-            // 로드뷰 레이어 표시 - 지도 위에 로드뷰 촬영 가능한 도로 표시
             toggleRoadviewLayer();
             break;
     }
