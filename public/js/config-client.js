@@ -250,11 +250,26 @@ window.showClickParcels = function() {
 }
 
 window.hideClickParcels = function() {
-    // console.log('클릭 필지 숨김:', window.clickParcels.size, '개');
-    window.clickParcels.forEach((parcel) => {
-        if (parcel.polygon) parcel.polygon.setMap(null);
-        if (parcel.label) parcel.label.setMap(null);
-    });
+    console.log('🚫 클릭 필지 숨김 시작');
+
+    // window.clickParcels 처리
+    if (window.clickParcels) {
+        window.clickParcels.forEach((parcel) => {
+            if (parcel.polygon) parcel.polygon.setMap(null);
+            if (parcel.label) parcel.label.setMap(null);
+        });
+        console.log(`✅ window.clickParcels 숨김: ${window.clickParcels.size}개`);
+    }
+
+    // mode-click-handler의 clickModePolygons도 처리
+    if (window.clickModePolygons) {
+        window.clickModePolygons.forEach((polygon) => {
+            if (polygon && typeof polygon.setMap === 'function') {
+                polygon.setMap(null);
+            }
+        });
+        console.log(`✅ clickModePolygons 숨김: ${window.clickModePolygons.size}개`);
+    }
 }
 
 window.showSearchParcels = function() {

@@ -1884,13 +1884,23 @@ async function loadSavedClickModeParcels() {
                         }
                     };
 
+                    // 🔍 현재 모드 확인: 검색 모드라면 폴리곤을 지도에 표시하지 않음
+                    const currentMode = window.currentMode || localStorage.getItem('currentMode') || 'click';
+                    const targetMap = currentMode === 'search' ? null : undefined;
+
                     // 폴리곤 그리기 (색상 정보가 포함된 parcelData 전달)
-                    // drawClickModeParcelPolygon 호출
-                    const polygon = await drawClickModeParcelPolygon(structuredData, true);
+                    const polygon = await drawClickModeParcelPolygon(structuredData, {
+                        isRestored: true,
+                        targetMap: targetMap
+                    });
 
                     if (polygon) {
                         // 폴리곤 생성 성공
                         // 색상은 이미 drawClickModeParcelPolygon에서 적용됨
+
+                        if (currentMode === 'search') {
+                            console.log(`🔍 검색 모드 - 클릭 필지 폴리곤 숨김: ${pnu}`);
+                        }
 
                         // clickParcels Map에 추가 (중요!)
                         if (window.clickParcels) {
@@ -1986,8 +1996,17 @@ function registerClickHandPolygonSync() {
             }
         });
 
-        const initialMap = window.map || window.mapClick || null;
-        syncClickModePolygonsToMap(initialMap);
+        // 🔍 초기 동기화 시 현재 모드 확인
+        const currentMode = window.currentMode || localStorage.getItem('currentMode') || 'click';
+        if (currentMode === 'search') {
+            // 검색 모드에서는 클릭 필지를 표시하지 않음
+            syncClickModePolygonsToMap(null);
+            console.log('[registerClickHandPolygonSync] 검색 모드 - 클릭 필지 숨김');
+        } else {
+            const initialMap = window.map || window.mapClick || null;
+            syncClickModePolygonsToMap(initialMap);
+            console.log('[registerClickHandPolygonSync] 클릭/손 모드 - 클릭 필지 표시');
+        }
     } else {
         setTimeout(registerClickHandPolygonSync, 800);
     }

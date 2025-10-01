@@ -73,15 +73,44 @@ class ModeManager {
         }
 
         // 검색 모드로 다시 전환 시 이전 검색 결과를 다시 표시
-        if (newMode === 'search' && this.currentMode !== 'search' && window.SearchModeManager) {
-            const searchActive = typeof window.SearchModeManager.isActive === 'function'
-                ? window.SearchModeManager.isActive()
-                : !!window.SearchModeManager.isSearchActive;
+        if (newMode === 'search' && this.currentMode !== 'search') {
+            // 클릭 필지 숨기기 (검색 모드에서는 검색 필지만 표시)
+            if (window.hideClickParcels) {
+                window.hideClickParcels();
+                console.log('[ModeManager] 클릭 필지 숨김 (검색 모드 전환)');
+            }
 
-            if (searchActive) {
-                // 숨겨진 검색 결과를 다시 표시
-                window.SearchModeManager.setVisible(true);
-                console.log('[ModeManager] 이전 검색 결과 복원');
+            if (window.SearchModeManager) {
+                const searchActive = typeof window.SearchModeManager.isActive === 'function'
+                    ? window.SearchModeManager.isActive()
+                    : !!window.SearchModeManager.isSearchActive;
+
+                if (searchActive) {
+                    // 숨겨진 검색 결과를 다시 표시
+                    window.SearchModeManager.setVisible(true);
+                    console.log('[ModeManager] 이전 검색 결과 복원');
+                }
+            }
+
+            // 검색 필지 표시
+            if (window.showSearchParcels) {
+                window.showSearchParcels();
+                console.log('[ModeManager] 검색 필지 표시');
+            }
+        }
+
+        // 클릭/손 모드로 전환 시 검색 필지 숨기기
+        if ((newMode === 'click' || newMode === 'hand') && this.currentMode === 'search') {
+            // 검색 필지 숨기기
+            if (window.hideSearchParcels) {
+                window.hideSearchParcels();
+                console.log('[ModeManager] 검색 필지 숨김 (클릭/손 모드 전환)');
+            }
+
+            // 클릭 필지 표시 (손 모드는 필지를 표시만 하고 색칠은 불가)
+            if (window.showClickParcels) {
+                window.showClickParcels();
+                console.log('[ModeManager] 클릭 필지 표시');
             }
         }
 
@@ -605,6 +634,18 @@ class ModeManager {
 
             // 모드 버튼 이벤트 리스너 설정
             this.setupModeButtons();
+
+            // 검색 모드인 경우 클릭 필지 숨김 (초기화 직후)
+            if (savedMode === 'search') {
+                console.log('🔍 검색 모드 - 초기화 시 클릭 필지 숨김 예약');
+                // 필지 로드가 완료된 후 숨기기 위해 약간 지연
+                setTimeout(() => {
+                    if (window.hideClickParcels) {
+                        window.hideClickParcels();
+                        console.log('✅ 검색 모드 - 클릭 필지 숨김 완료');
+                    }
+                }, 500);
+            }
 
             console.log(`✅ ModeManager 초기화 완료: ${savedMode} 모드`);
 

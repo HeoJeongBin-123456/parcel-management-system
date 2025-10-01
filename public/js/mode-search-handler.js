@@ -504,6 +504,13 @@ async function removeSearchParcel(targetPNU) {
 
             // window.searchParcels에서도 제거
             if (window.searchParcels && window.searchParcels.has(targetPNU)) {
+                // 주소 레이블(label) 제거 - 필지 색칠 삭제 시 주소도 함께 삭제
+                const searchParcel = window.searchParcels.get(targetPNU);
+                if (searchParcel && searchParcel.label) {
+                    searchParcel.label.setMap(null);
+                    console.log(`🗑️ 주소 레이블 제거: ${targetPNU}`);
+                }
+
                 window.searchParcels.delete(targetPNU);
                 console.log(`🗑️ window.searchParcels에서 제거: ${targetPNU}`);
 
@@ -620,6 +627,16 @@ async function handleSearchModeRightClick(lat, lng) {
                 if (searchModePolygons.has(targetPNU)) {
                     searchModePolygons.delete(targetPNU);
                     searchModeParcelData.delete(targetPNU);
+                }
+
+                // window.searchParcels에서 주소 레이블도 제거
+                if (window.searchParcels && window.searchParcels.has(targetPNU)) {
+                    const searchParcel = window.searchParcels.get(targetPNU);
+                    if (searchParcel && searchParcel.label) {
+                        searchParcel.label.setMap(null);
+                        console.log(`🗑️ 주소 레이블 제거: ${targetPNU}`);
+                    }
+                    window.searchParcels.delete(targetPNU);
                 }
 
                 // clickParcels에서도 제거
