@@ -57,6 +57,22 @@ async function processColorSaveQueue() {
 const parcelFeatureCache = window.ParcelFeatureCache || new Map();
 window.ParcelFeatureCache = parcelFeatureCache;
 
+const savedParcelDataCache = new Map();
+let savedParcelDataCacheTimestamp = 0;
+
+// 🎯 동적 설정 (optimization-config.js에서 관리)
+function getCacheValidityMs() {
+    return window.OPTIMIZATION_CONFIG?.cacheMs || 5000;
+}
+
+function getMaxParcelCacheSize() {
+    return window.OPTIMIZATION_CONFIG?.lruSize || 500;
+}
+
+// 하위 호환성을 위한 상수 (deprecated)
+const CACHE_VALIDITY_MS = 5000;
+const MAX_PARCEL_CACHE_SIZE = 500;
+
 const IDLE_FALLBACK_DELAY = 32;
 
 function waitForIdleFrame(timeout = IDLE_FALLBACK_DELAY) {
@@ -154,6 +170,16 @@ function cacheParcelFeature(feature) {
         },
         updatedAt: Date.now()
     };
+
+    // 🧹 LRU 캐시 크기 제한 (메모리 최적화)
+    const maxSize = getMaxParcelCacheSize();
+    if (parcelFeatureCache.size >= maxSize) {
+        const firstKey = parcelFeatureCache.keys().next().value;
+        if (firstKey) {
+            parcelFeatureCache.delete(firstKey);
+            console.log(`🧹 LRU 캐시 정리: 가장 오래된 항목 삭제 (현재: ${parcelFeatureCache.size}/${maxSize})`);
+        }
+    }
 
     parcelFeatureCache.set(pnu, entry);
     return entry;
@@ -913,14 +939,9 @@ async function applyColorToParcel(parcel, color) {
         } else if (typeof color === 'string' && color.startsWith('#')) {
             // 색상 값이 직접 전달된 경우 (#FF0000 같은)
             expectedColor = color;
-            // ColorPaletteManager에서 해당 색상의 인덱스 찾기
+            // 🚀 최적화: Map을 사용한 O(1) 조회
             if (window.ColorPaletteManager) {
-                for (let i = 0; i < window.ColorPaletteManager.colors.length; i++) {
-                    if (window.ColorPaletteManager.colors[i].hex === color) {
-                        colorIndex = i;
-                        break;
-                    }
-                }
+                colorIndex = window.ColorPaletteManager.getIndexByHex(color);
             }
         } else if (window.ColorPaletteManager) {
             // 현재 선택된 색상 사용
@@ -947,10 +968,7 @@ async function applyColorToParcel(parcel, color) {
     }
 
     if (colorIndex === null && window.ColorPaletteManager && expectedColor) {
-        const matched = window.ColorPaletteManager.colors.find(item => item.hex === expectedColor);
-        if (matched) {
-            colorIndex = matched.index;
-        }
+        colorIndex = window.ColorPaletteManager.getIndexByHex(expectedColor);
     }
 
     // 검색 필지인지 확인
@@ -1925,22 +1943,54 @@ async function saveSearchParcelData() {
     }
 }
 
-// 저장된 필지 데이터 가져오기
+// 저장된 필지 데이터 가져오기 (🚀 메모리 캐시 최적화)
 async function getSavedParcelData(pnu) {
-    const savedData = JSON.parse(await window.migratedGetItem(CONFIG.STORAGE_KEY) || '[]');
-    // PNU로 찾기 (isMinimalData가 true인 항목은 제외)
-    return savedData.find(item =>
-        item.pnu === pnu && item.isMinimalData !== true
-    );
+    const now = Date.now();
+    const cacheValidityMs = getCacheValidityMs();
+
+    if (savedParcelDataCache.has(pnu) && (now - savedParcelDataCacheTimestamp) < cacheValidityMs) {
+        return savedParcelDataCache.get(pnu);
+    }
+
+    if ((now - savedParcelDataCacheTimestamp) >= cacheValidityMs) {
+        savedParcelDataCache.clear();
+        savedParcelDataCacheTimestamp = now;
+
+        const savedData = JSON.parse(await window.migratedGetItem(CONFIG.STORAGE_KEY) || '[]');
+        savedData.forEach(item => {
+            if (item.pnu && item.isMinimalData !== true) {
+                savedParcelDataCache.set(item.pnu, item);
+            }
+        });
+    }
+
+    return savedParcelDataCache.get(pnu) || null;
 }
 
-// 지번으로 저장된 필지 데이터 가져오기
+// 지번으로 저장된 필지 데이터 가져오기 (🚀 메모리 캐시 최적화)
 async function getSavedParcelDataByJibun(jibun) {
-    const savedData = JSON.parse(await window.migratedGetItem(CONFIG.STORAGE_KEY) || '[]');
-    // isMinimalData가 true인 항목은 제외
-    return savedData.find(item =>
-        item.parcelNumber === jibun && item.isMinimalData !== true
-    );
+    const now = Date.now();
+    const cacheValidityMs = getCacheValidityMs();
+
+    if ((now - savedParcelDataCacheTimestamp) >= cacheValidityMs || savedParcelDataCache.size === 0) {
+        savedParcelDataCache.clear();
+        savedParcelDataCacheTimestamp = now;
+
+        const savedData = JSON.parse(await window.migratedGetItem(CONFIG.STORAGE_KEY) || '[]');
+        savedData.forEach(item => {
+            if (item.pnu && item.isMinimalData !== true) {
+                savedParcelDataCache.set(item.pnu, item);
+            }
+        });
+    }
+
+    for (const item of savedParcelDataCache.values()) {
+        if (item.parcelNumber === jibun) {
+            return item;
+        }
+    }
+
+    return null;
 }
 
 // 필지에 메모가 있는지 확인
@@ -2088,6 +2138,9 @@ async function loadSavedParcels() {
 
 // 지도에 저장된 필지 색상 복원
 async function restoreSavedParcelsOnMap() {
+    // 🔍 현재 모드 확인 - 검색 모드에서는 클릭 필지 복원하지 않음
+    const currentMode = window.currentMode || localStorage.getItem('currentMode') || 'click';
+
     const savedData = JSON.parse(await window.migratedGetItem(CONFIG.STORAGE_KEY) || '[]');
     let processed = 0;
 
@@ -2114,10 +2167,15 @@ async function restoreSavedParcelsOnMap() {
 
             // 검색 필지인지 클릭 필지인지 구분
             const targetMap = saved.isSearchParcel ? window.searchParcels : window.clickParcels;
-            
+
+            // 🔍 검색 모드에서 클릭 필지는 건너뛰기
+            if (!saved.isSearchParcel && currentMode === 'search') {
+                continue;
+            }
+
             // 해당 Map에 이미 있는지 확인
             const existingParcel = targetMap.get(saved.pnu);
-            
+
             if (existingParcel && existingParcel.polygon) {
                 // 이미 있으면 색상만 변경
                 existingParcel.polygon.setOptions({
