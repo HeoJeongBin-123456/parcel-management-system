@@ -1051,46 +1051,12 @@ function initSearchEventListeners() {
     }
     
     // console.log('✅ HTML 요소 찾기 성공');
-    
-    // 검색 버튼
-    searchBtn.addEventListener('click', () => {
-    // console.log('🔍 검색 버튼 클릭됨!');
-    // console.log('현재 시간:', new Date().toLocaleString());
-        const query = searchInput.value.trim();
-    // console.log('입력된 검색어:', `"${query}"`);
 
-        if (query) {
-    // console.log('✅ 검색어 유효함, SearchModeManager 사용');
-            // SearchModeManager가 있으면 그것을 사용, 없으면 searchAddress 사용
-            if (window.SearchModeManager && window.SearchModeManager.executeSearch) {
-                window.SearchModeManager.executeSearch(query, 'all');
-            } else {
-                searchAddress(query);
-            }
-        } else {
-    // console.log('❌ 검색어가 비어있음');
-            alert('검색어를 입력하세요');
-        }
-    });
+    // 검색 버튼 이벤트는 index.html에서 등록됨 (중복 방지)
+    // searchBtn.addEventListener('click', ...) - REMOVED (index.html에서 처리)
 
-    // 엔터키로 검색
-    searchInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-    // console.log('엔터키 검색');
-            const query = e.target.value.trim();
-            if (query) {
-    // console.log('검색 실행:', query);
-                // SearchModeManager가 있으면 그것을 사용, 없으면 searchAddress 사용
-                if (window.SearchModeManager && window.SearchModeManager.executeSearch) {
-                    window.SearchModeManager.executeSearch(query, 'all');
-                } else {
-                    searchAddress(query);
-                }
-            } else {
-                alert('검색어를 입력하세요');
-            }
-        }
-    });
+    // 엔터키 검색 이벤트도 index.html에서 등록됨 (중복 방지)
+    // searchInput.addEventListener('keypress', ...) - REMOVED (index.html에서 처리)
     
     // 검색 토글 버튼 초기 상태 설정
     const searchToggleBtn = document.getElementById('searchToggleBtn');
