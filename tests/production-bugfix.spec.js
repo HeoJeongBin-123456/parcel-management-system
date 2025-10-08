@@ -272,12 +272,12 @@ test.describe('프로덕션 버그 수정 검증', () => {
         });
         console.log('로그아웃 전 세션 ID:', sessionBefore);
 
+        // confirm 다이얼로그 자동 승인 (클릭 전에 등록!)
+        page.on('dialog', dialog => dialog.accept());
+
         // 로그아웃 버튼 클릭
         const logoutBtn = page.locator('#logoutBtn');
         await logoutBtn.click();
-
-        // confirm 다이얼로그 자동 승인
-        page.on('dialog', dialog => dialog.accept());
 
         // 로그인 페이지로 리다이렉트 확인
         await page.waitForURL('**/login.html', { timeout: 5000 });
