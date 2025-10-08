@@ -22,6 +22,9 @@ class AppInitializer {
         const startTime = performance.now();
 
         try {
+            // 🔐 사용자 세션 확인 및 데이터 격리
+            this.validateUserSession();
+
             // ⚡ 병렬 처리로 속도 개선 - 의존성 체크와 초기화를 동시 실행
             const [dependencies, supabaseInit] = await Promise.all([
                 this.waitForDependencies(),
@@ -175,6 +178,96 @@ class AppInitializer {
     }
 
     // 병렬 처리용 Supabase 초기화
+    /**
+     * 🔐 사용자 세션 검증 및 데이터 격리
+     * 다른 사용자로 로그인했을 경우 이전 데이터를 숨김
+     */
+    validateUserSession() {
+        const currentSession = localStorage.getItem('user_session');
+        const lastSession = localStorage.getItem('last_user_session');
+
+        if (!currentSession) {
+            // 세션 ID가 없으면 새로 생성
+            const newSession = 'user_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 9);
+            localStorage.setItem('user_session', newSession);
+            console.log('🆕 새 사용자 세션 생성:', newSession);
+            return;
+        }
+
+        if (lastSession && currentSession !== lastSession) {
+            // 다른 사용자로 로그인한 경우
+            console.warn('⚠️ 다른 사용자로 로그인 감지');
+            console.log(`   이전 세션: ${lastSession}`);
+            console.log(`   현재 세션: ${currentSession}`);
+
+            // 경고: 이전 사용자의 데이터는 숨김 처리 (삭제하지 않음)
+            const confirm = window.confirm(
+                '다른 사용자 계정으로 로그인했습니다.\n\n' +
+                '이전 사용자의 데이터는 숨겨집니다.\n' +
+                '(이전 계정으로 다시 로그인하면 복원됩니다)\n\n' +
+                '계속하시겠습니까?'
+            );
+
+            if (!confirm) {
+                // 사용자가 취소하면 이전 세션으로 복원
+                localStorage.setItem('user_session', lastSession);
+                window.location.href = '/login.html';
+                return;
+            }
+
+            // 이전 데이터 백업 (세션 ID를 prefix로 사용)
+            this.backupPreviousUserData(lastSession);
+
+            // 현재 세션 데이터 로드 시도
+            this.loadUserData(currentSession);
+
+            console.log('✅ 세션 전환 완료');
+        } else if (currentSession === lastSession) {
+            // 같은 사용자가 재로그인한 경우
+            console.log('✅ 같은 사용자 재로그인 감지 - 데이터 복원');
+        }
+
+        // last_user_session 업데이트
+        localStorage.setItem('last_user_session', currentSession);
+    }
+
+    /**
+     * 이전 사용자 데이터 백업
+     */
+    backupPreviousUserData(sessionId) {
+        const dataKeys = ['parcelData', 'parcelColors', 'markerStates', 'searchResults'];
+
+        dataKeys.forEach(key => {
+            const data = localStorage.getItem(key);
+            if (data) {
+                localStorage.setItem(`${key}_${sessionId}`, data);
+                localStorage.removeItem(key); // 현재 키에서는 제거
+                console.log(`💾 백업: ${key} → ${key}_${sessionId}`);
+            }
+        });
+    }
+
+    /**
+     * 사용자 데이터 로드
+     */
+    loadUserData(sessionId) {
+        const dataKeys = ['parcelData', 'parcelColors', 'markerStates', 'searchResults'];
+
+        dataKeys.forEach(key => {
+            const backedUpKey = `${key}_${sessionId}`;
+            const backedUpData = localStorage.getItem(backedUpKey);
+
+            if (backedUpData) {
+                localStorage.setItem(key, backedUpData);
+                console.log(`📥 복원: ${backedUpKey} → ${key}`);
+            } else {
+                // 백업 데이터가 없으면 빈 데이터로 초기화
+                localStorage.removeItem(key);
+                console.log(`🆕 ${key} 초기화`);
+            }
+        });
+    }
+
     async initializeSupabaseParallel() {
         console.log('⚡ Supabase 병렬 초기화 시작...');
 
@@ -214,20 +307,28 @@ class AppInitializer {
             let polygonData = [];
 
             console.log('📋 데이터 로드 시작...');
-            try {
-                supabaseData = await this.loadFromSupabase();
-            } catch (e) {
-                console.log('📋 Supabase 로드 건너뜀:', e.message);
-            }
 
-            console.log('📋 LocalStorage 로드 시도...');
+            // 🎯 수정: LocalStorage 우선 로드 (Single Source of Truth)
+            console.log('📋 LocalStorage 로드 시도 (우선)...');
             localData = await this.loadFromLocalStorage();
 
             console.log('📋 Polygon 로드 시도...');
             polygonData = await this.loadPolygonData();
 
-            // 데이터 병합
-            const restoredData = supabaseData.length > 0 ? supabaseData : localData;
+            // Supabase는 백업 용도로만 사용 (LocalStorage 없을 때만)
+            if (localData.length === 0) {
+                console.log('📋 LocalStorage 데이터 없음 - Supabase에서 복원 시도...');
+                try {
+                    supabaseData = await this.loadFromSupabase();
+                } catch (e) {
+                    console.log('📋 Supabase 로드 실패:', e.message);
+                }
+            } else {
+                console.log(`✅ LocalStorage에서 ${localData.length}개 필지 로드 완료`);
+            }
+
+            // 🔧 데이터 선택: LocalStorage 우선, 없으면 Supabase
+            const restoredData = localData.length > 0 ? localData : supabaseData;
 
             if (restoredData.length > 0 || polygonData.length > 0) {
                 console.log(`⚡ 데이터 로드: ${restoredData.length}개 필지, ${polygonData.length}개 폴리곤`);

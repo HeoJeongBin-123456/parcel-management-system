@@ -588,9 +588,25 @@ async function getParcelInfoViaProxyForClickMode(lat, lng, options = {}) {
             return true;
         }
 
+        // 🎯 수정: 필지 정보를 가져올 수 없을 때 사용자에게 명확한 안내
+        console.warn('⚠️ 필지 정보 없음 - 빈 공간이거나 필지 경계 밖입니다.');
+        alert('필지 정보를 가져올 수 없습니다.\n\n가능한 원인:\n- 필지가 아닌 빈 공간을 클릭했습니다.\n- 필지 경계선 밖을 클릭했습니다.\n\n해결 방법:\n- 필지 중앙을 정확히 클릭해주세요.\n- 지도를 확대하여 더 정밀하게 클릭하세요.');
         return false;
     } catch (error) {
         console.error('❌ 클릭 모드 서버 프록시 호출 실패:', error);
+
+        // 🎯 수정: 에러 종류에 따른 사용자 친화적 메시지
+        let errorMessage = '필지 정보를 가져오는 중 오류가 발생했습니다.\n\n';
+
+        if (error.message.includes('네트워크')) {
+            errorMessage += '원인: 인터넷 연결 불안정\n\n해결 방법:\n- 인터넷 연결을 확인해주세요.\n- 잠시 후 다시 시도해주세요.';
+        } else if (error.message.includes('타임아웃') || error.message.includes('timeout')) {
+            errorMessage += '원인: 서버 응답 시간 초과\n\n해결 방법:\n- 잠시 후 다시 시도해주세요.\n- 지속되면 페이지를 새로고침 해주세요.';
+        } else {
+            errorMessage += `상세 오류: ${error.message}\n\n해결 방법:\n- 잠시 후 다시 시도해주세요.\n- 지속되면 페이지를 새로고침 해주세요.`;
+        }
+
+        alert(errorMessage);
         throw error;
     }
 }

@@ -222,8 +222,8 @@ class SupabaseManager {
         
         this._loadCallCount++;
         
-        // 무한 루프 방지 - 쿨다운 적용
-        if (this._lastLoadTime && (now - this._lastLoadTime) < 1000) {
+        // 🎯 성능 최적화: 쿨다운 시간 단축 (1000ms → 200ms)
+        if (this._lastLoadTime && (now - this._lastLoadTime) < 200) {
             console.log(`⏳ 로드 쿨다운 중... (${this._loadCallCount}/${this._maxLoadCalls})`);
             return this._lastResult || [];
         }

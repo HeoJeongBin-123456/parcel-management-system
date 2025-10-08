@@ -261,6 +261,42 @@ class SupabaseAdapter {
         const memoLines = rawMemo.split('\n');
         const resolvedPnu = this.resolvePnu(supabaseData);
 
+        // 🎯 색상 인덱스 검증 및 변환 (hex → index)
+        let colorIndex = supabaseData.colorIndex;
+
+        // colorIndex가 없거나 유효하지 않으면 color(hex)에서 변환 시도
+        if (typeof colorIndex !== 'number' || colorIndex < 0 || colorIndex > 8) {
+            if (supabaseData.color) {
+                // hex 값을 index로 변환
+                const hexToIndex = {
+                    '#FF0000': 0, // 빨강
+                    '#FFA500': 1, // 주황
+                    '#FFFF00': 2, // 노랑
+                    '#90EE90': 3, // 연두
+                    '#0000FF': 4, // 파랑
+                    '#000000': 5, // 검정
+                    '#FFFFFF': 6, // 흰색
+                    '#87CEEB': 7, // 하늘색
+                    '#9B59B6': 8  // 검색 (보라색)
+                };
+                colorIndex = hexToIndex[supabaseData.color] ?? 0;
+                console.log(`🎨 색상 hex → index 변환: ${supabaseData.color} → ${colorIndex}`);
+            } else {
+                colorIndex = 0; // 기본값: 빨강
+            }
+        }
+
+        // parcelColors LocalStorage 동기화
+        if (resolvedPnu && colorIndex >= 0 && colorIndex <= 8) {
+            try {
+                const parcelColors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
+                parcelColors[resolvedPnu] = colorIndex;
+                localStorage.setItem('parcelColors', JSON.stringify(parcelColors));
+            } catch (error) {
+                console.warn('⚠️ parcelColors 동기화 실패:', error);
+            }
+        }
+
         const localData = {
             id: supabaseData.id,
             parcelNumber: supabaseData.parcel_name,
@@ -271,7 +307,7 @@ class SupabaseAdapter {
             ownerContact: supabaseData.owner_contact || '',
             memo: '',
             visitCount: 0,
-            colorIndex: supabaseData.colorIndex || 0,
+            colorIndex: colorIndex, // 검증된 colorIndex 사용
             mode: supabaseData.mode || 'click',
             visitDate: '',
             isSearchParcel: supabaseData.parcel_type === 'search',

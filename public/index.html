@@ -467,6 +467,13 @@
         // 로그아웃 처리 함수
         function handleLogout() {
             if (confirm('로그아웃 하시겠습니까?')) {
+                // 🎯 현재 세션 ID 저장 (재로그인 시 데이터 복원용)
+                const currentSession = localStorage.getItem('user_session');
+                if (currentSession) {
+                    localStorage.setItem('last_user_session', currentSession);
+                    console.log('✅ 현재 세션 ID 저장:', currentSession);
+                }
+
                 // 세션 정보 삭제
                 localStorage.removeItem('isLoggedIn');
                 localStorage.removeItem('userInfo');
@@ -479,6 +486,12 @@
                 // 구글 관련 토큰도 정리 (있을 경우)
                 localStorage.removeItem('googleToken');
                 localStorage.removeItem('accessToken');
+
+                // ⚠️ 필지 데이터는 삭제하지 않음 (재로그인 시 복원)
+                // localStorage.removeItem('parcelData'); // 삭제 안함
+                // localStorage.removeItem('parcelColors'); // 삭제 안함
+
+                console.log('🔐 로그아웃 완료 - 필지 데이터는 보존됨');
 
                 // 로그인 페이지로 이동
                 window.location.href = '/login.html';

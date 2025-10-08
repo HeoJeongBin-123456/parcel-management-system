@@ -37,7 +37,10 @@ window.CONFIG = {
 // VWorld API 프록시 헬퍼 (모든 모듈에서 재사용)
 if (!window.vworldApi) {
     window.vworldApi = {
-        async request(params = {}) {
+        async request(params = {}, retryCount = 0) {
+            const MAX_RETRIES = 5; // 최대 재시도 횟수 (3 → 5)
+            const RETRY_DELAY = 1000; // 재시도 간격 (ms)
+
             const searchParams = new URLSearchParams();
 
             Object.entries(params).forEach(([key, value]) => {
@@ -90,13 +93,25 @@ if (!window.vworldApi) {
             const supabaseAnonKey = (window.SupabaseManager && window.SupabaseManager.supabaseKey) ||
                 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNxZnN6Y2JpZm9ueHBmYXNvZHRvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc0MTM2NzUsImV4cCI6MjA3Mjk4OTY3NX0.gaEIzHhU8d7e1T8WDzxK-YDW7DPU2aLkD3XBU7TtncI';
 
-            let response = await fetch(endpoint, {
-                method: 'GET',
-                headers: {
-                    'Accept': 'application/json',
-                    'Authorization': `Bearer ${supabaseAnonKey}`
+            let response;
+            try {
+                response = await fetch(endpoint, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Authorization': `Bearer ${supabaseAnonKey}`
+                    },
+                    signal: AbortSignal.timeout(10000) // 10초 타임아웃
+                });
+            } catch (fetchError) {
+                // 네트워크 오류 시 재시도
+                if (retryCount < MAX_RETRIES) {
+                    console.warn(`[vworldApi] 프록시 호출 실패 (재시도 ${retryCount + 1}/${MAX_RETRIES}):`, fetchError.message);
+                    await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * (retryCount + 1)));
+                    return this.request(params, retryCount + 1);
                 }
-            });
+                throw new Error(`필지 정보를 가져오는데 실패했습니다.\n\n원인: 네트워크 오류\n상세: ${fetchError.message}\n\n잠시 후 다시 시도해주세요.`);
+            }
 
             if (!response.ok) {
                 console.warn(`[vworldApi] 프록시 실패: HTTP ${response.status}. 직접 호출 폴백 시도`);
