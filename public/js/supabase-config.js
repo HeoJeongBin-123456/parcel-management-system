@@ -9,6 +9,8 @@ class SupabaseManager {
         this.initializationAttempts = 0;
         this.maxInitializationAttempts = 5; // 최대 시도 제한
         this.supportsIsColored = true; // Supabase parcels 테이블에 is_colored 컬럼 존재 여부
+        this.supportsUserSettings = false; // Bug Fix #3: user_settings 테이블 지원 여부
+        this.supportsUserStates = false; // Bug Fix #3: user_states 테이블 지원 여부
         
         // 무한 루프 방지 강화
         this._loadCallCount = 0;
@@ -168,20 +170,50 @@ class SupabaseManager {
                 console.log('📝 parcel_polygons 테이블 확인 중 오류 - 계속 진행');
             }
 
-            // user_settings 테이블 확인 (없어도 계속 진행)
+            // Bug Fix #3: user_settings 테이블 확인 및 플래그 설정
             try {
                 const { data: settingsData, error: settingsError } = await this.supabase
                     .from('user_settings')
                     .select('id')
                     .limit(1);
 
-                if (settingsError && settingsError.code === 'PGRST116') {
-                    console.log('⚠️ user_settings 테이블이 존재하지 않습니다. 로컬 저장소 사용');
+                if (settingsError) {
+                    if (settingsError.code === 'PGRST116') {
+                        console.log('⚠️ user_settings 테이블이 존재하지 않습니다. 로컬 저장소 사용');
+                    } else if (settingsError.code === '406' || settingsError.status === 406) {
+                        console.log('⚠️ user_settings RLS 정책 미설정 - 로컬 저장소로 대체');
+                    }
+                    this.supportsUserSettings = false;
                 } else {
                     console.log('✅ user_settings 테이블 확인 완료');
+                    this.supportsUserSettings = true;
                 }
             } catch (settingsError) {
-                console.log('📝 user_settings 테이블 없음 - 로컬 저장소로 대체');
+                console.log('📝 user_settings 테이블 접근 불가 - 로컬 저장소로 대체');
+                this.supportsUserSettings = false;
+            }
+
+            // Bug Fix #3: user_states 테이블 확인 및 플래그 설정
+            try {
+                const { data: statesData, error: statesError } = await this.supabase
+                    .from('user_states')
+                    .select('user_session')
+                    .limit(1);
+
+                if (statesError) {
+                    if (statesError.code === 'PGRST116') {
+                        console.log('⚠️ user_states 테이블이 존재하지 않습니다. 로컬 저장소 사용');
+                    } else if (statesError.code === '406' || statesError.status === 406) {
+                        console.log('⚠️ user_states RLS 정책 미설정 - 로컬 저장소로 대체');
+                    }
+                    this.supportsUserStates = false;
+                } else {
+                    console.log('✅ user_states 테이블 확인 완료');
+                    this.supportsUserStates = true;
+                }
+            } catch (statesError) {
+                console.log('📝 user_states 테이블 접근 불가 - 로컬 저장소로 대체');
+                this.supportsUserStates = false;
             }
 
         } catch (error) {
@@ -303,6 +335,24 @@ class SupabaseManager {
         return sessionId;
     }
 
+    /**
+     * UUID v4 생성 함수
+     * Bug Fix #1: id 컬럼 NOT NULL 제약조건 위반 해결
+     */
+    generateUUID() {
+        // crypto.randomUUID()가 지원되면 사용 (최신 브라우저)
+        if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+            return crypto.randomUUID();
+        }
+
+        // Fallback: 수동 UUID v4 생성
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+            const r = Math.random() * 16 | 0;
+            const v = c === 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    }
+
     isValidUUID(value) {
         if (typeof value !== 'string') {
             return false;
@@ -314,8 +364,15 @@ class SupabaseManager {
     prepareParcelRecord(parcel) {
         const sanitized = { ...parcel };
 
-        if (sanitized.id && !this.isValidUUID(sanitized.id)) {
-            delete sanitized.id;
+        // Bug Fix #1: id가 없거나 유효하지 않으면 자동 생성
+        if (!sanitized.id || !this.isValidUUID(sanitized.id)) {
+            sanitized.id = this.generateUUID();
+            console.log(`🔧 [Bug Fix] UUID 자동 생성: ${sanitized.id.substring(0, 8)}...`);
+        }
+
+        // Bug Fix #2: geometry 컬럼 제거 (Supabase 스키마에 없음)
+        if (sanitized.geometry) {
+            delete sanitized.geometry;
         }
 
         if (!this.supportsIsColored) {
@@ -597,7 +654,8 @@ class SupabaseManager {
         // 로컬 저장소에도 백업
         localStorage.setItem(`setting_${key}`, JSON.stringify(value));
 
-        if (!this.isConnected) {
+        // Bug Fix #3: user_settings 테이블 미지원 시 로컬만 사용
+        if (!this.isConnected || !this.supportsUserSettings) {
             console.log(`💾 로컬 저장: ${key} = ${value}`);
             return true;
         }
@@ -611,7 +669,7 @@ class SupabaseManager {
                 updated_at: new Date().toISOString()
             };
 
-            const { data, error } = await this.supabase
+            const { data, error} = await this.supabase
                 .from('user_settings')
                 .upsert(settingData, { onConflict: 'id' });
 
@@ -631,7 +689,8 @@ class SupabaseManager {
     async loadUserSetting(key, defaultValue = null) {
         const sessionId = this.getUserSession();
 
-        if (!this.isConnected) {
+        // Bug Fix #3: user_settings 테이블 미지원 시 로컬만 사용
+        if (!this.isConnected || !this.supportsUserSettings) {
             const stored = localStorage.getItem(`setting_${key}`);
             const value = stored ? JSON.parse(stored) : defaultValue;
             console.log(`📁 로컬 로드: ${key} = ${value}`);
@@ -682,9 +741,11 @@ class SupabaseManager {
     async saveUserState(stateData) {
         const sessionId = this.getUserSession();
 
-        if (!this.isConnected) {
-            // 로컬 저장소 백업
-            localStorage.setItem('user_state', JSON.stringify(stateData));
+        // 로컬 저장소 백업
+        localStorage.setItem('user_state', JSON.stringify(stateData));
+
+        // Bug Fix #3: user_states 테이블 미지원 시 로컬만 사용
+        if (!this.isConnected || !this.supportsUserStates) {
             console.log('💾 로컬 상태 저장:', Object.keys(stateData));
             return true;
         }
@@ -705,7 +766,6 @@ class SupabaseManager {
 
             if (error) {
                 console.warn('📝 Supabase 상태 저장 실패, 로컬 저장 사용:', error);
-                localStorage.setItem('user_state', JSON.stringify(stateData));
                 return false;
             }
 
@@ -713,7 +773,6 @@ class SupabaseManager {
             return true;
         } catch (error) {
             console.error('❌ 사용자 상태 저장 실패:', error);
-            localStorage.setItem('user_state', JSON.stringify(stateData));
             return false;
         }
     }
@@ -722,7 +781,8 @@ class SupabaseManager {
     async loadUserState() {
         const sessionId = this.getUserSession();
 
-        if (!this.isConnected) {
+        // Bug Fix #3: user_states 테이블 미지원 시 로컬만 사용
+        if (!this.isConnected || !this.supportsUserStates) {
             const stored = localStorage.getItem('user_state');
             const state = stored ? JSON.parse(stored) : {};
             console.log('📁 로컬 상태 로드:', Object.keys(state));
