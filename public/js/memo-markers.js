@@ -367,26 +367,31 @@ class MemoMarkerManager {
                 return;
             }
 
-            // 삭제된 필지 체크
-            const deletedParcels = window.getDeletedParcels ? window.getDeletedParcels() : [];
-            const deletedSet = new Set(deletedParcels.map(id => String(id).trim()));
-
-            const identifiers = [
-                parcelData.pnu,
-                parcelData.id,
-                parcelData.pnu_code,
-                parcelData.parcelNumber,
-                parcelData.parcel_name
-            ].filter(Boolean).map(id => String(id).trim());
-
-            if (identifiers.some(id => deletedSet.has(id))) {
-                console.log(`⏩ 삭제된 필지 마커 생성 건너뛰기: ${parcelData.pnu || parcelData.id}`);
-                return;
-            }
-
             // 🛡️ 마커 생성 조건 확인 (가장 중요한 체크)
             const shouldShow = this.shouldShowMarker(parcelData);
             console.log('🔍 [DEBUG] shouldShowMarker 결과:', shouldShow);
+
+            // 🔧 삭제된 필지 체크 → 마커 조건 충족 시 삭제 목록에서 복원
+            if (shouldShow) {
+                const deletedParcels = window.getDeletedParcels ? window.getDeletedParcels() : [];
+                const deletedSet = new Set(deletedParcels.map(id => String(id).trim()));
+
+                const identifiers = [
+                    parcelData.pnu,
+                    parcelData.id,
+                    parcelData.pnu_code,
+                    parcelData.parcelNumber,
+                    parcelData.parcel_name
+                ].filter(Boolean).map(id => String(id).trim());
+
+                if (identifiers.some(id => deletedSet.has(id))) {
+                    console.log(`♻️ 삭제 목록에 있던 필지가 마커 조건 충족 - 삭제 목록에서 복원: ${parcelData.pnu || parcelData.id}`);
+                    const pnu = parcelData.pnu || parcelData.id;
+                    if (window.removeFromDeletedParcels) {
+                        window.removeFromDeletedParcels(pnu);
+                    }
+                }
+            }
 
             if (!shouldShow) {
                 console.log('🚫 마커 생성 조건 미충족:', {
@@ -837,7 +842,9 @@ class MemoMarkerManager {
 
     // 새 필지 메모 추가 시 호출
     async onParcelMemoAdded(parcelData) {
-        // 삭제된 필지 체크
+        const pnu = parcelData.pnu || parcelData.id;
+
+        // 🔧 삭제된 필지 체크 → 정보 입력 시 삭제 목록에서 복원
         const deletedParcels = window.getDeletedParcels ? window.getDeletedParcels() : [];
         const deletedSet = new Set(deletedParcels.map(id => String(id).trim()));
 
@@ -850,13 +857,14 @@ class MemoMarkerManager {
         ].filter(Boolean).map(id => String(id).trim());
 
         if (identifiers.some(id => deletedSet.has(id))) {
-            console.log(`⏩ 삭제된 필지 마커 업데이트 건너뛰기: ${parcelData.pnu || parcelData.id}`);
-            return;
+            console.log(`♻️ 삭제 목록에 있던 필지에 정보 입력 감지 - 삭제 목록에서 복원: ${pnu}`);
+            if (window.removeFromDeletedParcels) {
+                window.removeFromDeletedParcels(pnu);
+            }
         }
 
         // shouldShowMarker 조건 사용 (PNU, 지번, 메모, 소유자명 등 중 하나라도 있으면)
         if (this.shouldShowMarker(parcelData)) {
-            const pnu = parcelData.pnu || parcelData.id;
             // 이미 마커가 있으면 업데이트, 없으면 새로 생성
             if (this.markers.has(pnu)) {
                 console.log('🔄 기존 마커 업데이트:', pnu);
