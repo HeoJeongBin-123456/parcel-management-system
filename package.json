@@ -27,10 +27,18 @@
     "@eslint/markdown": "^7.3.0",
     "@playwright/test": "^1.55.1",
     "eslint": "^9",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.4",
     "playwright": "^1.55.1"
   },
   "author": "권용범",
   "license": "MIT",
+  "lint-staged": {
+    "*.js": [
+      "eslint --fix",
+      "npm run scan:debt:quick"
+    ]
+  },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
     "axios": "^1.11.0",

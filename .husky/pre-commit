@@ -1,0 +1,39 @@
+#!/bin/sh
+
+# Husky pre-commit hook
+# Runs lint-staged which executes ESLint and tech debt scanner on staged files
+
+. "$(dirname "$0")/_/husky.sh"
+
+echo ""
+echo "🔍 기술 부채 검증 시작..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Run lint-staged
+npx lint-staged --allow-empty
+
+# Store the result
+LINT_STAGED_RESULT=$?
+
+if [ $LINT_STAGED_RESULT -ne 0 ]; then
+  echo ""
+  echo "❌ 헌법 준수 검증 실패!"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo ""
+  echo "🔧 다음 중 하나를 실행하세요:"
+  echo "  1. ESLint 규칙 수정:"
+  echo "     npx eslint --fix <file>"
+  echo ""
+  echo "  2. 기술 부채 항목 추가:"
+  echo "     npm run debt:add"
+  echo ""
+  echo "  3. 기술 부채 항목 업데이트:"
+  echo "     npm run debt:update -- --id <ID> --status 'In Progress'"
+  echo ""
+  exit 1
+fi
+
+echo ""
+echo "✅ 헌법 준수 검증 통과!"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
