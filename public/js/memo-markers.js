@@ -4,7 +4,8 @@ class MemoMarkerManager {
         this.markers = new Map(); // PNU -> marker 매핑
         this.isInitialized = false;
         this.isInitializing = false; // 🔧 FIX: 초기화 중 재진입 방지 플래그
-        console.log('📍 MemoMarkerManager 초기화');
+        this._isCreating = false; // [FR-002 FIX]: 마커 생성 중 동시 업데이트 차단 플래그
+        console.log('[MemoMarkerManager] 클래스 초기화');
     }
 
     // 마커 표시 조건 확인 (실제 정보가 있을 때만)
@@ -16,7 +17,7 @@ class MemoMarkerManager {
 
         // 🔥 데이터 스키마 호환성 개선: 다양한 키 이름 지원
         const memo = parcelData.memo || parcelData.parcelMemo || '';
-        const parcelNumber = parcelData.parcelNumber || parcelData.parcel_number || parcelData.parcel_name || '';
+        const _parcelNumber = parcelData.parcelNumber || parcelData.parcel_number || parcelData.parcel_name || '';
         const ownerName = parcelData.ownerName || parcelData.owner_name || parcelData.owner || '';
         const ownerAddress = parcelData.ownerAddress || parcelData.owner_address || '';
         const ownerContact = parcelData.ownerContact || parcelData.owner_contact || parcelData.contact || '';
@@ -41,7 +42,7 @@ class MemoMarkerManager {
         const hasMeaningfulInfo = hasUserSuppliedInfo;
 
         // 검색 필지 여부는 로깅용으로만 사용 (조건 동일)
-        const isSearchParcel = parcelData.pnu && window.searchParcels && window.searchParcels.has(parcelData.pnu);
+        const _isSearchParcel = parcelData.pnu && window.searchParcels && window.searchParcels.has(parcelData.pnu);
 
         // 마커 조건 확인 (로그 제거 - 성능 개선)
 
@@ -50,49 +51,52 @@ class MemoMarkerManager {
     }
 
     // 초기화 (지도 없이도 가능)
+    // [FR-001 FIX]: isInitialized 플래그를 loadAllMemoMarkers() 완료 후에만 설정
     async initialize() {
         // 🔧 FIX: 초기화 중이거나 이미 초기화된 경우 재진입 방지
         if (this.isInitialized || this.isInitializing) {
-            console.log(`⏩ MemoMarkerManager 초기화 건너뛰기 (isInitialized: ${this.isInitialized}, isInitializing: ${this.isInitializing})`);
+            console.log(`[MemoMarkerManager] ⏩ 초기화 건너뛰기 (isInitialized: ${this.isInitialized}, isInitializing: ${this.isInitializing})`);
             return;
         }
 
         // 초기화 시작
         this.isInitializing = true;
-        console.log('🔄 MemoMarkerManager 초기화 시작...');
+        console.log('[MemoMarkerManager] initialize() 호출됨');
 
         try {
             // 지도가 이미 있으면 마커 로드
             if (window.map) {
                 // 중복 마커 정리
                 this.cleanupDuplicateMarkers();
+                console.log('[MemoMarkerManager] 지도 감지됨, loadAllMemoMarkers() 시작...');
                 await this.loadAllMemoMarkers();
-                console.log('📍 지도 있음: 마커 로드 완료');
+                console.log('[MemoMarkerManager] 📍 지도 있음: 마커 로드 완료');
             } else {
                 // 지도 로드 감지를 위한 인터벌 설정
-                console.log('🗺️ 지도 로딩 대기 중...');
+                console.log('[MemoMarkerManager] 🗺️ 지도 로딩 대기 중...');
                 let checkCount = 0;
                 const mapCheckInterval = setInterval(async () => {
                     checkCount++;
                     if (window.map) {
                         clearInterval(mapCheckInterval);
-                        console.log('🗺️ 지도 로드 감지! 마커 로드 시작...');
+                        console.log('[MemoMarkerManager] 🗺️ 지도 로드 감지! loadAllMemoMarkers() 시작...');
                         this.cleanupDuplicateMarkers();
                         await this.loadAllMemoMarkers();
                     } else if (checkCount > 40) {
                         // 20초 후에도 지도가 없으면 중단
                         clearInterval(mapCheckInterval);
-                        console.warn('⚠️ 지도 로딩 타임아웃 (20초)');
+                        console.warn('[MemoMarkerManager] ⚠️ 지도 로딩 타임아웃 (20초)');
                     }
                 }, 500);
             }
 
-            // 초기화 완료
+            // [FR-001 FIX]: isInitialized를 loadAllMemoMarkers() 완료 후에만 설정
             this.isInitialized = true;
-            console.log('✅ MemoMarkerManager 초기화 완료');
+            console.log('[MemoMarkerManager] ✅ 초기화 완료, isInitialized = true');
         } finally {
             // 초기화 플래그 해제
             this.isInitializing = false;
+            console.log('[MemoMarkerManager] 초기화 상태: isInitializing = false');
         }
     }
 
@@ -164,11 +168,36 @@ class MemoMarkerManager {
     }
 
     // 모든 메모 마커 로드 (Supabase 우선, localStorage 백업)
+    // [FR-001 FIX]: Gate check로 이미 초기화된 경우 조기 반환
+    // [FR-002 FIX]: _isCreating 플래그로 Race condition 방지
+    // [FR-003 FIX]: markerStates 복구 로직 추가
     async loadAllMemoMarkers() {
+        // [FR-001]: isInitialized가 이미 true이면 재로드 방지
+        if (this.isInitialized) {
+            console.log('[MemoMarkerManager] ⏩ 이미 초기화되어 있음, loadAllMemoMarkers() 스킵');
+            return Promise.resolve();
+        }
+
+        // [FR-002]: 마커 생성 Lock 설정 (Race condition 방지)
+        this._isCreating = true;
+        console.log('[MemoMarkerManager] 마커 생성 Lock 활성화: _isCreating = true');
+
         try {
-            console.log('🔍 메모 마커 로드 시작: Supabase 우선 → localStorage 백업');
+            console.log('[MemoMarkerManager] loadAllMemoMarkers() 시작: Supabase 우선 → localStorage 백업');
 
             let allMemoData = [];
+
+            // [FR-003]: LocalStorage에서 markerStates 사전 로드 (표시 상태 복구용)
+            const markerStates = (() => {
+                try {
+                    const stored = localStorage.getItem('markerStates');
+                    return stored ? JSON.parse(stored) : {};
+                } catch (e) {
+                    console.warn('[MemoMarkerManager] markerStates 파싱 실패:', e);
+                    return {};
+                }
+            })();
+            console.log('[MemoMarkerManager] markerStates 로드됨:', Object.keys(markerStates).length, '개 항목');
 
             // 🎯 1차: Supabase에서 메모가 있는 필지들 로드
             if (window.SupabaseManager && window.SupabaseManager.isConnected) {
@@ -292,15 +321,32 @@ class MemoMarkerManager {
                 });
             }
 
-            // shouldShowMarker 조건을 만족하는 필지에 대해서만 마커 생성
+            // [FR-003]: shouldShowMarker 조건을 만족하는 필지에 대해서만 마커 생성하고 상태 복구
+            let markerCreatedCount = 0;
             for (const parcel of allMemoData) {
                 if (this.shouldShowMarker(parcel)) {
-                    await this.createMemoMarker(parcel);
-                    console.log('✅ 마커 생성:', parcel.pnu || parcel.parcelNumber || parcel.id);
+                    const pnu = parcel.pnu || parcel.parcelNumber || parcel.parcel_name || parcel.id;
+
+                    // 마커 생성
+                    const marker = await this.createMemoMarker(parcel);
+
+                    // [FR-003]: markerStates에서 표시 상태 복구
+                    if (marker && Object.prototype.hasOwnProperty.call(markerStates, pnu) && markerStates[pnu] === false) {
+                        marker.setVisible(false);
+                        console.log(`[MemoMarkerManager] ✅ 마커 생성: ${pnu} (상태: 숨김)`);
+                    } else {
+                        console.log(`[MemoMarkerManager] ✅ 마커 생성: ${pnu} (상태: 표시)`);
+                    }
+                    markerCreatedCount++;
                 }
             }
+            console.log(`[MemoMarkerManager] 📊 마커 생성 완료: 총 ${markerCreatedCount}개`);
         } catch (error) {
-            console.error('❌ 메모 마커 로드 실패:', error);
+            console.error('[MemoMarkerManager] ❌ 메모 마커 로드 실패:', error);
+        } finally {
+            // [FR-002]: Lock 해제 (Supabase 업데이트 허용)
+            this._isCreating = false;
+            console.log('[MemoMarkerManager] 마커 생성 Lock 해제: _isCreating = false');
         }
     }
 
@@ -482,8 +528,12 @@ class MemoMarkerManager {
 
             console.log(`📍 메모 마커 생성: ${parcelData.parcelNumber}`);
 
+            // [FR-003 FIX]: 마커 반환 (markerStates 복구용)
+            return marker;
+
         } catch (error) {
             console.error('❌ 메모 마커 생성 실패:', error, parcelData);
+            return null;
         }
     }
 
