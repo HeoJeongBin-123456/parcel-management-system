@@ -67,7 +67,7 @@
 
 ### FR-001 Tasks
 
-- [ ] T007 [FR-001] Refactor MemoMarkerManager.initialize() to defer isInitialized flag setting in `public/js/memo-markers.js`
+- [X] T007 [FR-001] Refactor MemoMarkerManager.initialize() to defer isInitialized flag setting in `public/js/memo-markers.js`
   - **Current Problem**: isInitialized = true happens in initialize(), before loadAllMemoMarkers() completes
   - **Fix Required**:
     ```javascript
@@ -89,7 +89,7 @@
     - [x] Test: Call initialize() 5 times rapidly → loadAllMemoMarkers() fires exactly 1x
     - [x] Console output confirms sequence: "isInitializing→true" → "loadAllMemoMarkers()" → "isInitialized→true"
 
-- [ ] T008 [FR-001] Add gate check in loadAllMemoMarkers() to prevent re-entry in `public/js/memo-markers.js`
+- [X] T008 [FR-001] Add gate check in loadAllMemoMarkers() to prevent re-entry in `public/js/memo-markers.js`
   - **Action**: Add early return if isInitialized already true
   - **Code**:
     ```javascript
@@ -105,7 +105,7 @@
     - [x] Function aborts if isInitialized true
     - [x] Log message appears on attempted re-entry
 
-- [ ] T009 [FR-001] Test FR-001 with Scenario 1: Single memo refresh in browser
+- [X] T009 [FR-001] Test FR-001 with Scenario 1: Single memo refresh in browser
   - **Test Steps**:
     1. Open app, click parcel #940-26
     2. Add memo "Test memo", save
@@ -128,7 +128,7 @@
 
 ### FR-002 Tasks
 
-- [ ] T010 [P] [FR-002] Add marker creation lock mechanism (_isCreating flag) in `public/js/memo-markers.js`
+- [X] T010 [P] [FR-002] Add marker creation lock mechanism (_isCreating flag) in `public/js/memo-markers.js`
   - **Action**:
     ```javascript
     class MemoMarkerManager {
@@ -192,7 +192,7 @@
 
 ### FR-003 Tasks
 
-- [ ] T013 [FR-003] Modify loadAllMemoMarkers() to restore marker visibility from markerStates in `public/js/memo-markers.js`
+- [X] T013 [FR-003] Modify loadAllMemoMarkers() to restore marker visibility from markerStates in `public/js/memo-markers.js`
   - **Current Missing Code**:
     ```javascript
     async loadAllMemoMarkers() {
@@ -217,7 +217,7 @@
     - [x] marker.setVisible(false) called for parcels with markerStates[pnu] = false
     - [x] Console log shows visibility restoration for each marker
 
-- [ ] T014 [FR-003] Verify marker toggle persistence writes to markerStates in `public/js/memo-markers.js`
+- [X] T014 [FR-003] Verify marker toggle persistence writes to markerStates in `public/js/memo-markers.js`
   - **Action**: Find marker click handler, confirm localStorage.setItem('markerStates', ...) called
   - **Code Pattern**:
     ```javascript
@@ -235,7 +235,7 @@
     - [x] markerStates updated immediately on marker click
     - [x] localStorage.setItem called synchronously (no async delay)
 
-- [ ] T015 [FR-003] Test Scenario 3: Marker visibility toggle + refresh
+- [X] T015 [FR-003] Test Scenario 3: Marker visibility toggle + refresh
   - **Test Steps**:
     1. Add memo to parcel #940-26, save
     2. Marker appears on map
