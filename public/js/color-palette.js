@@ -12,15 +12,19 @@ class ColorPaletteManager {
             { index: 4, hex: '#0000FF', name: '파랑', isActive: false, usageCount: 0 },
             { index: 5, hex: '#000000', name: '검정', isActive: false, usageCount: 0 },
             { index: 6, hex: '#FFFFFF', name: '흰색', isActive: false, usageCount: 0 },
-            { index: 7, hex: '#87CEEB', name: '하늘색', isActive: false, usageCount: 0 },
-            { index: 8, hex: '#9B59B6', name: '검색', isActive: false, usageCount: 0 }
+            { index: 7, hex: '#87CEEB', name: '하늘색', isActive: false, usageCount: 0 }
         ];
 
-        this.currentSelection = null;
+        this.SEARCH_COLOR_INDEX = 8;
         this.searchModeColor = {
+            index: this.SEARCH_COLOR_INDEX,
             hex: '#9B59B6',
-            name: '검색'
+            name: '검색',
+            isActive: false,
+            usageCount: 0
         };
+
+        this.currentSelection = null;
 
         this.selectionCallbacks = [];
 
@@ -28,7 +32,21 @@ class ColorPaletteManager {
         this.colors.forEach(color => {
             this.colorHexToIndexMap.set(color.hex, color.index);
         });
+        this.colorHexToIndexMap.set(this.searchModeColor.hex, this.SEARCH_COLOR_INDEX);
         console.log('[ColorPalette] 🚀 색상 인덱스 Map 초기화 완료 (O(1) 조회)');
+    }
+
+    getColorMeta(index) {
+        if (typeof index !== 'number') {
+            return null;
+        }
+        if (index >= 0 && index < this.colors.length) {
+            return this.colors[index];
+        }
+        if (index === this.SEARCH_COLOR_INDEX) {
+            return this.searchModeColor;
+        }
+        return null;
     }
 
     /**
@@ -69,45 +87,44 @@ class ColorPaletteManager {
      * 색상 선택
      */
     selectColor(index) {
+        if (index == null || Number.isNaN(index)) {
+            console.error('[ColorPalette] Invalid color index: null/NaN');
+            return;
+        }
+
+        if (index === this.SEARCH_COLOR_INDEX) {
+            console.warn('[ColorPalette] 검색 모드 색상은 팔레트에서 직접 선택할 수 없습니다.');
+            return;
+        }
+
         if (index < 0 || index >= this.colors.length) {
             console.error(`[ColorPalette] Invalid color index: ${index}`);
             return;
         }
 
-        // 이전 선택 해제
-        // 색상 존재 확인
-        if (!this.colors[index]) {
-            console.warn(`[ColorPalette] Invalid color index: ${index}`);
+        const colorMeta = this.getColorMeta(index);
+        if (!colorMeta) {
+            console.error(`[ColorPalette] Invalid color index: ${index}`);
             return;
         }
 
-        if (this.currentSelection !== null && this.colors[this.currentSelection]) {
-            this.colors[this.currentSelection].isActive = false;
+        if (this.currentSelection !== null) {
+            const previous = this.getColorMeta(this.currentSelection);
+            if (previous) {
+                previous.isActive = false;
+            }
         }
 
-        // 새 색상 선택
         this.currentSelection = index;
-        this.colors[index].isActive = true;
+        colorMeta.isActive = true;
 
-        // window.currentColor 업데이트 (중요!)
-        window.currentColor = this.colors[index].hex;
+        window.currentColor = colorMeta.hex;
 
-        // UI 업데이트
         this.updatePaletteUI();
 
-        // 색상 변경 시 이전 색상 필지 제거 기능 비활성화 (버그 수정)
-        // 사용자가 같은 색상으로 여러 필지를 칠할 수 있도록 허용
+        this.notifyColorSelection(index, colorMeta);
 
-        // 콜백 실행
-        const selectedColor = this.colors[index];
-        if (!selectedColor) {
-            console.warn(`[ColorPalette] Invalid color index: ${index}`);
-            return;
-        }
-
-        this.notifyColorSelection(index, selectedColor);
-
-        console.log(`[ColorPalette] Color selected: ${selectedColor.name} (${index}) - ${selectedColor.hex}`);
+        console.log(`[ColorPalette] Color selected: ${colorMeta.name} (${index}) - ${colorMeta.hex}`);
     }
 
     /**
@@ -115,7 +132,10 @@ class ColorPaletteManager {
      */
     deselectColor() {
         if (this.currentSelection !== null) {
-            this.colors[this.currentSelection].isActive = false;
+            const current = this.getColorMeta(this.currentSelection);
+            if (current) {
+                current.isActive = false;
+            }
             this.currentSelection = null;
             this.updatePaletteUI();
             this.notifyColorSelection(null, null);
@@ -136,17 +156,14 @@ class ColorPaletteManager {
         if (this.currentSelection === null) {
             return null;
         }
-        return this.colors[this.currentSelection];
+        return this.getColorMeta(this.currentSelection);
     }
 
     /**
      * 색상 인덱스로 색상 정보 가져오기
      */
     getColorByIndex(index) {
-        if (index >= 0 && index < this.colors.length) {
-            return this.colors[index];
-        }
-        return null;
+        return this.getColorMeta(index);
     }
 
     /**
@@ -160,8 +177,13 @@ class ColorPaletteManager {
      * 색상 사용 통계 업데이트
      */
     updateUsageCount(index, delta) {
+        const colorMeta = this.getColorMeta(index);
+        if (!colorMeta) {
+            return;
+        }
+
+        colorMeta.usageCount = Math.max(0, colorMeta.usageCount + delta);
         if (index >= 0 && index < this.colors.length) {
-            this.colors[index].usageCount = Math.max(0, this.colors[index].usageCount + delta);
             this.updatePaletteUI();
         }
     }
@@ -173,6 +195,7 @@ class ColorPaletteManager {
         this.colors.forEach(color => {
             color.usageCount = 0;
         });
+        this.searchModeColor.usageCount = 0;
         this.updatePaletteUI();
     }
 
@@ -182,7 +205,7 @@ class ColorPaletteManager {
     updatePaletteUI() {
         const colorItems = document.querySelectorAll('.color-item');
         colorItems.forEach((item, index) => {
-            const color = this.colors[index];
+            const color = this.getColorMeta(index);
             if (!color) return;
 
             // 선택 상태 업데이트
@@ -233,12 +256,12 @@ class ColorPaletteManager {
      * 필지 색상 적용
      */
     applyColorToParcel(pnu, colorIndex) {
-        if (colorIndex < 0 || colorIndex >= this.colors.length) {
-            console.error(`[ColorPalette] Invalid color index: ${colorIndex}`);
+        if (typeof colorIndex !== 'number') {
+            console.warn(`[ColorPalette] Invalid color index for applyColorToParcel: ${colorIndex}`);
             return false;
         }
 
-        const color = this.colors[colorIndex];
+        const color = this.getColorMeta(colorIndex);
         if (!color) {
             console.warn(`[ColorPalette] Invalid color index for applyColorToParcel: ${colorIndex}`);
             return false;
@@ -290,8 +313,8 @@ class ColorPaletteManager {
     getParcelColor(pnu) {
         const colorIndex = ParcelColorStorage.getIndex(pnu);
 
-        if (typeof colorIndex === 'number' && colorIndex >= 0 && colorIndex < this.colors.length) {
-            return this.colors[colorIndex];
+        if (typeof colorIndex === 'number') {
+            return this.getColorMeta(colorIndex);
         }
 
         return null;
@@ -306,8 +329,9 @@ class ColorPaletteManager {
         // 사용 카운트 재계산
         this.resetUsageCounts();
         parcelColors.forEach(colorIndex => {
-            if (typeof colorIndex === 'number' && colorIndex >= 0 && colorIndex < this.colors.length) {
-                this.colors[colorIndex].usageCount++;
+            const colorMeta = this.getColorMeta(colorIndex);
+            if (colorMeta) {
+                colorMeta.usageCount++;
             }
         });
 

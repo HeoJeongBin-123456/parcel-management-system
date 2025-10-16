@@ -59,6 +59,14 @@ class ModeManager {
             return true;
         }
 
+        // 모드 전환을 즉시 로컬 스토리지에 반영 (재로딩 시 일관성 유지)
+        try {
+            localStorage.setItem('currentMode', newMode);
+            localStorage.setItem('current_mode', newMode);
+        } catch (storageError) {
+            console.warn('[ModeManager] Failed to persist mode early:', storageError);
+        }
+
         // 검색 모드에서 다른 모드로 전환 시 검색 결과를 숨김 (삭제 X)
         if (this.currentMode === 'search' && newMode !== 'search' && window.SearchModeManager) {
             const searchActive = typeof window.SearchModeManager.isActive === 'function'

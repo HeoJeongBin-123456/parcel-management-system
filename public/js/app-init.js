@@ -141,18 +141,11 @@ class AppInitializer {
             await this.loadAndDisplaySavedParcelsOptimized();
             console.log('✅ 클릭 필지 복원 완료');
 
-            // Step 4: 마커 생성 및 복원 (지연 실행)
-            setTimeout(() => {
-                if (window.MemoMarkerManager) {
-                    console.log('📍 마커 복원 시작...');
-                    if (typeof window.MemoMarkerManager.refreshAllMarkers === 'function') {
-                        window.MemoMarkerManager.refreshAllMarkers();
-                        console.log('✅ 마커 복원 완료');
-                    }
-                } else {
-                    console.warn('⚠️ MemoMarkerManager 없음');
-                }
-            }, 1000);
+            // Step 4: 마커 초기화는 initializeMemoMarkers()에서 이미 처리됨
+            // 🔧 FIX: 중복 refreshAllMarkers() 호출 제거 (마커 깜빡임 방지)
+            // 이전에는 1초 지연으로 refreshAllMarkers()를 호출했으나,
+            // 이미 initializeMemoMarkers()에서 초기화가 완료되므로 불필요한 중복 호출 제거
+            console.log('📍 마커 초기화는 initializeMemoMarkers()에서 처리됨');
 
             console.log('🎉 순서 보장된 데이터 복원 완료');
 

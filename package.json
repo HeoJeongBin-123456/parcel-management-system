@@ -13,7 +13,13 @@
     "test:ci": "playwright test --project=chromium --workers=1 --timeout=60000 --reporter=line",
     "test:install": "npx playwright install chromium",
     "vercel:build": "echo 'Vercel build complete'",
-    "vercel:dev": "vercel dev"
+    "vercel:dev": "vercel dev",
+    "scan:debt": "node lib/tech-debt/scanner.js",
+    "scan:debt:quick": "npm run scan:debt -- --quick",
+    "validate:debt": "node lib/tech-debt/validators/markdown-schema.js",
+    "debt:stats": "node lib/tech-debt/reporters/stats.js",
+    "debt:add": "node lib/tech-debt/cli/add.js",
+    "debt:update": "node lib/tech-debt/cli/update.js"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
@@ -31,6 +37,7 @@
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
+    "glob": "^11.0.3",
     "node-fetch": "^3.3.2"
   }
 }

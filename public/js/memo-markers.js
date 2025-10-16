@@ -3,6 +3,7 @@ class MemoMarkerManager {
     constructor() {
         this.markers = new Map(); // PNU -> marker 매핑
         this.isInitialized = false;
+        this.isInitializing = false; // 🔧 FIX: 초기화 중 재진입 방지 플래그
         console.log('📍 MemoMarkerManager 초기화');
     }
 
@@ -50,38 +51,48 @@ class MemoMarkerManager {
 
     // 초기화 (지도 없이도 가능)
     async initialize() {
-        if (this.isInitialized) {
-            // MemoMarkerManager 이미 초기화됨
+        // 🔧 FIX: 초기화 중이거나 이미 초기화된 경우 재진입 방지
+        if (this.isInitialized || this.isInitializing) {
+            console.log(`⏩ MemoMarkerManager 초기화 건너뛰기 (isInitialized: ${this.isInitialized}, isInitializing: ${this.isInitializing})`);
             return;
         }
 
-        // 초기화 상태 설정 (재진입 방지)
-        this.isInitialized = true;
-        // MemoMarkerManager 초기화 완료
+        // 초기화 시작
+        this.isInitializing = true;
+        console.log('🔄 MemoMarkerManager 초기화 시작...');
 
-        // 지도가 이미 있으면 마커 로드
-        if (window.map) {
-            // 중복 마커 정리
-            this.cleanupDuplicateMarkers();
-            await this.loadAllMemoMarkers();
-            console.log('📍 지도 있음: 마커 로드 완료');
-        } else {
-            // 지도 로드 감지를 위한 인터벌 설정
-            console.log('🗺️ 지도 로딩 대기 중...');
-            let checkCount = 0;
-            const mapCheckInterval = setInterval(async () => {
-                checkCount++;
-                if (window.map) {
-                    clearInterval(mapCheckInterval);
-                    console.log('🗺️ 지도 로드 감지! 마커 로드 시작...');
-                    this.cleanupDuplicateMarkers();
-                    await this.loadAllMemoMarkers();
-                } else if (checkCount > 40) {
-                    // 20초 후에도 지도가 없으면 중단
-                    clearInterval(mapCheckInterval);
-                    console.warn('⚠️ 지도 로딩 타임아웃 (20초)');
-                }
-            }, 500);
+        try {
+            // 지도가 이미 있으면 마커 로드
+            if (window.map) {
+                // 중복 마커 정리
+                this.cleanupDuplicateMarkers();
+                await this.loadAllMemoMarkers();
+                console.log('📍 지도 있음: 마커 로드 완료');
+            } else {
+                // 지도 로드 감지를 위한 인터벌 설정
+                console.log('🗺️ 지도 로딩 대기 중...');
+                let checkCount = 0;
+                const mapCheckInterval = setInterval(async () => {
+                    checkCount++;
+                    if (window.map) {
+                        clearInterval(mapCheckInterval);
+                        console.log('🗺️ 지도 로드 감지! 마커 로드 시작...');
+                        this.cleanupDuplicateMarkers();
+                        await this.loadAllMemoMarkers();
+                    } else if (checkCount > 40) {
+                        // 20초 후에도 지도가 없으면 중단
+                        clearInterval(mapCheckInterval);
+                        console.warn('⚠️ 지도 로딩 타임아웃 (20초)');
+                    }
+                }, 500);
+            }
+
+            // 초기화 완료
+            this.isInitialized = true;
+            console.log('✅ MemoMarkerManager 초기화 완료');
+        } finally {
+            // 초기화 플래그 해제
+            this.isInitializing = false;
         }
     }
 
@@ -1124,12 +1135,19 @@ setTimeout(() => {
 // 페이지 로드 시 자동 초기화 (AppInitializer가 없는 경우에만)
 document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => {
-        if (window.MemoMarkerManager && !window.MemoMarkerManager.isInitialized) {
+        // 🔧 FIX: isInitializing 플래그도 체크하여 초기화 중복 방지 강화
+        if (window.MemoMarkerManager &&
+            !window.MemoMarkerManager.isInitialized &&
+            !window.MemoMarkerManager.isInitializing) {
             // AppInitializer가 없거나 초기화되지 않은 경우에만 직접 초기화
             if (!window.appInitializer || !window.appInitializer.isInitialized) {
                 console.log('🔄 AppInitializer 없음, 메모 마커 직접 초기화');
                 window.MemoMarkerManager.initialize();
+            } else {
+                console.log('⏩ AppInitializer가 이미 초기화함, 건너뛰기');
             }
+        } else {
+            console.log('⏩ MemoMarkerManager 이미 초기화됨 또는 초기화 중, 건너뛰기');
         }
 
         // 저장 함수 후킹 재시도

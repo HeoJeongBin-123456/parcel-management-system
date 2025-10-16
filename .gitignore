@@ -43,3 +43,7 @@ complete-*.js
 
 .vercel
 test-results/
+
+# 기술 부채 스캐너 캐시
+lib/tech-debt/.cache/
+*.scan.cache
