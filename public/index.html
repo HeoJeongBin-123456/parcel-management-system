@@ -18,6 +18,39 @@
     <!-- html2canvas for screenshot capture -->
     <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
 
+    <!-- 프로덕션 설정 -->
+    <script src="/js/production-config.js"></script>
+
+    <!-- 글로벌 에러 핸들러 -->
+    <script>
+        // 전역 에러 핸들러 (프로덕션 안정성)
+        window.addEventListener('error', function(event) {
+            console.error('❌ 글로벌 에러:', event.error || event.message);
+            
+            // 프로덕션에서 에러 로깅
+            if (window.PRODUCTION_CONFIG?.errorReporting?.enabled) {
+                // 외부 에러 리포팅 서비스로 전송 (선택 사항)
+                console.warn('에러 발생:', event.filename, event.lineno, event.colno);
+            }
+            
+            return false; // 기본 에러 처리 유지
+        });
+
+        // Unhandled Promise Rejection 핸들러
+        window.addEventListener('unhandledrejection', function(event) {
+            console.error('❌ Unhandled Promise Rejection:', event.reason);
+            
+            // 프로덕션에서 에러 로깅
+            if (window.PRODUCTION_CONFIG?.errorReporting?.enabled) {
+                console.warn('Unhandled rejection:', event.reason);
+            }
+            
+            event.preventDefault(); // 에러 무시 방지
+        });
+
+        console.log('✅ 글로벌 에러 핸들러 등록 완료');
+    </script>
+
     <!-- CSS -->
     <link rel="stylesheet" href="/css/styles.css">
     <link rel="stylesheet" href="/css/advanced-ui.css">
@@ -206,8 +239,8 @@
     <script src="/js/search.js"></script>
     <script src="/js/memo-markers.js"></script>
     <script src="/js/mobile-handler.js"></script>
-    <!-- data-persistence-manager.js 비활성화 - LocalStorage와 Supabase만 사용 -->
-    <!-- <script src="/js/data-persistence-manager.js"></script> -->
+    <!-- data-persistence-manager.js 활성화 - 다층 저장소 시스템 -->
+    <script src="/js/data-persistence-manager.js"></script>
     <script src="/js/parcel-restore-helper.js"></script>
     <!-- 기존 백업 시스템 제거 (unified-backup-manager.js로 통합) -->
     <!-- <script src="/js/backup-manager.js"></script> -->

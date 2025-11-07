@@ -129,7 +129,10 @@ if (!window.vworldApi) {
                     try {
                         const decoded = decodeURIComponent(gf);
                         if (/^POINT\(/.test(decoded)) paramsCloned.set('geomFilter', decoded);
-                    } catch (_) {}
+                    } catch (error) {
+                        // 디코딩 실패 시 원본 값 유지
+                        console.warn('⚠️ geomFilter 디코딩 실패:', error);
+                    }
                 }
 
                 for (const key of fallbackKeys) {

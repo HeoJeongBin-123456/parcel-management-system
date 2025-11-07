@@ -17,8 +17,8 @@
         init() {
             if (!this.enabled) return;
 
-            // idle 이벤트 카운트
-            const originalIdleHandler = window.debouncedIdleHandler;
+        // idle 이벤트 카운트 (추후 사용 예정)
+        const _originalIdleHandler = window.debouncedIdleHandler;
 
             // restoreSavedParcelsOnMap 모니터링
             const originalRestore = window.restoreSavedParcelsOnMap;

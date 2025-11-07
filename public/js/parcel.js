@@ -79,8 +79,8 @@ function getMaxParcelCacheSize() {
 }
 
 // 하위 호환성을 위한 상수 (deprecated)
-const CACHE_VALIDITY_MS = 5000;
-const MAX_PARCEL_CACHE_SIZE = 500;
+const _CACHE_VALIDITY_MS = 5000;
+const _MAX_PARCEL_CACHE_SIZE = 500;
 
 const IDLE_FALLBACK_DELAY = 32;
 

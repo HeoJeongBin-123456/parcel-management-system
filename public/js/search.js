@@ -666,9 +666,10 @@ async function searchAddress(query) {
     // console.log('✅ 사전 확인 완료, 지오코딩 API 호출 시작');
     
     // 네이버 Geocoding API로 주소 검색
+    const searchQuery = query; // ESLint 스코프 이슈 해결
     try {
         naver.maps.Service.geocode({
-            query: query
+            query: searchQuery
         }, function(status, response) {
     // console.log('Geocoding 상태:', status);
     // console.log('Geocoding 응답:', response);
@@ -676,14 +677,14 @@ async function searchAddress(query) {
             if (status !== naver.maps.Service.Status.OK) {
     // console.log('Geocoding 실패, 지번 검색 시도');
                 // Geocoding 실패 시 지번 검색 시도
-                searchParcelByJibun(query);
+                searchParcelByJibun(searchQuery);
                 return;
             }
             
             const result = response.v2.addresses[0];
             if (!result) {
     // console.log('주소 결과 없음, 지번 검색 시도');
-                searchParcelByJibun(query);
+                searchParcelByJibun(searchQuery);
                 return;
             }
             

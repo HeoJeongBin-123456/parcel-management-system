@@ -1,4 +1,3 @@
-/* eslint-disable */
 // 구글 캘린더 연동 모듈
 class GoogleCalendar {
     constructor() {
