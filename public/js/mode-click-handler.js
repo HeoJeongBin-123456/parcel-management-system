@@ -826,7 +826,9 @@ async function applyClickModeColorToParcel(parcel, color, polygon) {
     try {
         const normalizedColor = color || getCurrentSelectedColor() || '#FF0000';
 
-        if (polygon.__clickModeFillColor !== normalizedColor) {
+        // 색상이 다르거나 __clickModeFillColor가 없으면 항상 업데이트
+        // (모드 전환 시 색상이 안 칠해지는 문제 해결)
+        if (!polygon.__clickModeFillColor || polygon.__clickModeFillColor !== normalizedColor) {
             polygon.setOptions({
                 fillColor: normalizedColor,
                 fillOpacity: 0.5,

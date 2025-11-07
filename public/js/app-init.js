@@ -965,8 +965,11 @@ class AppInitializer {
                 console.log('📭 복원할 필지 데이터가 없습니다');
             }
             
-            // 메모 마커 매니저 초기화
-            await this.initializeMemoMarkers();
+            // 메모 마커 매니저 초기화 (필지 복원 완료 후)
+            // 약간의 지연을 두어 필지 복원이 완전히 끝난 후 마커 로드
+            setTimeout(async () => {
+                await this.initializeMemoMarkers();
+            }, 300);
             
             // 복원 완료 알림
             this.showRestoreNotification();
@@ -1015,39 +1018,39 @@ class AppInitializer {
                         }
                     };
                     
-                    if (typeof window.drawParcelPolygon === 'function') {
-                        await window.drawParcelPolygon(feature, false);
-                        
-                        // 🎨 색상 적용 (localStorage의 parcelColors도 확인)
-                        let colorToApply = null;
+                if (typeof window.drawParcelPolygon === 'function') {
+                    await window.drawParcelPolygon(feature, false);
+                    
+                    // 🎨 색상 적용 (localStorage의 parcelColors도 확인)
+                    let colorToApply = null;
 
-                        // 1. Supabase color_info 필드 확인
-                        if (parcel.color_info && parcel.color_info.color) {
-                            colorToApply = parcel.color_info.color;
-                            console.log('🎨 Supabase color_info에서 색상 복원:', colorToApply);
-                        }
-                        // 2. 기존 color 필드 확인
-                        else if (parcel.color && parcel.color !== 'transparent') {
-                            colorToApply = parcel.color;
-                            console.log('🎨 기존 color 필드에서 색상 복원:', colorToApply);
-                        }
-                        // 3. localStorage의 parcelColors 확인
-                        else {
-                            const storedHex = ParcelColorStorage.getHex(parcel.pnu);
-                            if (storedHex) {
-                                colorToApply = storedHex;
-                                console.log('🎨 localStorage parcelColors에서 색상 복원:', colorToApply);
-                            }
-                        }
-
-                        if (colorToApply) {
-                            // 🎨 즉시 색상 적용 (setTimeout 제거)
-                            this.applyParcelColor({...parcel, color: colorToApply});
-                        }
-                        
-                        restoredCount++;
+                    // 1. localStorage의 parcelColors 확인 (최우선)
+                    const storedHex = ParcelColorStorage.getHex(parcel.pnu);
+                    if (storedHex) {
+                        colorToApply = storedHex;
+                        console.log('🎨 localStorage parcelColors에서 색상 복원:', colorToApply);
                     }
-                } else if (parcel.lat && parcel.lng) {
+                    // 2. Supabase color_info 필드 확인
+                    else if (parcel.color_info && parcel.color_info.color) {
+                        colorToApply = parcel.color_info.color;
+                        console.log('🎨 Supabase color_info에서 색상 복원:', colorToApply);
+                    }
+                    // 3. 기존 color 필드 확인
+                    else if (parcel.color && parcel.color !== 'transparent') {
+                        colorToApply = parcel.color;
+                        console.log('🎨 기존 color 필드에서 색상 복원:', colorToApply);
+                    }
+
+                    if (colorToApply) {
+                        // 🎨 약간의 지연을 두어 폴리곤이 완전히 생성된 후 색상 적용
+                        setTimeout(() => {
+                            this.applyParcelColor({...parcel, color: colorToApply});
+                        }, 50);
+                    }
+                    
+                    restoredCount++;
+                }
+            } else if (parcel.lat && parcel.lng) {
                     // 🛡️ 마커 생성 조건 확인 - 실제 정보가 있을 때만 마커 생성
                     const hasRealInfo = !!(
                         (parcel.memo && parcel.memo.trim() && parcel.memo.trim() !== '(메모 없음)') ||
@@ -1072,26 +1075,59 @@ class AppInitializer {
         
         console.log(`✅ ${restoredCount}/${parcels.length}개 필지 지도 복원 완료`);
 
-        // 🎨 모든 복원 완료 후 지도 강제 새로고침으로 색상 즉시 표시
+        // 🎨 모든 복원 완료 후 색상 일괄 적용 (새로고침 시 색칠 필지 복원 개선)
         if (restoredCount > 0 && window.map) {
+            // 모든 필지 복원 후 색상 적용을 위한 지연
             setTimeout(() => {
+                // localStorage의 parcelColors에서 모든 색상 정보 가져오기
+                const parcelColors = ParcelColorStorage.getAll();
+                let colorAppliedCount = 0;
+
+                parcelColors.forEach((colorIndex, pnu) => {
+                    const colorHex = ParcelColorStorage.palette[colorIndex]?.hex;
+                    if (colorHex) {
+                        const parcelData = window.clickParcels?.get(pnu);
+                        if (parcelData && parcelData.polygon) {
+                            // 색상이 다를 때만 적용 (중복 방지)
+                            if (parcelData.color !== colorHex) {
+                                parcelData.polygon.setOptions({
+                                    fillColor: colorHex,
+                                    fillOpacity: 0.5,
+                                    strokeColor: colorHex,
+                                    strokeWeight: 2
+                                });
+                                parcelData.color = colorHex;
+                                colorAppliedCount++;
+                            }
+                        }
+                    }
+                });
+
+                if (colorAppliedCount > 0) {
+                    console.log(`🎨 ${colorAppliedCount}개 필지 색상 복원 완료`);
+                }
+
+                // 지도 강제 새로고침으로 색상 즉시 표시
                 const currentZoom = window.map.getZoom();
-                window.map.setZoom(currentZoom + 0.001); // 아주 미세한 변경
+                window.map.setZoom(currentZoom + 0.001);
                 setTimeout(() => {
-                    window.map.setZoom(currentZoom); // 원래 줌으로 복원
+                    window.map.setZoom(currentZoom);
                     console.log('🎨 지도 새로고침으로 색상 즉시 표시 완료');
                 }, 10);
-            }, 100);
+            }, 200);
         }
 
         return restoredCount;
     }
 
-    // 필지 색상 적용
+    // 필지 색상 적용 (개선된 버전)
     applyParcelColor(parcel) {
         const targetMap = parcel.isSearchParcel ? window.searchParcels : window.clickParcels;
 
-        if (!targetMap) return;
+        if (!targetMap) {
+            console.warn('⚠️ 대상 Map이 없습니다:', parcel.isSearchParcel ? 'searchParcels' : 'clickParcels');
+            return;
+        }
 
         const existingParcel = targetMap.get(parcel.pnu);
 
@@ -1105,22 +1141,26 @@ class AppInitializer {
                     strokeWeight: 3
                 });
                 existingParcel.color = '#9370DB';
-                console.log(`🔍 검색 필지 보라색 고정: ${parcel.parcelNumber}`);
+                console.log(`🔍 검색 필지 보라색 고정: ${parcel.parcelNumber || parcel.pnu}`);
             } else {
-                // 일반 필지만 색상 변경
-                existingParcel.polygon.setOptions({
-                    fillColor: parcel.color,
-                    fillOpacity: 0.5,
-                    strokeColor: parcel.color,
-                    strokeWeight: 2
-                });
-                existingParcel.color = parcel.color;
-                console.log(`🎨 필지 색상 적용: ${parcel.parcelNumber} → ${parcel.color}`);
+                // 일반 필지만 색상 변경 (색상이 다를 때만 업데이트)
+                if (!existingParcel.color || existingParcel.color !== parcel.color) {
+                    existingParcel.polygon.setOptions({
+                        fillColor: parcel.color,
+                        fillOpacity: 0.5,
+                        strokeColor: parcel.color,
+                        strokeWeight: 2
+                    });
+                    existingParcel.color = parcel.color;
+                    console.log(`🎨 필지 색상 적용: ${parcel.parcelNumber || parcel.pnu} → ${parcel.color}`);
+                }
             }
+        } else {
+            console.warn(`⚠️ 필지 데이터를 찾을 수 없습니다: ${parcel.pnu}`);
         }
     }
 
-    // 🗺️ 폴리곤 데이터로 필지 복원 (새로 추가)
+    // 🗺️ 폴리곤 데이터로 필지 복원 (개선된 버전 - 색상 복원 포함)
     async restorePolygonsToMap(polygons) {
         console.log(`🗺️ ${polygons.length}개 폴리곤을 지도에 복원합니다...`);
         let restoredCount = 0;
@@ -1137,8 +1177,20 @@ class AppInitializer {
 
                 if (typeof window.drawParcelPolygon === 'function') {
                     await window.drawParcelPolygon(feature, false);
+                    
+                    // 🎨 색상 복원 (localStorage의 parcelColors 확인)
+                    const pnu = polygonData.pnu;
+                    if (pnu) {
+                        const storedHex = ParcelColorStorage.getHex(pnu);
+                        if (storedHex) {
+                            setTimeout(() => {
+                                this.applyParcelColor({pnu, color: storedHex});
+                            }, 50);
+                        }
+                    }
+                    
                     restoredCount++;
-                    console.log('🗺️ 폴리곤 복원 완료:', polygonData.pnu);
+                    console.log('🗺️ 폴리곤 복원 완료:', pnu);
                 }
             } catch (error) {
                 console.warn(`⚠️ 폴리곤 복원 실패: ${polygonData.pnu}`, error);

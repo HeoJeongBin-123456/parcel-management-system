@@ -1,18 +1,36 @@
 // 필지 관련 기능
 
-// 🚀 성능 최적화: 비동기 저장 큐 시스템
+// 🚀 성능 최적화: 비동기 저장 큐 시스템 (개선된 버전)
 const colorSaveQueue = new Map();
 let colorSaveTimer = null;
-const COLOR_SAVE_BATCH_DELAY = 0; // 즉시 처리 (최대 성능)
+const COLOR_SAVE_BATCH_DELAY = 300; // 배치 처리로 성능 개선 (300ms)
 
-// 비동기 색상 저장 큐에 추가
+// 비동기 색상 저장 큐에 추가 (중복 제거)
 function queueColorSave(pnu, color, colorIndex = null) {
+    // 기존 항목이 있고 같은 색상이면 스킵 (중복 저장 방지)
+    const existing = colorSaveQueue.get(pnu);
+    if (existing && existing.color === color && existing.colorIndex === colorIndex) {
+        return; // 중복 저장 방지
+    }
+
     colorSaveQueue.set(pnu, {
         color,
         colorIndex,
         timestamp: Date.now()
     });
 
+    // LocalStorage 즉시 저장 (UI 반응성)
+    try {
+        if (colorIndex !== null && window.ParcelColorStorage) {
+            window.ParcelColorStorage.setIndex(pnu, colorIndex);
+        } else if (color && window.ParcelColorStorage) {
+            window.ParcelColorStorage.setHex(pnu, color);
+        }
+    } catch (error) {
+        console.error('❌ LocalStorage 색상 즉시 저장 실패:', error);
+    }
+
+    // 배치 저장 스케줄링
     if (colorSaveTimer) clearTimeout(colorSaveTimer);
     colorSaveTimer = setTimeout(processColorSaveQueue, COLOR_SAVE_BATCH_DELAY);
 }
@@ -23,19 +41,6 @@ async function processColorSaveQueue() {
 
     const items = Array.from(colorSaveQueue.entries());
     colorSaveQueue.clear();
-
-    // LocalStorage 즉시 저장 (UI 반응성)
-    try {
-        const colors = JSON.parse(localStorage.getItem('parcelColors') || '{}');
-        items.forEach(([pnu, data]) => {
-            if (data.colorIndex !== null) {
-                colors[pnu] = data.colorIndex;
-            }
-        });
-        localStorage.setItem('parcelColors', JSON.stringify(colors));
-    } catch (error) {
-        console.error('❌ LocalStorage 색상 저장 실패:', error);
-    }
 
     // Supabase 백그라운드 저장 (await 없이)
     if (window.SupabaseManager && window.SupabaseManager.isConnected) {
@@ -48,7 +53,11 @@ async function processColorSaveQueue() {
 
         // 백그라운드에서 실행 (블로킹 없이)
         window.SupabaseManager.saveParcels(parcelsToSave)
-            .then(() => console.log(`✅ ${parcelsToSave.length}개 필지 색상 백그라운드 저장 완료`))
+            .then(() => {
+                if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production') {
+                    console.log(`✅ ${parcelsToSave.length}개 필지 색상 백그라운드 저장 완료`);
+                }
+            })
             .catch(error => console.error('❌ Supabase 색상 저장 실패:', error));
     }
 }
@@ -1037,18 +1046,19 @@ async function applyColorToParcel(parcel, color) {
         const newColor = expectedColor;
 
         // 1. 🚀 프로덕션 최적화: 즉각적인 UI 업데이트 (지연 제거)
-        parcelData.polygon.setOptions({
-            fillColor: newColor,
-            fillOpacity: 0.5,
-            strokeColor: newColor,
-            strokeOpacity: 0.7
-        });
-        parcelData.color = newColor;
+        // 현재 색상과 다를 때만 업데이트 (불필요한 렌더링 방지)
+        if (parcelData.color !== newColor) {
+            parcelData.polygon.setOptions({
+                fillColor: newColor,
+                fillOpacity: 0.5,
+                strokeColor: newColor,
+                strokeOpacity: 0.7
+            });
+            parcelData.color = newColor;
+        }
 
         // 2. 🚀 Optimistic UI: 즉시 색상 저장 큐에 추가 (백그라운드 저장)
         queueColorSave(pnu, newColor, colorIndex);
-
-
     }
 }
 
