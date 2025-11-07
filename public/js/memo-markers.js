@@ -239,11 +239,17 @@ class MemoMarkerManager {
 
                                 // 이 키에서 정보가 있는 필지들 찾기 (확장된 조건 + 삭제된 필지 제외)
                                 const withMemo = parsed.filter(parcel => {
-                                    // 삭제된 필지 체크
+                                    // isDeleted 플래그 체크 (최우선)
+                                    if (parcel.isDeleted === true) {
+                                        return false;
+                                    }
+                                    
+                                    // 삭제된 필지 목록 체크
                                     const pnu = parcel.pnu || parcel.properties?.PNU || parcel.properties?.pnu || parcel.id;
                                     if (pnu && deletedParcels.includes(pnu)) {
                                         return false; // 삭제된 필지는 마커 생성 안 함
                                     }
+                                    
                                     return this.shouldShowMarker(parcel);
                                 });
 
@@ -279,9 +285,13 @@ class MemoMarkerManager {
                             if (Array.isArray(parsed) && parsed.length > 0) {
                                 console.log(`📡 migratedGetItem에서 ${parsed.length}개 필지 발견`);
 
-                                const withMemo = parsed.filter(parcel =>
-                                    this.shouldShowMarker(parcel)
-                                );
+                                const withMemo = parsed.filter(parcel => {
+                                    // isDeleted 플래그 체크
+                                    if (parcel.isDeleted === true) {
+                                        return false;
+                                    }
+                                    return this.shouldShowMarker(parcel);
+                                });
 
                                 if (withMemo.length > 0) {
                                     console.log(`📝 migratedGetItem에서 메모가 있는 필지 ${withMemo.length}개 발견`);

@@ -1013,12 +1013,25 @@ class SupabaseManager {
     // 🔍 고급 쿼리 메서드들
     // ============================================================================
 
-    // 메모가 있는 필지들만 조회
+    // 메모가 있는 필지들만 조회 (삭제된 필지 제외)
     async loadMemoparcels() {
         if (!this.isConnected) {
             const stored = localStorage.getItem('parcels');
             const parcels = stored ? JSON.parse(stored) : [];
-            return parcels.filter(p => p.memo && p.memo.trim() !== '');
+            // 삭제된 필지 제외 (isDeleted=true 또는 deletedParcels 목록에 있는 경우)
+            const deletedParcels = window.getDeletedParcels ? window.getDeletedParcels() : [];
+            return parcels.filter(p => {
+                // isDeleted 플래그 체크
+                if (p.isDeleted === true) {
+                    return false;
+                }
+                // deletedParcels 목록 체크
+                if (p.pnu && deletedParcels.includes(p.pnu)) {
+                    return false;
+                }
+                // 메모가 있는 필지만
+                return p.memo && p.memo.trim() !== '';
+            });
         }
 
         try {
@@ -1030,8 +1043,12 @@ class SupabaseManager {
                 .order('updated_at', { ascending: false });
 
             if (error) throw error;
-            console.log('📡 메모 필지 로드 완료:', data?.length || 0, '개');
-            return data || [];
+            
+            // 삭제된 필지 제외 (isDeleted=true인 경우)
+            const filteredData = (data || []).filter(p => p.isDeleted !== true);
+            
+            console.log('📡 메모 필지 로드 완료:', filteredData.length, '개 (삭제된 필지 제외)');
+            return filteredData;
         } catch (error) {
             console.error('❌ 메모 필지 로드 실패:', error);
             return [];
@@ -1266,7 +1283,7 @@ class SupabaseManager {
         }
     }
 
-    // 필지 삭제 메서드
+    // 필지 삭제 메서드 (개선된 버전 - 메모 필드도 명시적으로 삭제)
     async deleteParcel(pnu, options = {}) {
         if (!this.isConnected) {
             console.warn('⚠️ Supabase 미연결 상태');
@@ -1314,37 +1331,70 @@ class SupabaseManager {
             // pnu를 반드시 포함해야 함 - 필지의 주요 식별자
             const targetColumns = ['pnu', 'id', 'parcel_name'];
 
+            // 먼저 메모 필드를 빈 값으로 업데이트 시도 (소프트 삭제)
             for (const column of targetColumns) {
                 try {
-                    const { data, error } = await this.supabase
+                    const { data: updateData, error: updateError } = await this.supabase
                         .from('parcels')
-                        .delete()
+                        .update({
+                            memo: '',
+                            owner_name: '',
+                            owner_address: '',
+                            owner_contact: '',
+                            isDeleted: true,
+                            updated_at: new Date().toISOString()
+                        })
                         .in(column, candidateList)
                         .select('id, pnu, parcel_name');
 
-                    if (error) {
-                        if (error.code && error.code !== 'PGRST116') {
-                            console.error(`❌ parcels 테이블 ${column} 기준 삭제 실패:`, error);
-                        }
-                        continue;
+                    if (!updateError && updateData && updateData.length > 0) {
+                        console.log(`✅ ${column} 기준으로 ${updateData.length}개 필지 메모 제거됨`);
                     }
-
-                    if (Array.isArray(data) && data.length > 0) {
-                        deletedRows.push(...data);
-                    }
-                } catch (innerError) {
-                    console.error(`❌ parcels 테이블 ${column} 삭제 중 예외:`, innerError);
+                } catch (updateErr) {
+                    console.warn(`⚠️ ${column} 기준 업데이트 실패:`, updateErr);
                 }
             }
 
-            if (deletedRows.length === 0) {
+            // 색상이 없으면 완전 삭제
+            if (options.removeColor) {
+                for (const column of targetColumns) {
+                    try {
+                        const { data, error } = await this.supabase
+                            .from('parcels')
+                            .delete()
+                            .in(column, candidateList)
+                            .select('id, pnu, parcel_name');
+
+                        if (error) {
+                            if (error.code && error.code !== 'PGRST116') {
+                                console.error(`❌ parcels 테이블 ${column} 기준 삭제 실패:`, error);
+                            }
+                            continue;
+                        }
+
+                        if (Array.isArray(data) && data.length > 0) {
+                            deletedRows.push(...data);
+                        }
+                    } catch (innerError) {
+                        console.error(`❌ parcels 테이블 ${column} 삭제 중 예외:`, innerError);
+                    }
+                }
+            }
+
+            // 메모 제거 성공 (소프트 삭제)
+            console.log(`✅ Supabase에서 메모 제거 완료 (isDeleted=true 설정)`);
+            
+            if (deletedRows.length === 0 && !options.removeColor) {
+                // 소프트 삭제는 성공으로 처리
+                return true;
+            } else if (deletedRows.length === 0) {
                 console.warn('⚠️ Supabase에서 삭제된 필지가 없습니다. 대상 후보:', candidateList);
                 // 이미 삭제되었거나 존재하지 않는 경우도 성공으로 처리
                 console.log('📝 필지가 이미 삭제되었거나 존재하지 않음 - 정상 처리');
                 return true; // false 대신 true 반환 (이미 없으면 삭제 목적 달성)
             }
 
-            console.log(`✅ Supabase에서 ${deletedRows.length}개 필지 삭제 성공:`, deletedRows.map(r => r.pnu || r.id));
+            console.log(`✅ Supabase에서 ${deletedRows.length}개 필지 완전 삭제 성공:`, deletedRows.map(r => r.pnu || r.id));
 
             const polygonCandidates = new Set(candidateList);
             deletedRows.forEach(row => {
